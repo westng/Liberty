@@ -59,5 +59,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: liberty-${{ matrix.bundleTarget }}
-          path: src-tauri/target/${{ matrix.bundleTarget }}/release/bundle/**
+          path: |
+            src-tauri/target/${{ matrix.bundleTarget }}/release/bundle/**
+            src-tauri/target/release/bundle/**
+            target/${{ matrix.bundleTarget }}/release/bundle/**
+            target/release/bundle/**
           if-no-files-found: error
