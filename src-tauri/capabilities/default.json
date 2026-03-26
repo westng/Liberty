@@ -2,9 +2,14 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-capability",
   "description": "Capability for the main Liberty window",
-  "windows": ["main"],
+  "windows": ["main", "ai-summary", "meeting-notes", "model-editor", "template-editor"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-close",
+    "core:window:allow-create",
+    "core:window:allow-set-focus",
+    "core:window:allow-show",
     "dialog:default",
     "fs:allow-write-text-file"
   ]

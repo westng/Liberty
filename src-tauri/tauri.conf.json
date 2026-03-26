@@ -9,6 +9,9 @@
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
+  "bundle": {
+    "resources": ["../scripts/funasr_runner.py"]
+  },
   "app": {
     "windows": [
       {

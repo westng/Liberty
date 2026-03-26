@@ -65,6 +65,43 @@ function formatCreatedAt(value: string) {
     minute: "2-digit",
   });
 }
+
+function formatFileDuration(minutes: number) {
+  if (!minutes || minutes <= 0) {
+    return "待处理";
+  }
+
+  const totalMinutes = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `${remainingMinutes} 分钟`;
+  }
+
+  if (remainingMinutes === 0) {
+    return `${hours} 小时`;
+  }
+
+  return `${hours} 小时 ${remainingMinutes} 分钟`;
+}
+
+function formatProcessingDuration(seconds?: number) {
+  if (typeof seconds !== "number" || seconds < 0) {
+    return "未完成";
+  }
+
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}小时 ${String(minutes).padStart(2, "0")}分`;
+  }
+
+  return `${minutes}分 ${String(remainingSeconds).padStart(2, "0")}秒`;
+}
 </script>
 
 <template>
@@ -96,7 +133,8 @@ function formatCreatedAt(value: string) {
       <div class="jobs-table">
         <div class="jobs-table-head">
           <span>任务</span>
-          <span>文件 / 时长</span>
+          <span>文件信息</span>
+          <span>处理时间</span>
           <span>创建时间</span>
           <span>状态</span>
           <span>操作</span>
@@ -113,7 +151,17 @@ function formatCreatedAt(value: string) {
           <div class="jobs-cell">
             <strong>{{ job.sourceFiles.length }} 个文件</strong>
             <div class="job-meta-line">
-              {{ job.durationMinutes }} 分钟 · {{ job.enableSpeaker ? "含说话人分离" : "仅转写" }}
+              文件时长 {{ formatFileDuration(job.durationMinutes) }}
+            </div>
+            <div class="job-meta-line">
+              {{ job.enableSpeaker ? "含说话人分离" : "仅转写" }}
+            </div>
+          </div>
+
+          <div class="jobs-cell">
+            <strong>{{ formatProcessingDuration(job.processingDurationSeconds) }}</strong>
+            <div class="job-meta-line">
+              {{ job.overallStatus === "completed" ? "处理完成" : job.overallStatus === "failed" ? "处理失败" : "处理中" }}
             </div>
           </div>
 

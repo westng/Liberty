@@ -21,12 +21,16 @@ function makeTranscript(job: MeetingJob): string {
 
 function makeNotes(job: MeetingJob): string {
   const { summary } = job;
+  const riskLines = summary.risks?.length ? ["", "## 风险", ...summary.risks.map((item) => `- ${item}`)] : [];
+  const followUpLines = summary.followUps?.length
+    ? ["", "## 跟进事项", ...summary.followUps.map((item) => `- ${item}`)]
+    : [];
 
   return [
     `# ${job.title}`,
     "",
     "## 摘要",
-    summary.overview,
+    summary.overview || "当前还没有可导出的 AI 总结内容。",
     "",
     "## 议题",
     ...summary.topics.map((item) => `- ${item}`),
@@ -36,6 +40,8 @@ function makeNotes(job: MeetingJob): string {
     "",
     "## 行动项",
     ...summary.actionItems.map((item) => `- ${item}`),
+    ...riskLines,
+    ...followUpLines,
   ].join("\n");
 }
 

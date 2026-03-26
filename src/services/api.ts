@@ -47,13 +47,5 @@ export function createMeetingApi(baseUrl: string, apiToken?: string) {
         },
         apiToken,
       ),
-    regenerateSummary: (id: string) =>
-      requestJson<MeetingJob>(
-        `${normalized}/api/jobs/${id}/regenerate-summary`,
-        {
-          method: "POST",
-        },
-        apiToken,
-      ),
   };
 }

@@ -8,6 +8,7 @@ const props = defineProps<{
 }>();
 
 const labels: Record<JobStage, string> = {
+  idle: "未生成",
   uploaded: "已上传",
   queued: "排队中",
   transcribing: "转写中",

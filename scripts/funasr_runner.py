@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", os.environ["OMP_NUM_THREADS"])
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 
@@ -26,6 +27,11 @@ def parse_args():
 def write_json(path: Path, payload: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def log(message: str):
+    sys.stdout.write(f"{message}\n")
+    sys.stdout.flush()
 
 
 def write_progress(
@@ -59,6 +65,76 @@ def normalize_sentence_items(raw: dict) -> list[dict]:
     return []
 
 
+def parse_positive_int(value: str | None, default: int) -> int:
+    try:
+        parsed = int(str(value or "").strip())
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def resolve_requested_device() -> str:
+    requested = str(os.getenv("FUNASR_DEVICE", "auto") or "auto").strip().lower()
+    if requested in {"cpu", "mps", "cuda"}:
+        return requested
+    return "auto"
+
+
+def detect_best_device() -> str:
+    try:
+        import torch
+    except Exception:
+        return "cpu"
+
+    try:
+        if torch.cuda.is_available():
+            return "cuda:0"
+    except Exception:
+        pass
+
+    try:
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+
+    return "cpu"
+
+
+def build_model(auto_model_cls, wants_speaker: bool) -> tuple[object, str]:
+    model_kwargs = {
+        "model": os.getenv("FUNASR_MODEL", "paraformer-zh"),
+        "vad_model": os.getenv("FUNASR_VAD_MODEL", "fsmn-vad"),
+        "punc_model": os.getenv("FUNASR_PUNC_MODEL", "ct-punc"),
+    }
+    if wants_speaker:
+        model_kwargs["spk_model"] = os.getenv("FUNASR_SPK_MODEL", "cam++")
+
+    requested_device = resolve_requested_device()
+    base_device = detect_best_device() if requested_device == "auto" else requested_device
+    device_candidates: list[str | None] = []
+
+    for candidate in [base_device, "cpu", None]:
+        if candidate not in device_candidates:
+            device_candidates.append(candidate)
+
+    last_error: Exception | None = None
+    for candidate in device_candidates:
+        try:
+            kwargs = dict(model_kwargs)
+            if candidate is not None:
+                kwargs["device"] = "cuda:0" if candidate == "cuda" else candidate
+            model = auto_model_cls(**kwargs)
+            return model, candidate or "default"
+        except Exception as error:
+            last_error = error
+
+    if last_error is not None:
+        raise last_error
+
+    raise RuntimeError("FunASR 模型初始化失败。")
+
+
 def extract_segments(result: dict, with_speaker: bool) -> tuple[list[dict], list[dict]]:
     transcript_segments: list[dict] = []
     speaker_segments: list[dict] = []
@@ -67,7 +143,7 @@ def extract_segments(result: dict, with_speaker: bool) -> tuple[list[dict], list
     for index, item in enumerate(sentence_items, start=1):
         text = str(item.get("text") or item.get("sentence") or item.get("content") or "").strip()
         if not text:
-          continue
+            continue
 
         start_ms = normalize_timestamp(item.get("start") or item.get("start_ms") or item.get("begin"))
         end_ms = normalize_timestamp(item.get("end") or item.get("end_ms") or item.get("stop"))
@@ -132,20 +208,20 @@ def main():
         write_progress(job_dir, "failed", "导入 funasr 失败。", str(error))
         raise
 
-    model_kwargs = {
-        "model": os.getenv("FUNASR_MODEL", "paraformer-zh"),
-        "vad_model": os.getenv("FUNASR_VAD_MODEL", "fsmn-vad"),
-        "punc_model": os.getenv("FUNASR_PUNC_MODEL", "ct-punc"),
-    }
-    if wants_speaker:
-        model_kwargs["spk_model"] = os.getenv("FUNASR_SPK_MODEL", "cam++")
-
-    model = AutoModel(**model_kwargs)
+    model, resolved_device = build_model(AutoModel, wants_speaker)
+    batch_size_s = parse_positive_int(os.getenv("FUNASR_BATCH_SIZE_S"), 300)
+    log(
+        "FunASR runtime:"
+        f" device={resolved_device}"
+        f", batch_size_s={batch_size_s}"
+        f", threads={os.getenv('OMP_NUM_THREADS', '1')}"
+        f", speaker={'true' if wants_speaker else 'false'}"
+    )
 
     write_progress(job_dir, "transcribing", "正在进行本地转写。")
     result = model.generate(
         input=str(input_path),
-        batch_size_s=300,
+        batch_size_s=batch_size_s,
         hotword=args.hotwords or None,
     )
 

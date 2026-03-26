@@ -1,4 +1,5 @@
 export type JobStage =
+  | "idle"
   | "uploaded"
   | "queued"
   | "transcribing"
@@ -6,6 +7,12 @@ export type JobStage =
   | "summarizing"
   | "completed"
   | "failed";
+
+export type AiSummaryRunStatus = "running" | "completed" | "failed";
+export type ThemeMode = "auto" | "light" | "dark";
+export type LiquidGlassStyle = "transparent" | "tinted";
+export type LocaleCode = "zh-CN" | "en-US";
+export type LocalAsrDevice = "auto" | "cpu" | "mps" | "cuda";
 
 export interface TranscriptSegment {
   id: string;
@@ -20,6 +27,65 @@ export interface MeetingSummary {
   topics: string[];
   decisions: string[];
   actionItems: string[];
+  risks?: string[];
+  followUps?: string[];
+}
+
+export interface AiSummaryActionItem {
+  task: string;
+  owner?: string;
+  dueDate?: string;
+}
+
+export interface AiSummaryResult {
+  title: string;
+  overview: string;
+  topics: string[];
+  decisions: string[];
+  actionItems: AiSummaryActionItem[];
+  risks: string[];
+  followUps: string[];
+}
+
+export interface AiModelConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  enabled: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiSummaryTemplate {
+  id: string;
+  name: string;
+  description: string;
+  prompt: string;
+  includeSpeakerByDefault: boolean;
+  includeTimestampByDefault: boolean;
+  builtin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiSummaryRun {
+  id: string;
+  jobId: string;
+  modelConfigId: string;
+  templateId: string;
+  includeSpeaker: boolean;
+  includeTimestamp: boolean;
+  extraInstructions: string;
+  status: AiSummaryRunStatus;
+  errorMessage?: string;
+  promptPreview?: string;
+  rawResponse?: string;
+  result?: AiSummaryResult;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MeetingJob {
@@ -27,6 +93,9 @@ export interface MeetingJob {
   title: string;
   sourceFiles: MeetingSourceFile[];
   durationMinutes: number;
+  processingStartedAtMs?: number;
+  processingFinishedAtMs?: number;
+  processingDurationSeconds?: number;
   createdAt: string;
   hotwords: string[];
   lang: string;
@@ -40,6 +109,8 @@ export interface MeetingJob {
   transcriptSegments: TranscriptSegment[];
   speakerSegments: TranscriptSegment[];
   summary: MeetingSummary;
+  summaryRuns: AiSummaryRun[];
+  activeSummaryRunId?: string;
   exportFormats: string[];
   lastExportedAt?: string;
   processLog?: string;
@@ -63,6 +134,10 @@ export interface NewMeetingJobInput {
 }
 
 export interface SettingsState {
+  themeMode: ThemeMode;
+  liquidGlassStyle: LiquidGlassStyle;
+  accentColor: string;
+  locale: LocaleCode;
   backendUrl: string;
   apiToken: string;
   defaultHotwords: string;
@@ -70,4 +145,7 @@ export interface SettingsState {
   concurrency: number;
   pythonPath: string;
   runnerScriptPath: string;
+  localAsrDevice: LocalAsrDevice;
+  localAsrThreads: number;
+  localAsrBatchSizeSeconds: number;
 }
