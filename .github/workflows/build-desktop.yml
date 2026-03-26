@@ -53,7 +53,6 @@ jobs:
       - name: Build Tauri bundle
         uses: tauri-apps/tauri-action@v0.6.0
         with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
           args: ${{ matrix.args }}
 
       - name: Upload bundle artifacts
