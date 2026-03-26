@@ -32,7 +32,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 20
-          cache: pnpm
 
       - name: Install pnpm
         run: npm install --global pnpm@10.30.3
