@@ -14,15 +14,18 @@ jobs:
           - name: macOS Apple Silicon
             platform: macos-latest
             rustTargets: aarch64-apple-darwin
+            bundleTarget: aarch64-apple-darwin
             args: --target aarch64-apple-darwin
           - name: macOS Intel
             platform: macos-latest
             rustTargets: x86_64-apple-darwin
+            bundleTarget: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
           - name: Windows x64
             platform: windows-latest
             rustTargets: x86_64-pc-windows-msvc
-            args: ""
+            bundleTarget: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -52,5 +55,10 @@ jobs:
         with:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: liberty-[platform]-[arch]-[bundle]
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: liberty-${{ matrix.bundleTarget }}
+          path: src-tauri/target/${{ matrix.bundleTarget }}/release/bundle/**
+          if-no-files-found: error
