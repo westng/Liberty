@@ -4,14 +4,19 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAiStore } from "@/composables/useAiStore";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { formatMessage, getMessages } from "@/services/i18n";
 import type { AiSummaryTemplate } from "@/types/meeting";
 
 const route = useRoute();
 const aiStore = useAiStore();
+const meetingStore = useMeetingStore();
 
 const selectedId = ref<string | null>(null);
 const draft = ref<AiSummaryTemplate>(createFreshDraft());
 const errorMessage = ref("");
+const messages = computed(() => getMessages(meetingStore.settings.value.locale).templates);
+const commonMessages = computed(() => getMessages(meetingStore.settings.value.locale).common);
 
 const selectedTemplate = computed(() =>
   selectedId.value ? aiStore.getTemplateById(selectedId.value) ?? null : null,
@@ -50,11 +55,11 @@ function createFreshDraft() {
 
 function validateDraft() {
   if (!draft.value.name.trim()) {
-    return "模板名称不能为空。";
+    return messages.value.validationName;
   }
 
   if (!draft.value.prompt.trim()) {
-    return "Prompt 不能为空。";
+    return messages.value.validationPrompt;
   }
 
   return "";
@@ -62,7 +67,7 @@ function validateDraft() {
 
 async function syncWindowTitle(isEdit: boolean) {
   try {
-    await getCurrentWindow().setTitle(isEdit ? "编辑模板" : "新增模板");
+    await getCurrentWindow().setTitle(isEdit ? messages.value.editorEditTitle : messages.value.editorNewTitle);
   } catch {
     // ignore
   }
@@ -70,7 +75,7 @@ async function syncWindowTitle(isEdit: boolean) {
 
 async function save() {
   if (draft.value.builtin) {
-    errorMessage.value = "内置模板不可直接修改，请先复制。";
+    errorMessage.value = messages.value.builtinReadonly;
     return;
   }
 
@@ -117,11 +122,11 @@ async function removeTemplate() {
     return;
   }
 
-  const confirmed = await confirm(`确认删除模板“${selectedTemplate.value.name}”吗？`, {
-    title: "删除模板",
+  const confirmed = await confirm(formatMessage(messages.value.deleteConfirm, { name: selectedTemplate.value.name }), {
+    title: messages.value.deleteTitle,
     kind: "warning",
-    okLabel: "删除",
-    cancelLabel: "取消",
+    okLabel: commonMessages.value.delete,
+    cancelLabel: commonMessages.value.cancel,
   });
 
   if (!confirmed) {
@@ -147,26 +152,26 @@ function resetDraft() {
   <section class="editor-window-shell">
     <article class="surface editor-window-card">
       <div class="section-heading">
-        <h3>{{ selectedId ? "编辑模板" : "新增模板" }}</h3>
+        <h3>{{ selectedId ? messages.editorEditTitle : messages.editorNewTitle }}</h3>
         <button
           v-if="selectedTemplate"
           class="secondary-button"
           type="button"
           @click="duplicateTemplate"
         >
-          复制模板
+          {{ messages.duplicate }}
         </button>
       </div>
 
       <div class="field-grid">
         <div class="field-grid two-col">
           <div class="field">
-            <label for="template-name">模板名称</label>
+            <label for="template-name">{{ messages.name }}</label>
             <input id="template-name" v-model="draft.name" :readonly="draft.builtin" />
           </div>
 
           <div class="field">
-            <label for="template-description">模板说明</label>
+            <label for="template-description">{{ messages.description }}</label>
             <input
               id="template-description"
               v-model="draft.description"
@@ -182,7 +187,7 @@ function resetDraft() {
               type="checkbox"
               :disabled="draft.builtin"
             />
-            <span>默认包含说话人</span>
+            <span>{{ messages.includeSpeakerDefault }}</span>
           </label>
 
           <label class="toggle-field">
@@ -191,17 +196,17 @@ function resetDraft() {
               type="checkbox"
               :disabled="draft.builtin"
             />
-            <span>默认包含时间戳</span>
+            <span>{{ messages.includeTimestampDefault }}</span>
           </label>
         </div>
 
         <div class="field">
-          <label for="template-prompt">Prompt</label>
+          <label for="template-prompt">{{ messages.prompt }}</label>
           <textarea
             id="template-prompt"
             v-model="draft.prompt"
             :readonly="draft.builtin"
-            placeholder="输入结构化 Prompt"
+            :placeholder="messages.promptPlaceholder"
           />
         </div>
       </div>
@@ -217,10 +222,10 @@ function resetDraft() {
           :disabled="draft.builtin"
           @click="save"
         >
-          保存模板
+          {{ messages.save }}
         </button>
         <button class="secondary-button" type="button" @click="resetDraft">
-          新建空模板
+          {{ messages.reset }}
         </button>
         <button
           v-if="selectedTemplate && !selectedTemplate.builtin"
@@ -228,7 +233,7 @@ function resetDraft() {
           type="button"
           @click="removeTemplate"
         >
-          删除模板
+          {{ commonMessages.delete }}
         </button>
       </div>
     </article>

@@ -2,10 +2,15 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import { useAiStore } from "@/composables/useAiStore";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { formatMessage, getMessages } from "@/services/i18n";
 import { openModelEditorWindow } from "@/services/window";
 import type { AiModelConfig } from "@/types/meeting";
 
 const aiStore = useAiStore();
+const meetingStore = useMeetingStore();
+const messages = computed(() => getMessages(meetingStore.settings.value.locale).models);
+const commonMessages = computed(() => getMessages(meetingStore.settings.value.locale).common);
 
 const models = computed(() =>
   [...aiStore.models.value].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
@@ -37,11 +42,11 @@ async function editModel(model: AiModelConfig) {
 }
 
 async function removeModel(model: AiModelConfig) {
-  const confirmed = await confirm(`确认删除模型“${model.name}”吗？`, {
-    title: "删除模型",
+  const confirmed = await confirm(formatMessage(messages.value.deleteConfirm, { name: model.name }), {
+    title: messages.value.deleteTitle,
     kind: "warning",
-    okLabel: "删除",
-    cancelLabel: "取消",
+    okLabel: commonMessages.value.delete,
+    cancelLabel: commonMessages.value.cancel,
   });
   if (!confirmed) {
     return;
@@ -51,7 +56,7 @@ async function removeModel(model: AiModelConfig) {
 }
 
 function formatUpdatedAt(value: string) {
-  return new Date(value).toLocaleString("zh-CN", {
+  return new Date(value).toLocaleString(meetingStore.settings.value.locale, {
     year: "2-digit",
     month: "2-digit",
     day: "2-digit",
@@ -66,22 +71,22 @@ function formatUpdatedAt(value: string) {
     <article class="surface">
       <div class="section-heading">
         <div>
-          <h3>模型管理</h3>
-          <p class="section-copy">新增与编辑都在独立窗口中完成。</p>
+          <h3>{{ messages.title }}</h3>
+          <p class="section-copy">{{ messages.copy }}</p>
         </div>
         <button class="primary-button" type="button" @click="startCreate">
-          新增模型
+          {{ messages.add }}
         </button>
       </div>
       <div class="summary-inline">
-        <span>全部模型 {{ models.length }}</span>
-        <span>可用 {{ enabledCount }}</span>
-        <span>默认 {{ defaultModel?.name ?? "未设置" }}</span>
+        <span>{{ messages.total }} {{ models.length }}</span>
+        <span>{{ messages.enabled }} {{ enabledCount }}</span>
+        <span>{{ messages.defaultLabel }} {{ defaultModel?.name ?? commonMessages.notSet }}</span>
       </div>
     </article>
 
     <div class="section-heading model-management-header">
-      <h3>模型列表</h3>
+      <h3>{{ messages.listTitle }}</h3>
     </div>
 
     <article class="surface model-list-card">
@@ -99,15 +104,15 @@ function formatUpdatedAt(value: string) {
 
           <div class="model-row-side">
             <span class="record-meta">{{ formatUpdatedAt(model.updatedAt) }}</span>
-            <span class="record-meta">{{ model.isDefault ? "默认" : model.enabled ? "启用" : "停用" }}</span>
-            <button class="text-button" type="button" @click.stop="editModel(model)">编辑</button>
-            <button class="text-button danger-text" type="button" @click.stop="removeModel(model)">删除</button>
+            <span class="record-meta">{{ model.isDefault ? messages.defaultTag : model.enabled ? messages.enabledTag : messages.disabledTag }}</span>
+            <button class="text-button" type="button" @click.stop="editModel(model)">{{ commonMessages.edit }}</button>
+            <button class="text-button danger-text" type="button" @click.stop="removeModel(model)">{{ commonMessages.delete }}</button>
           </div>
         </article>
       </div>
 
       <div v-else class="empty-state">
-        还没有配置模型。
+        {{ messages.empty }}
       </div>
     </article>
   </section>

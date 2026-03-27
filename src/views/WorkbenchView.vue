@@ -7,6 +7,7 @@ import { useAiStore } from "@/composables/useAiStore";
 import TranscriptTimeline from "@/components/TranscriptTimeline.vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { exportJob } from "@/services/export";
+import { formatMessage, getMessages } from "@/services/i18n";
 import { getPrimaryTranscriptSegments } from "@/services/transcript";
 import { openAiSummaryWindow, openMeetingNotesWindow } from "@/services/window";
 
@@ -20,12 +21,14 @@ const query = ref("");
 const selectedSpeaker = ref(ALL_SPEAKERS);
 const isExporting = ref(false);
 const isRenamingSpeaker = ref(false);
+const messages = computed(() => getMessages(store.settings.value.locale).workbench);
+const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
 const transcriptSegments = computed(() =>
   job.value ? getPrimaryTranscriptSegments(job.value) : [],
 );
 
 function normalizeSpeakerLabel(value?: string) {
-  return value?.trim() || "未知说话人";
+  return value?.trim() || commonMessages.value.unknownSpeaker;
 }
 
 const speakerOptions = computed(() => {
@@ -39,7 +42,7 @@ const speakerOptions = computed(() => {
   return [
     {
       key: ALL_SPEAKERS,
-      label: "全部",
+      label: messages.value.allSpeakers,
       count: transcriptSegments.value.length,
     },
     ...Array.from(counts.entries()).map(([label, count]) => ({
@@ -104,7 +107,7 @@ async function renameSpeaker(fromSpeaker: string, toSpeaker: string) {
     return;
   }
 
-  const sourceLabel = fromSpeaker.trim() || "未知说话人";
+  const sourceLabel = fromSpeaker.trim() || commonMessages.value.unknownSpeaker;
   const targetLabel = toSpeaker.trim();
 
   if (!targetLabel) {
@@ -112,12 +115,15 @@ async function renameSpeaker(fromSpeaker: string, toSpeaker: string) {
   }
 
   const confirmed = await confirm(
-    `确认将当前任务中的“${sourceLabel}”统一替换为“${targetLabel}”吗？`,
+    formatMessage(messages.value.renameSpeakerConfirm, {
+      source: sourceLabel,
+      target: targetLabel,
+    }),
     {
-      title: "编辑讲话人",
+      title: messages.value.renameSpeakerTitle,
       kind: "warning",
-      okLabel: "替换",
-      cancelLabel: "取消",
+      okLabel: messages.value.replace,
+      cancelLabel: commonMessages.value.cancel,
     },
   );
 
@@ -146,7 +152,7 @@ async function renameSpeaker(fromSpeaker: string, toSpeaker: string) {
           <div>
             <h3>{{ job.title }}</h3>
             <p class="section-copy">
-              当前聚焦逐字稿与 AI 总结，导出和任务上下文收拢到右侧区域。
+              {{ messages.heroCopy }}
             </p>
           </div>
           <StatusBadge :status="job.overallStatus" />
@@ -159,42 +165,42 @@ async function renameSpeaker(fromSpeaker: string, toSpeaker: string) {
             :disabled="!transcriptSegments.length"
             @click="launchAiSummary"
           >
-            AI 总结
+            {{ messages.aiSummary }}
           </button>
           <button class="secondary-button" type="button" @click="openNotes">
-            查看会议纪要
+            {{ messages.viewNotes }}
           </button>
           <button class="primary-button" type="button" @click="doExport('bundle')">
-            {{ isExporting ? "导出中..." : "导出完整结果" }}
+            {{ isExporting ? messages.exporting : messages.exportBundle }}
           </button>
           <button class="secondary-button" type="button" @click="doExport('transcript')">
-            导出逐字稿
+            {{ messages.exportTranscript }}
           </button>
           <button class="secondary-button" type="button" @click="doExport('notes')">
-            导出纪要
+            {{ messages.exportNotes }}
           </button>
         </div>
 
         <div class="summary-inline">
-          <span>逐字稿 {{ transcriptSegments.length }} 段</span>
-          <span>AI 总结 {{ job.summaryRuns.length }} 次</span>
-          <span>当前模板 {{ activeTemplateName || "尚未生成" }}</span>
-          <span>文件 {{ job.sourceFiles.length }} 个</span>
-          <span>时长 {{ job.durationMinutes }} 分钟</span>
-          <span>热词 {{ job.hotwords.join("、") || "未配置" }}</span>
-          <span>{{ job.summary.overview ? "会议纪要已生成" : "暂无会议纪要" }}</span>
-          <span>{{ activeSummaryRun ? "当前已选结果可导出" : "还没有生成 AI 总结" }}</span>
+          <span>{{ formatMessage(messages.transcriptCount, { count: transcriptSegments.length }) }}</span>
+          <span>{{ formatMessage(messages.summaryCount, { count: job.summaryRuns.length }) }}</span>
+          <span>{{ formatMessage(messages.currentTemplate, { name: activeTemplateName || messages.notGenerated }) }}</span>
+          <span>{{ formatMessage(messages.fileCount, { count: job.sourceFiles.length }) }}</span>
+          <span>{{ formatMessage(messages.durationMinutes, { count: job.durationMinutes }) }}</span>
+          <span>{{ formatMessage(messages.hotwords, { value: job.hotwords.join("、") || messages.notConfigured }) }}</span>
+          <span>{{ job.summary.overview ? messages.notesReady : messages.notesEmpty }}</span>
+          <span>{{ activeSummaryRun ? messages.activeResultReady : messages.summaryEmpty }}</span>
         </div>
       </article>
 
       <article class="surface transcript-column full-span">
         <div class="section-heading workbench-transcript-heading">
-          <h3>逐字稿</h3>
+          <h3>{{ messages.transcript }}</h3>
           <div class="field workbench-search-field">
             <input
               id="transcript-search"
               v-model="query"
-              placeholder="搜索说话人或正文"
+              :placeholder="messages.searchPlaceholder"
             />
           </div>
         </div>
@@ -221,7 +227,7 @@ async function renameSpeaker(fromSpeaker: string, toSpeaker: string) {
     </div>
 
     <div v-else class="empty-state">
-      没有找到这个任务结果。
+      {{ messages.notFound }}
     </div>
   </section>
 </template>

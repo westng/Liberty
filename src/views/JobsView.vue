@@ -3,9 +3,12 @@ import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
+import { formatMessage, getMessages } from "@/services/i18n";
 
 const store = useMeetingStore();
 const deletingJobId = ref<string | null>(null);
+const messages = computed(() => getMessages(store.settings.value.locale).jobs);
+const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
 
 const sortedJobs = computed(() =>
   [...store.jobs.value].sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
@@ -43,7 +46,7 @@ async function deleteJob(jobId: string) {
     return;
   }
 
-  const confirmed = window.confirm(`确认删除任务“${job.title}”吗？删除后无法恢复。`);
+  const confirmed = window.confirm(formatMessage(messages.value.deleteConfirm, { title: job.title }));
   if (!confirmed) {
     return;
   }
@@ -58,7 +61,7 @@ async function deleteJob(jobId: string) {
 }
 
 function formatCreatedAt(value: string) {
-  return new Date(value).toLocaleString("zh-CN", {
+  return new Date(value).toLocaleString(store.settings.value.locale, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -68,7 +71,7 @@ function formatCreatedAt(value: string) {
 
 function formatFileDuration(minutes: number) {
   if (!minutes || minutes <= 0) {
-    return "待处理";
+    return messages.value.pending;
   }
 
   const totalMinutes = Math.max(1, Math.round(minutes));
@@ -76,19 +79,19 @@ function formatFileDuration(minutes: number) {
   const remainingMinutes = totalMinutes % 60;
 
   if (hours <= 0) {
-    return `${remainingMinutes} 分钟`;
+    return formatMessage(messages.value.minutes, { count: remainingMinutes });
   }
 
   if (remainingMinutes === 0) {
-    return `${hours} 小时`;
+    return formatMessage(messages.value.hours, { count: hours });
   }
 
-  return `${hours} 小时 ${remainingMinutes} 分钟`;
+  return formatMessage(messages.value.hoursMinutes, { hours, minutes: remainingMinutes });
 }
 
 function formatProcessingDuration(seconds?: number) {
   if (typeof seconds !== "number" || seconds < 0) {
-    return "未完成";
+    return messages.value.notCompleted;
   }
 
   const totalSeconds = Math.max(0, Math.round(seconds));
@@ -97,10 +100,16 @@ function formatProcessingDuration(seconds?: number) {
   const remainingSeconds = totalSeconds % 60;
 
   if (hours > 0) {
-    return `${hours}小时 ${String(minutes).padStart(2, "0")}分`;
+    return formatMessage(messages.value.processingWithHours, {
+      hours,
+      minutes: String(minutes).padStart(2, "0"),
+    });
   }
 
-  return `${minutes}分 ${String(remainingSeconds).padStart(2, "0")}秒`;
+  return formatMessage(messages.value.processingWithMinutes, {
+    minutes,
+    seconds: String(remainingSeconds).padStart(2, "0"),
+  });
 }
 </script>
 
@@ -109,35 +118,35 @@ function formatProcessingDuration(seconds?: number) {
     <article class="surface">
       <div class="section-heading">
         <div>
-          <h3>所有会议任务</h3>
+          <h3>{{ messages.pageTitle }}</h3>
           <p class="section-copy">
-            统一查看上传、转写、说话人处理和纪要生成阶段。
+            {{ messages.pageCopy }}
           </p>
         </div>
       </div>
       <div class="summary-inline">
-        <span>总任务 {{ sortedJobs.length }}</span>
-        <span>处理中 {{ processingJobs }}</span>
-        <span>已完成 {{ completedJobs }}</span>
+        <span>{{ messages.total }} {{ sortedJobs.length }}</span>
+        <span>{{ messages.processing }} {{ processingJobs }}</span>
+        <span>{{ messages.completed }} {{ completedJobs }}</span>
       </div>
     </article>
 
     <article class="surface">
       <div class="section-heading">
         <div>
-          <h3>任务队列</h3>
-          <p class="section-copy">按任务名、时长、状态和操作整理，减少在卡片间来回扫描。</p>
+          <h3>{{ messages.queueTitle }}</h3>
+          <p class="section-copy">{{ messages.queueCopy }}</p>
         </div>
       </div>
 
       <div class="jobs-table">
         <div class="jobs-table-head">
-          <span>任务</span>
-          <span>文件信息</span>
-          <span>处理时间</span>
-          <span>创建时间</span>
-          <span>状态</span>
-          <span>操作</span>
+          <span>{{ messages.colTask }}</span>
+          <span>{{ messages.colFileInfo }}</span>
+          <span>{{ messages.colProcessingTime }}</span>
+          <span>{{ messages.colCreatedAt }}</span>
+          <span>{{ messages.colStatus }}</span>
+          <span>{{ messages.colActions }}</span>
         </div>
 
         <div v-for="job in sortedJobs" :key="job.id" class="jobs-row">
@@ -149,19 +158,19 @@ function formatProcessingDuration(seconds?: number) {
           </div>
 
           <div class="jobs-cell">
-            <strong>{{ job.sourceFiles.length }} 个文件</strong>
+            <strong>{{ formatMessage(messages.filesCount, { count: job.sourceFiles.length }) }}</strong>
             <div class="job-meta-line">
-              文件时长 {{ formatFileDuration(job.durationMinutes) }}
+              {{ formatMessage(messages.fileDuration, { duration: formatFileDuration(job.durationMinutes) }) }}
             </div>
             <div class="job-meta-line">
-              {{ job.enableSpeaker ? "含说话人分离" : "仅转写" }}
+              {{ job.enableSpeaker ? messages.diarizationEnabled : messages.transcriptOnly }}
             </div>
           </div>
 
           <div class="jobs-cell">
             <strong>{{ formatProcessingDuration(job.processingDurationSeconds) }}</strong>
             <div class="job-meta-line">
-              {{ job.overallStatus === "completed" ? "处理完成" : job.overallStatus === "failed" ? "处理失败" : "处理中" }}
+              {{ job.overallStatus === "completed" ? messages.processCompleted : job.overallStatus === "failed" ? messages.processFailed : messages.processRunning }}
             </div>
           </div>
 
@@ -175,14 +184,14 @@ function formatProcessingDuration(seconds?: number) {
 
           <div class="jobs-actions">
             <RouterLink class="text-button" :to="`/jobs/${job.id}`">
-              详情
+              {{ messages.details }}
             </RouterLink>
             <RouterLink
               v-if="job.overallStatus === 'completed'"
               class="primary-button small-button"
               :to="`/jobs/${job.id}/workbench`"
             >
-              工作台
+              {{ messages.workbench }}
             </RouterLink>
             <button
               v-if="job.overallStatus === 'failed'"
@@ -190,16 +199,16 @@ function formatProcessingDuration(seconds?: number) {
               type="button"
               @click="store.retryJob(job.id)"
             >
-              重试
+              {{ commonMessages.retry }}
             </button>
             <button
               class="text-button small-button jobs-delete-button"
               type="button"
               :disabled="isDeleteDisabled(job.overallStatus) || isDeleting(job.id)"
-              :title="isDeleteDisabled(job.overallStatus) ? '处理中暂不可删除' : '删除任务'"
+              :title="isDeleteDisabled(job.overallStatus) ? messages.deleteDisabled : messages.deleteAction"
               @click="deleteJob(job.id)"
             >
-              {{ isDeleting(job.id) ? "删除中..." : "删除" }}
+              {{ isDeleting(job.id) ? messages.deleting : commonMessages.delete }}
             </button>
           </div>
         </div>

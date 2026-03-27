@@ -41,6 +41,7 @@ const form = reactive({
 
 const messages = computed(() => getMessages(store.settings.value.locale).settings);
 const shellMessages = computed(() => getMessages(store.settings.value.locale).shell);
+const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
 const glassPreviewThemeClass = computed(() =>
   resolveTheme(store.settings.value.themeMode) === "light"
     ? "preview-glass-light"
@@ -92,14 +93,14 @@ const runtimeStatusDescription = computed(() => {
 
   switch (runtimeStatus.value.status) {
     case "ready":
-      return "本地运行环境已就绪，任务会优先使用托管环境执行。";
+      return messages.value.runtimeDescriptionReady;
     case "installing":
-      return "正在下载并配置本地运行环境，请耐心等待当前安装流程完成。";
+      return messages.value.runtimeDescriptionInstalling;
     case "failed":
     case "repair_required":
-      return "安装未完成，请查看下方日志并重新安装。";
+      return messages.value.runtimeDescriptionFailed;
     default:
-      return "当前设备尚未安装本地运行环境，安装后即可直接处理会议文件。";
+      return messages.value.runtimeDescriptionMissing;
   }
 });
 const runtimeBusy = computed(() => runtimeStatus.value.status === "installing");
@@ -219,12 +220,12 @@ function labelForRuntimeStatus(status: ManagedRuntimeStatus) {
 function formatRuntimeDate(value?: string) {
   const normalized = value?.trim();
   if (!normalized) {
-    return "—";
+    return commonMessages.value.dash;
   }
 
   const fromMillis = Number(normalized);
   const date = Number.isFinite(fromMillis) && fromMillis > 0 ? new Date(fromMillis) : new Date(normalized);
-  return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString(store.settings.value.locale);
 }
 
 onMounted(() => {
@@ -454,7 +455,7 @@ onBeforeUnmount(() => {
             <input
               id="python-path"
               v-model="form.pythonPath"
-              placeholder="例如：/opt/homebrew/bin/python3 或 C:\\Python311\\python.exe"
+              :placeholder="messages.pythonPathPlaceholder"
               @blur="save"
             />
           </div>
@@ -489,7 +490,7 @@ onBeforeUnmount(() => {
             <textarea
               id="default-hotwords"
               v-model="form.defaultHotwords"
-              placeholder="使用英文逗号分隔，例如：SeACo-Paraformer, FunASR, 会议纪要"
+              :placeholder="messages.defaultHotwordsPlaceholder"
               @blur="save"
             />
           </div>
@@ -504,7 +505,7 @@ onBeforeUnmount(() => {
             <input
               id="summary-template"
               v-model="form.summaryTemplate"
-              placeholder="例如：默认会议纪要模板"
+              :placeholder="messages.defaultSummaryTemplatePlaceholder"
               @blur="save"
             />
           </div>
@@ -576,7 +577,7 @@ onBeforeUnmount(() => {
             <input
               id="backend-url"
               v-model="form.backendUrl"
-              placeholder="例如：http://127.0.0.1:8000"
+              :placeholder="messages.backendUrlPlaceholder"
               @blur="save"
             />
           </div>
@@ -592,7 +593,7 @@ onBeforeUnmount(() => {
               id="api-token"
               v-model="form.apiToken"
               type="password"
-              placeholder="可选"
+              :placeholder="messages.apiTokenPlaceholder"
               autocomplete="off"
               @blur="save"
             />

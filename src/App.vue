@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
 import { useMeetingStore } from "@/composables/useMeetingStore";
-import { getMessages } from "@/services/i18n";
+import { formatMessage, getMessages } from "@/services/i18n";
 import { openExternalUrl } from "@/services/system";
 
 const route = useRoute();
@@ -195,8 +195,8 @@ async function notifyJobCompleted(jobTitle: string) {
     return;
   }
 
-  new Notification("会议任务处理完成", {
-    body: `“${jobTitle}” 已处理完成，可以前往结果工作台查看。`,
+  new Notification(messages.value.shell.jobCompletedTitle, {
+    body: formatMessage(messages.value.shell.jobCompletedBody, { title: jobTitle }),
   });
 }
 </script>

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentMessages } from "@/services/i18n";
 import type {
   AiModelConfig,
   AiSummaryResult,
@@ -40,6 +41,7 @@ function formatSegment(
   includeSpeaker: boolean,
   includeTimestamp: boolean,
 ) {
+  const messages = getCurrentMessages();
   const parts: string[] = [];
 
   if (includeTimestamp) {
@@ -47,7 +49,7 @@ function formatSegment(
   }
 
   if (includeSpeaker) {
-    parts.push(`${segment.speaker ?? "未知说话人"}:`);
+    parts.push(`${segment.speaker ?? messages.common.unknownSpeaker}:`);
   }
 
   parts.push(segment.text);
@@ -55,6 +57,7 @@ function formatSegment(
 }
 
 function extractResponseText(payload: OpenAiChatCompletionResponse) {
+  const messages = getCurrentMessages();
   const content = payload.choices?.[0]?.message?.content;
 
   if (typeof content === "string") {
@@ -68,7 +71,7 @@ function extractResponseText(payload: OpenAiChatCompletionResponse) {
       .trim();
   }
 
-  throw new Error("模型返回内容为空。");
+  throw new Error(messages.aiSummary.emptyResponse);
 }
 
 export function buildSummaryPromptPreview({
@@ -78,20 +81,21 @@ export function buildSummaryPromptPreview({
   includeTimestamp,
   extraInstructions,
 }: Omit<GenerateAiSummaryInput, "model">) {
+  const { aiSummary, common } = getCurrentMessages();
   const transcript = getPrimaryTranscriptSegments(job)
     .map((segment) => formatSegment(segment, includeSpeaker, includeTimestamp))
     .join("\n");
 
   const userMessage = [
-    `会议标题：${job.title}`,
-    `会议语言：${job.lang}`,
-    `热词：${job.hotwords.join("、") || "无"}`,
-    `说话人信息：${includeSpeaker ? "包含" : "不包含"}`,
-    `时间戳：${includeTimestamp ? "包含" : "不包含"}`,
-    `补充要求：${extraInstructions.trim() || "无"}`,
+    `Meeting title: ${job.title}`,
+    `Meeting language: ${job.lang}`,
+    `Hotwords: ${job.hotwords.join(", ") || common.none}`,
+    `Include speaker info: ${includeSpeaker ? "yes" : "no"}`,
+    `Include timestamps: ${includeTimestamp ? "yes" : "no"}`,
+    `Extra instructions: ${extraInstructions.trim() || common.none}`,
     "",
-    "请基于以下会议内容输出 JSON：",
-    transcript || "当前没有可用的逐字稿内容。",
+    "Please output JSON based on the following meeting content:",
+    transcript || aiSummary.transcriptMissing,
   ].join("\n");
 
   return {
@@ -101,6 +105,7 @@ export function buildSummaryPromptPreview({
 }
 
 export async function generateAiSummary(input: GenerateAiSummaryInput) {
+  const messages = getCurrentMessages();
   const { model, job } = input;
   const promptPreview = buildSummaryPromptPreview(input);
   const { rawResponse } = await invoke<{ rawResponse: string }>("request_ai_chat_completion", {
@@ -118,7 +123,7 @@ export async function generateAiSummary(input: GenerateAiSummaryInput) {
   try {
     payload = JSON.parse(rawResponse) as OpenAiChatCompletionResponse;
   } catch {
-    throw new Error("AI 接口返回的不是合法 JSON。");
+    throw new Error(messages.aiSummary.invalidApiJson);
   }
 
   const content = extractResponseText(payload);
@@ -128,7 +133,7 @@ export async function generateAiSummary(input: GenerateAiSummaryInput) {
   try {
     structured = JSON.parse(content) as Partial<AiSummaryResult>;
   } catch {
-    throw new Error("模型返回内容无法解析为结构化 JSON。");
+    throw new Error(messages.aiSummary.invalidStructuredJson);
   }
 
   return {

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { getMessages } from "@/services/i18n";
 import type { TranscriptSegment } from "@/types/meeting";
 
 const props = defineProps<{
@@ -14,6 +16,9 @@ const emit = defineEmits<{
 const editingSegmentId = ref<string | null>(null);
 const originalSpeaker = ref("");
 const draftSpeaker = ref("");
+const store = useMeetingStore();
+const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
+const workbenchMessages = computed(() => getMessages(store.settings.value.locale).workbench);
 
 const filteredSegments = computed(() => {
   const keyword = props.query.trim().toLowerCase();
@@ -30,7 +35,7 @@ function formatClock(ms: number) {
 }
 
 function getSpeakerLabel(segment: TranscriptSegment) {
-  return segment.speaker?.trim() || "未知说话人";
+  return segment.speaker?.trim() || commonMessages.value.unknownSpeaker;
 }
 
 function startEdit(segment: TranscriptSegment) {
@@ -71,16 +76,16 @@ function submitEdit() {
               v-model="draftSpeaker"
               class="speaker-edit-input"
               type="text"
-              placeholder="输入讲话人名称"
+              :placeholder="workbenchMessages.speakerInputPlaceholder"
               :disabled="busy"
               @keydown.enter.prevent="submitEdit"
               @keydown.esc.prevent="cancelEdit"
             />
             <button class="text-button" type="button" :disabled="busy" @click="submitEdit">
-              保存
+              {{ commonMessages.save }}
             </button>
             <button class="text-button" type="button" :disabled="busy" @click="cancelEdit">
-              取消
+              {{ commonMessages.cancel }}
             </button>
           </template>
           <template v-else>
@@ -91,7 +96,7 @@ function submitEdit() {
               :disabled="busy"
               @click="startEdit(segment)"
             >
-              编辑
+              {{ commonMessages.edit }}
             </button>
           </template>
         </div>
@@ -106,7 +111,7 @@ function submitEdit() {
       v-if="!filteredSegments.length"
       class="empty-state"
     >
-      没有匹配到逐字稿片段。
+      {{ workbenchMessages.emptyFilteredTranscript }}
     </div>
   </div>
 </template>

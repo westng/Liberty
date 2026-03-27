@@ -1,15 +1,17 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { formatMessage, getCurrentMessages } from "@/services/i18n";
 
 export async function openAiSummaryWindow(jobId: string, title: string) {
   const label = "ai-summary";
   const existing = await WebviewWindow.getByLabel(label);
+  const messages = getCurrentMessages().windows;
 
   if (existing) {
     await existing.close();
   }
 
   const window = new WebviewWindow(label, {
-    title: `AI 总结 - ${title}`,
+    title: formatMessage(messages.aiSummaryTitle, { title }),
     url: `/ai-summary?jobId=${encodeURIComponent(jobId)}`,
     width: 1120,
     height: 860,
@@ -25,13 +27,14 @@ export async function openAiSummaryWindow(jobId: string, title: string) {
 export async function openMeetingNotesWindow(jobId: string, title: string) {
   const label = "meeting-notes";
   const existing = await WebviewWindow.getByLabel(label);
+  const messages = getCurrentMessages().windows;
 
   if (existing) {
     await existing.close();
   }
 
   const window = new WebviewWindow(label, {
-    title: `会议纪要 - ${title}`,
+    title: formatMessage(messages.meetingNotesTitle, { title }),
     url: `/meeting-notes?jobId=${encodeURIComponent(jobId)}`,
     width: 1120,
     height: 860,
@@ -47,6 +50,7 @@ export async function openMeetingNotesWindow(jobId: string, title: string) {
 export async function openModelEditorWindow(modelId?: string) {
   const label = "model-editor";
   const existing = await WebviewWindow.getByLabel(label);
+  const messages = getCurrentMessages().windows;
 
   if (existing) {
     await existing.close();
@@ -54,7 +58,7 @@ export async function openModelEditorWindow(modelId?: string) {
 
   const query = modelId ? `?id=${encodeURIComponent(modelId)}` : "";
   const window = new WebviewWindow(label, {
-    title: modelId ? "编辑模型" : "新增模型",
+    title: modelId ? messages.editModel : messages.newModel,
     url: `/model-editor${query}`,
     width: 880,
     height: 760,
@@ -70,6 +74,7 @@ export async function openModelEditorWindow(modelId?: string) {
 export async function openTemplateEditorWindow(templateId?: string) {
   const label = "template-editor";
   const existing = await WebviewWindow.getByLabel(label);
+  const messages = getCurrentMessages().windows;
 
   if (existing) {
     await existing.close();
@@ -77,7 +82,7 @@ export async function openTemplateEditorWindow(templateId?: string) {
 
   const query = templateId ? `?id=${encodeURIComponent(templateId)}` : "";
   const window = new WebviewWindow(label, {
-    title: templateId ? "编辑模板" : "新增模板",
+    title: templateId ? messages.editTemplate : messages.newTemplate,
     url: `/template-editor${query}`,
     width: 960,
     height: 820,

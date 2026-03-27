@@ -4,14 +4,19 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAiStore } from "@/composables/useAiStore";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { formatMessage, getMessages } from "@/services/i18n";
 import type { AiModelConfig } from "@/types/meeting";
 
 const route = useRoute();
 const aiStore = useAiStore();
+const meetingStore = useMeetingStore();
 
 const selectedId = ref<string | null>(null);
 const draft = ref<AiModelConfig>(createFreshDraft());
 const errorMessage = ref("");
+const messages = computed(() => getMessages(meetingStore.settings.value.locale).models);
+const commonMessages = computed(() => getMessages(meetingStore.settings.value.locale).common);
 
 const selectedModel = computed(() =>
   selectedId.value ? aiStore.getModelById(selectedId.value) ?? null : null,
@@ -50,19 +55,19 @@ function createFreshDraft() {
 
 function validateDraft() {
   if (!draft.value.name.trim()) {
-    return "模型名称不能为空。";
+    return messages.value.validationName;
   }
 
   if (!draft.value.baseUrl.trim()) {
-    return "Base URL 不能为空。";
+    return messages.value.validationBaseUrl;
   }
 
   if (!draft.value.apiKey.trim()) {
-    return "API Key 不能为空。";
+    return messages.value.validationApiKey;
   }
 
   if (!draft.value.model.trim()) {
-    return "Model 不能为空。";
+    return messages.value.validationModel;
   }
 
   return "";
@@ -70,7 +75,7 @@ function validateDraft() {
 
 async function syncWindowTitle(isEdit: boolean) {
   try {
-    await getCurrentWindow().setTitle(isEdit ? "编辑模型" : "新增模型");
+    await getCurrentWindow().setTitle(isEdit ? messages.value.editorEditTitle : messages.value.editorNewTitle);
   } catch {
     // ignore
   }
@@ -103,11 +108,11 @@ async function removeModel() {
     return;
   }
 
-  const confirmed = await confirm(`确认删除模型“${selectedModel.value.name}”吗？`, {
-    title: "删除模型",
+  const confirmed = await confirm(formatMessage(messages.value.deleteConfirm, { name: selectedModel.value.name }), {
+    title: messages.value.deleteTitle,
     kind: "warning",
-    okLabel: "删除",
-    cancelLabel: "取消",
+    okLabel: commonMessages.value.delete,
+    cancelLabel: commonMessages.value.cancel,
   });
   if (!confirmed) {
     return;
@@ -131,49 +136,49 @@ function resetDraft() {
   <section class="editor-window-shell">
     <article class="surface editor-window-card">
       <div class="section-heading">
-        <h3>{{ selectedId ? "编辑模型" : "新增模型" }}</h3>
+        <h3>{{ selectedId ? messages.editorEditTitle : messages.editorNewTitle }}</h3>
       </div>
 
       <div class="field-grid">
         <div class="field">
-          <label for="model-name">模型名称</label>
-          <input id="model-name" v-model="draft.name" placeholder="例如：OpenAI GPT-4.1" />
+          <label for="model-name">{{ messages.name }}</label>
+          <input id="model-name" v-model="draft.name" :placeholder="messages.namePlaceholder" />
         </div>
 
         <div class="field">
-          <label for="model-base-url">Base URL</label>
+          <label for="model-base-url">{{ messages.baseUrl }}</label>
           <input
             id="model-base-url"
             v-model="draft.baseUrl"
-            placeholder="例如：https://api.openai.com/v1"
+            :placeholder="messages.baseUrlPlaceholder"
           />
         </div>
 
         <div class="field">
-          <label for="model-api-key">API Key</label>
+          <label for="model-api-key">{{ messages.apiKey }}</label>
           <input
             id="model-api-key"
             v-model="draft.apiKey"
             type="password"
-            placeholder="sk-..."
+            :placeholder="messages.apiKeyPlaceholder"
             autocomplete="off"
           />
         </div>
 
         <div class="field">
-          <label for="model-id">Model</label>
-          <input id="model-id" v-model="draft.model" placeholder="例如：gpt-4.1" />
+          <label for="model-id">{{ messages.model }}</label>
+          <input id="model-id" v-model="draft.model" :placeholder="messages.modelPlaceholder" />
         </div>
 
         <div class="field-grid two-col">
           <label class="toggle-field">
             <input v-model="draft.enabled" type="checkbox" />
-            <span>启用该模型</span>
+            <span>{{ messages.enabledSwitch }}</span>
           </label>
 
           <label class="toggle-field">
             <input v-model="draft.isDefault" type="checkbox" />
-            <span>设为默认模型</span>
+            <span>{{ messages.defaultSwitch }}</span>
           </label>
         </div>
       </div>
@@ -184,10 +189,10 @@ function resetDraft() {
 
       <div class="button-row">
         <button class="primary-button" type="button" @click="save">
-          保存模型
+          {{ messages.save }}
         </button>
         <button class="secondary-button" type="button" @click="resetDraft">
-          清空表单
+          {{ messages.reset }}
         </button>
         <button
           v-if="selectedId"
@@ -195,7 +200,7 @@ function resetDraft() {
           type="button"
           @click="removeModel"
         >
-          删除模型
+          {{ commonMessages.delete }}
         </button>
       </div>
     </article>

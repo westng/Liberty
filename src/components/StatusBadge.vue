@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { getMessages } from "@/services/i18n";
 import type { JobStage } from "@/types/meeting";
 
 const props = defineProps<{
@@ -7,18 +9,10 @@ const props = defineProps<{
   text?: string;
 }>();
 
-const labels: Record<JobStage, string> = {
-  idle: "未生成",
-  uploaded: "已上传",
-  queued: "排队中",
-  transcribing: "转写中",
-  speaker_processing: "说话人处理中",
-  summarizing: "纪要生成中",
-  completed: "已完成",
-  failed: "失败",
-};
+const store = useMeetingStore();
+const labels = computed(() => getMessages(store.settings.value.locale).status);
 
-const label = computed(() => props.text ?? labels[props.status]);
+const label = computed(() => props.text ?? labels.value[props.status]);
 </script>
 
 <template>

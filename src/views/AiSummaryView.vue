@@ -7,6 +7,7 @@ import MeetingNotesPanel from "@/components/MeetingNotesPanel.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { useAiStore } from "@/composables/useAiStore";
 import { useMeetingStore } from "@/composables/useMeetingStore";
+import { formatMessage, getMessages } from "@/services/i18n";
 import {
   buildSummaryRun,
   createEmptyMeetingSummary,
@@ -19,6 +20,8 @@ import type { AiSummaryRun, JobStage } from "@/types/meeting";
 const route = useRoute();
 const aiStore = useAiStore();
 const meetingStore = useMeetingStore();
+const messages = computed(() => getMessages(meetingStore.settings.value.locale).aiSummary);
+const commonMessages = computed(() => getMessages(meetingStore.settings.value.locale).common);
 
 const jobId = computed(() => String(route.query.jobId ?? ""));
 const job = computed(() => meetingStore.getJobById(jobId.value));
@@ -107,18 +110,18 @@ const summaryDisplayStatus = computed<JobStage>(() => {
 });
 const activeSummaryLabel = computed(() => {
   if (!latestRun.value) {
-    return "尚未生成";
+    return messages.value.activeLabelEmpty;
   }
 
   if (summaryDisplayStatus.value === "failed") {
-    return "最近一次失败";
+    return messages.value.activeLabelFailed;
   }
 
   if (summaryDisplayStatus.value === "summarizing") {
-    return "生成中";
+    return messages.value.activeLabelRunning;
   }
 
-  return "已保存结果";
+  return messages.value.activeLabelSaved;
 });
 
 watch(
@@ -196,7 +199,7 @@ async function reconcileStaleRuns() {
     await meetingStore.saveSummaryRun({
       ...run,
       status: "failed",
-      errorMessage: "上一次 AI 总结未完成，可能因网络、代理或窗口中断导致失败。",
+      errorMessage: messages.value.staleRunError,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -204,24 +207,24 @@ async function reconcileStaleRuns() {
 
 async function submit() {
   if (!job.value) {
-    errorMessage.value = "没有找到当前任务。";
+    errorMessage.value = messages.value.jobNotFound;
     return;
   }
 
   if (!selectedModel.value) {
-    errorMessage.value = "请先在主窗口中配置可用模型。";
+    errorMessage.value = messages.value.modelMissing;
     return;
   }
 
   if (!selectedTemplate.value) {
-    errorMessage.value = "请先在主窗口中配置可用模板。";
+    errorMessage.value = messages.value.templateMissing;
     return;
   }
 
   const transcriptSegments = getPrimaryTranscriptSegments(job.value);
 
   if (!transcriptSegments.length) {
-    errorMessage.value = "当前任务还没有可用于总结的逐字稿内容。";
+    errorMessage.value = messages.value.transcriptMissing;
     return;
   }
 
@@ -269,7 +272,7 @@ async function submit() {
     await meetingStore.setActiveSummaryRun(pendingRun.jobId, pendingRun.id);
     selectedRunId.value = pendingRun.id;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "AI 总结失败。";
+    const message = error instanceof Error ? error.message : messages.value.requestFailed;
     errorMessage.value = message;
     await meetingStore.saveSummaryRun({
       ...pendingRun,
@@ -298,11 +301,11 @@ async function removeRun(run: AiSummaryRun) {
     return;
   }
 
-  const confirmed = await confirm("删除后无法恢复，确认删除这条 AI 总结记录吗？", {
-    title: "删除总结记录",
+  const confirmed = await confirm(messages.value.deleteConfirm, {
+    title: messages.value.deleteTitle,
     kind: "warning",
-    okLabel: "删除",
-    cancelLabel: "取消",
+    okLabel: commonMessages.value.delete,
+    cancelLabel: commonMessages.value.cancel,
   });
 
   if (!confirmed) {
@@ -317,7 +320,7 @@ async function removeRun(run: AiSummaryRun) {
 }
 
 function formatCreatedAt(value: string) {
-  return new Date(value).toLocaleString("zh-CN", {
+  return new Date(value).toLocaleString(meetingStore.settings.value.locale, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -331,24 +334,24 @@ function formatCreatedAt(value: string) {
     <article class="surface summary-window-hero">
       <div class="job-title-line">
         <div>
-          <h3>{{ job?.title || "AI 总结" }}</h3>
+          <h3>{{ job?.title || messages.heroTitle }}</h3>
           <p class="section-copy">
-            当前逐字稿段落 {{ transcriptCount }} 条，模型与模板来自主窗口中的资源管理页。
+            {{ formatMessage(messages.heroCopy, { count: transcriptCount }) }}
           </p>
         </div>
         <div class="button-row">
           <StatusBadge :status="summaryDisplayStatus" />
           <button class="secondary-button" type="button" @click="closeWindow">
-            关闭窗口
+            {{ commonMessages.closeWindow }}
           </button>
         </div>
       </div>
 
       <div class="summary-inline">
-        <span>逐字稿 {{ transcriptCount }} 条</span>
-        <span>当前状态 {{ activeSummaryLabel }}</span>
-        <span>输入文件 {{ job?.sourceFiles.length || 0 }} 个</span>
-        <span>{{ job?.sourceFiles.map((file) => file.name).join(" · ") || "未找到任务" }}</span>
+        <span>{{ formatMessage(messages.transcriptCount, { count: transcriptCount }) }}</span>
+        <span>{{ formatMessage(messages.currentStatus, { status: activeSummaryLabel }) }}</span>
+        <span>{{ formatMessage(messages.inputFiles, { count: job?.sourceFiles.length || 0 }) }}</span>
+        <span>{{ job?.sourceFiles.map((file) => file.name).join(" · ") || messages.jobMissing }}</span>
       </div>
     </article>
 
@@ -356,17 +359,17 @@ function formatCreatedAt(value: string) {
       <aside class="summary-window-side">
         <article class="surface">
           <div class="section-heading summary-centered-heading">
-            <h3>本次配置</h3>
+            <h3>{{ messages.currentConfig }}</h3>
             <StatusBadge :status="summaryDisplayStatus" />
           </div>
 
           <div class="field-grid">
             <div class="field-grid two-col">
               <div class="field">
-                <label for="summary-model">模型</label>
+                <label for="summary-model">{{ messages.model }}</label>
                 <select id="summary-model" v-model="selectedModelId">
                   <option disabled value="">
-                    请选择模型
+                    {{ messages.chooseModel }}
                   </option>
                   <option v-for="model in enabledModels" :key="model.id" :value="model.id">
                     {{ model.name }} · {{ model.model }}
@@ -375,10 +378,10 @@ function formatCreatedAt(value: string) {
               </div>
 
               <div class="field">
-                <label for="summary-template">模板</label>
+                <label for="summary-template">{{ messages.template }}</label>
                 <select id="summary-template" v-model="selectedTemplateId">
                   <option disabled value="">
-                    请选择模板
+                    {{ messages.chooseTemplate }}
                   </option>
                   <option v-for="template in templates" :key="template.id" :value="template.id">
                     {{ template.name }}
@@ -390,21 +393,21 @@ function formatCreatedAt(value: string) {
             <div class="field-grid two-col">
               <label class="toggle-field">
                 <input v-model="includeSpeaker" type="checkbox" />
-                <span>包含说话人</span>
+                <span>{{ messages.includeSpeaker }}</span>
               </label>
 
               <label class="toggle-field">
                 <input v-model="includeTimestamp" type="checkbox" />
-                <span>包含时间戳</span>
+                <span>{{ messages.includeTimestamp }}</span>
               </label>
             </div>
 
             <div class="field">
-              <label for="summary-extra">补充要求</label>
+              <label for="summary-extra">{{ messages.extraInstructions }}</label>
               <textarea
                 id="summary-extra"
                 v-model="extraInstructions"
-                placeholder="例如：重点关注风险项和负责人，输出适合直接发飞书。"
+                :placeholder="messages.extraInstructionsPlaceholder"
               />
             </div>
           </div>
@@ -415,14 +418,14 @@ function formatCreatedAt(value: string) {
 
           <div class="button-row summary-submit-row">
             <button class="primary-button" type="button" :disabled="submitting" @click="submit">
-              {{ submitting ? "生成中..." : "生成总结" }}
+              {{ submitting ? messages.submitting : messages.submit }}
             </button>
           </div>
         </article>
 
         <article class="surface summary-history-panel">
           <div class="section-heading">
-            <h3>生成记录</h3>
+            <h3>{{ messages.history }}</h3>
           </div>
 
           <div v-if="latestRuns.length" class="record-list">
@@ -436,10 +439,10 @@ function formatCreatedAt(value: string) {
             >
               <div class="record-item-head">
                 <div class="record-title-stack">
-                  <strong>{{ aiStore.getTemplateById(run.templateId)?.name || "导入/未知模板" }}</strong>
+                  <strong>{{ aiStore.getTemplateById(run.templateId)?.name || messages.unknownTemplate }}</strong>
                   <div class="record-tags">
-                    <span v-if="job?.activeSummaryRunId === run.id" class="record-tag active">当前结果</span>
-                    <span v-else-if="latestRun?.id === run.id" class="record-tag">最新</span>
+                    <span v-if="job?.activeSummaryRunId === run.id" class="record-tag active">{{ messages.currentResult }}</span>
+                    <span v-else-if="latestRun?.id === run.id" class="record-tag">{{ messages.latest }}</span>
                   </div>
                 </div>
                 <StatusBadge
@@ -453,7 +456,7 @@ function formatCreatedAt(value: string) {
                 />
               </div>
               <div class="record-item-body">
-                <span>{{ aiStore.getModelById(run.modelConfigId)?.name || "未知模型" }}</span>
+                <span>{{ aiStore.getModelById(run.modelConfigId)?.name || messages.unknownModel }}</span>
                 <span>{{ formatCreatedAt(run.createdAt) }}</span>
               </div>
               <div v-if="run.result?.overview" class="record-item-copy">
@@ -466,7 +469,7 @@ function formatCreatedAt(value: string) {
           </div>
 
           <div v-else class="empty-state">
-            还没有生成过 AI 总结。
+            {{ messages.emptyRuns }}
           </div>
         </article>
       </aside>
@@ -475,16 +478,16 @@ function formatCreatedAt(value: string) {
 
         <article class="surface summary-window-result ai-summary-result">
           <div class="section-heading summary-centered-heading">
-            <h3>结果预览</h3>
+            <h3>{{ messages.preview }}</h3>
             <StatusBadge :status="previewStatus" />
           </div>
 
           <div v-if="selectedRun" class="summary-preview-toolbar">
             <div class="record-meta summary-preview-meta">
-              <span>{{ aiStore.getTemplateById(selectedRun.templateId)?.name || "导入/未知模板" }}</span>
-              <span>{{ aiStore.getModelById(selectedRun.modelConfigId)?.name || "未知模型" }}</span>
+              <span>{{ aiStore.getTemplateById(selectedRun.templateId)?.name || messages.unknownTemplate }}</span>
+              <span>{{ aiStore.getModelById(selectedRun.modelConfigId)?.name || messages.unknownModel }}</span>
               <span>{{ formatCreatedAt(selectedRun.createdAt) }}</span>
-              <span v-if="selectedRunIsActive">当前结果</span>
+              <span v-if="selectedRunIsActive">{{ messages.currentResult }}</span>
             </div>
             <div class="button-row">
               <button
@@ -493,14 +496,14 @@ function formatCreatedAt(value: string) {
                 :disabled="!canApplySelectedRun"
                 @click="applySelectedRun"
               >
-                {{ selectedRunIsActive ? "当前采用中" : "设为当前结果" }}
+                {{ selectedRunIsActive ? messages.usingCurrent : messages.setCurrent }}
               </button>
               <button
                 class="secondary-button jobs-delete-button"
                 type="button"
                 @click="removeRun(selectedRun)"
               >
-                删除本次
+                {{ messages.deleteCurrent }}
               </button>
             </div>
           </div>

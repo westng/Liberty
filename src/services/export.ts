@@ -1,5 +1,6 @@
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { getCurrentMessages } from "@/services/i18n";
 import type { MeetingJob } from "@/types/meeting";
 import { getPrimaryTranscriptSegments } from "@/services/transcript";
 
@@ -11,34 +12,38 @@ function timestamp(ms: number): string {
 }
 
 function makeTranscript(job: MeetingJob): string {
+  const messages = getCurrentMessages();
   return getPrimaryTranscriptSegments(job)
     .map(
       (segment) =>
-        `[${timestamp(segment.startMs)} - ${timestamp(segment.endMs)}] ${segment.speaker ?? "未知说话人"}: ${segment.text}`,
+        `[${timestamp(segment.startMs)} - ${timestamp(segment.endMs)}] ${segment.speaker ?? messages.common.unknownSpeaker}: ${segment.text}`,
     )
     .join("\n");
 }
 
 function makeNotes(job: MeetingJob): string {
+  const messages = getCurrentMessages();
   const { summary } = job;
-  const riskLines = summary.risks?.length ? ["", "## 风险", ...summary.risks.map((item) => `- ${item}`)] : [];
+  const riskLines = summary.risks?.length
+    ? ["", messages.export.risksHeading, ...summary.risks.map((item) => `- ${item}`)]
+    : [];
   const followUpLines = summary.followUps?.length
-    ? ["", "## 跟进事项", ...summary.followUps.map((item) => `- ${item}`)]
+    ? ["", messages.export.followUpsHeading, ...summary.followUps.map((item) => `- ${item}`)]
     : [];
 
   return [
     `# ${job.title}`,
     "",
-    "## 摘要",
-    summary.overview || "当前还没有可导出的 AI 总结内容。",
+    messages.export.summaryHeading,
+    summary.overview || messages.export.emptySummary,
     "",
-    "## 议题",
+    messages.export.topicsHeading,
     ...summary.topics.map((item) => `- ${item}`),
     "",
-    "## 结论",
+    messages.export.decisionsHeading,
     ...summary.decisions.map((item) => `- ${item}`),
     "",
-    "## 行动项",
+    messages.export.actionItemsHeading,
     ...summary.actionItems.map((item) => `- ${item}`),
     ...riskLines,
     ...followUpLines,
@@ -46,7 +51,8 @@ function makeNotes(job: MeetingJob): string {
 }
 
 function makeBundle(job: MeetingJob): string {
-  return [makeNotes(job), "", "## 逐字稿", makeTranscript(job)].join("\n");
+  const messages = getCurrentMessages();
+  return [makeNotes(job), "", messages.export.transcriptHeading, makeTranscript(job)].join("\n");
 }
 
 export function buildExportPayload(job: MeetingJob, kind: ExportKind) {

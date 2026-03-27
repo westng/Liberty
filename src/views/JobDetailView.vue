@@ -3,9 +3,12 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
+import { getMessages } from "@/services/i18n";
 
 const route = useRoute();
 const store = useMeetingStore();
+const messages = computed(() => getMessages(store.settings.value.locale).jobDetail);
+const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
 
 const job = computed(() => store.getJobById(route.params.id as string));
 
@@ -15,10 +18,10 @@ const stages = computed(() => {
   }
 
   return [
-    { label: "上传完成", status: job.value.uploadStatus },
-    { label: "转写引擎", status: job.value.asrStatus },
-    { label: "AI 总结", status: job.value.summaryStatus },
-    { label: "总状态", status: job.value.overallStatus },
+    { label: messages.value.stageUploaded, status: job.value.uploadStatus },
+    { label: messages.value.stageAsr, status: job.value.asrStatus },
+    { label: messages.value.stageSummary, status: job.value.summaryStatus },
+    { label: messages.value.stageOverall, status: job.value.overallStatus },
   ];
 });
 </script>
@@ -46,9 +49,9 @@ const stages = computed(() => {
 
         <div class="detail-hero-footer">
           <div class="summary-inline">
-            <span>输入文件 {{ job.sourceFiles.length }}</span>
-            <span>热词 {{ job.hotwords.length }}</span>
-            <span>说话人 {{ job.enableSpeaker ? "开启" : "关闭" }}</span>
+            <span>{{ messages.inputFiles }} {{ job.sourceFiles.length }}</span>
+            <span>{{ messages.hotwords }} {{ job.hotwords.length }}</span>
+            <span>{{ messages.speaker }} {{ job.enableSpeaker ? commonMessages.enabled : commonMessages.disabled }}</span>
           </div>
 
           <div class="button-row">
@@ -57,7 +60,7 @@ const stages = computed(() => {
               class="primary-button"
               :to="`/jobs/${job.id}/workbench`"
             >
-              查看结果工作台
+              {{ messages.viewWorkbench }}
             </RouterLink>
             <button
               v-if="job.overallStatus === 'failed'"
@@ -65,7 +68,7 @@ const stages = computed(() => {
               type="button"
               @click="store.retryJob(job.id)"
             >
-              重试任务
+              {{ messages.retryJob }}
             </button>
           </div>
         </div>
@@ -73,14 +76,14 @@ const stages = computed(() => {
 
       <article class="surface detail-main-column">
         <div class="section-heading">
-          <h3>输入文件</h3>
+          <h3>{{ messages.filesSection }}</h3>
         </div>
         <div class="file-list">
           <div v-for="file in job.sourceFiles" :key="file.id" class="file-pill">
             <div>
               <strong>{{ file.name }}</strong>
               <div class="job-meta-line">
-                {{ file.kind === "audio" ? "音频" : "视频" }} · {{ file.sizeLabel }}
+                {{ file.kind === "audio" ? commonMessages.audio : commonMessages.video }} · {{ file.sizeLabel }}
               </div>
             </div>
           </div>
@@ -89,19 +92,19 @@ const stages = computed(() => {
 
       <article class="surface detail-side-column">
         <div class="section-heading">
-          <h3>任务设置</h3>
+          <h3>{{ messages.settingsSection }}</h3>
         </div>
         <div class="metric-strip metric-strip-tight">
           <div class="metric-pill">
-            <span class="muted">语言</span>
+            <span class="muted">{{ messages.language }}</span>
             <strong>{{ job.lang }}</strong>
           </div>
           <div class="metric-pill">
-            <span class="muted">说话人分离</span>
-            <strong>{{ job.enableSpeaker ? "开启" : "关闭" }}</strong>
+            <span class="muted">{{ messages.speakerDiarization }}</span>
+            <strong>{{ job.enableSpeaker ? commonMessages.enabled : commonMessages.disabled }}</strong>
           </div>
           <div class="metric-pill">
-            <span class="muted">热词</span>
+            <span class="muted">{{ messages.hotwords }}</span>
             <strong>{{ job.hotwords.length }}</strong>
           </div>
         </div>
@@ -109,7 +112,7 @@ const stages = computed(() => {
 
       <article class="surface detail-log-card full-span">
         <div class="section-heading">
-          <h3>异常信息</h3>
+          <h3>{{ messages.errorSection }}</h3>
         </div>
         <div v-if="job.failureReason" class="note-block error-block">
           {{ job.failureReason }}
@@ -119,13 +122,13 @@ const stages = computed(() => {
           class="log-block"
         ><code>{{ job.processLog }}</code></pre>
         <div v-else class="empty-state">
-          当前没有错误记录。
+          {{ messages.noError }}
         </div>
       </article>
     </div>
 
     <div v-else class="empty-state">
-      没有找到这个任务。
+      {{ messages.notFound }}
     </div>
   </section>
 </template>

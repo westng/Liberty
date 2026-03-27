@@ -1,25 +1,31 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { getMessages } from "@/services/i18n";
 import type { MeetingSummary } from "@/types/meeting";
 
 defineProps<{
   summary: MeetingSummary;
 }>();
+
+const store = useMeetingStore();
+const messages = computed(() => getMessages(store.settings.value.locale).notes);
 </script>
 
 <template>
   <div class="notes-list">
     <article class="note-block">
       <div class="notes-head">
-        <h4>摘要</h4>
+        <h4>{{ messages.summary }}</h4>
       </div>
       <div class="note-content">
-        {{ summary.overview || "当前还没有可用的 AI 总结内容。" }}
+        {{ summary.overview || messages.emptySummary }}
       </div>
     </article>
 
     <article v-if="summary.topics.length" class="note-block">
       <div class="notes-head">
-        <h4>议题</h4>
+        <h4>{{ messages.topics }}</h4>
       </div>
       <ul class="note-list">
         <li v-for="item in summary.topics" :key="item">{{ item }}</li>
@@ -28,7 +34,7 @@ defineProps<{
 
     <article v-if="summary.decisions.length" class="note-block">
       <div class="notes-head">
-        <h4>结论</h4>
+        <h4>{{ messages.decisions }}</h4>
       </div>
       <ul class="note-list">
         <li v-for="item in summary.decisions" :key="item">{{ item }}</li>
@@ -37,7 +43,7 @@ defineProps<{
 
     <article v-if="summary.actionItems.length" class="note-block">
       <div class="notes-head">
-        <h4>行动项</h4>
+        <h4>{{ messages.actionItems }}</h4>
       </div>
       <ul class="note-list">
         <li v-for="item in summary.actionItems" :key="item">{{ item }}</li>
@@ -46,7 +52,7 @@ defineProps<{
 
     <article v-if="summary.risks?.length" class="note-block">
       <div class="notes-head">
-        <h4>风险</h4>
+        <h4>{{ messages.risks }}</h4>
       </div>
       <ul class="note-list">
         <li v-for="item in summary.risks" :key="item">{{ item }}</li>
@@ -55,7 +61,7 @@ defineProps<{
 
     <article v-if="summary.followUps?.length" class="note-block">
       <div class="notes-head">
-        <h4>跟进事项</h4>
+        <h4>{{ messages.followUps }}</h4>
       </div>
       <ul class="note-list">
         <li v-for="item in summary.followUps" :key="item">{{ item }}</li>

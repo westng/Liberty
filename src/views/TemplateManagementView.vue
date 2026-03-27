@@ -2,10 +2,15 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import { useAiStore } from "@/composables/useAiStore";
+import { useMeetingStore } from "@/composables/useMeetingStore";
+import { formatMessage, getMessages } from "@/services/i18n";
 import { openTemplateEditorWindow } from "@/services/window";
 import type { AiSummaryTemplate } from "@/types/meeting";
 
 const aiStore = useAiStore();
+const meetingStore = useMeetingStore();
+const messages = computed(() => getMessages(meetingStore.settings.value.locale).templates);
+const commonMessages = computed(() => getMessages(meetingStore.settings.value.locale).common);
 
 const templates = computed(() =>
   [...aiStore.templates.value].sort((left, right) => {
@@ -45,11 +50,11 @@ async function removeTemplate(template: AiSummaryTemplate) {
     return;
   }
 
-  const confirmed = await confirm(`确认删除模板“${template.name}”吗？`, {
-    title: "删除模板",
+  const confirmed = await confirm(formatMessage(messages.value.deleteConfirm, { name: template.name }), {
+    title: messages.value.deleteTitle,
     kind: "warning",
-    okLabel: "删除",
-    cancelLabel: "取消",
+    okLabel: commonMessages.value.delete,
+    cancelLabel: commonMessages.value.cancel,
   });
 
   if (!confirmed) {
@@ -60,7 +65,7 @@ async function removeTemplate(template: AiSummaryTemplate) {
 }
 
 function formatUpdatedAt(value: string) {
-  return new Date(value).toLocaleString("zh-CN", {
+  return new Date(value).toLocaleString(meetingStore.settings.value.locale, {
     year: "2-digit",
     month: "2-digit",
     day: "2-digit",
@@ -75,22 +80,22 @@ function formatUpdatedAt(value: string) {
     <article class="surface">
       <div class="section-heading">
         <div>
-          <h3>总结模板</h3>
-          <p class="section-copy">内置 Prompt 负责结构稳定，自定义模板统一在独立窗口中编辑。</p>
+          <h3>{{ messages.title }}</h3>
+          <p class="section-copy">{{ messages.copy }}</p>
         </div>
         <button class="primary-button" type="button" @click="startCreate">
-          新增模板
+          {{ messages.add }}
         </button>
       </div>
       <div class="summary-inline">
-        <span>全部模板 {{ templates.length }}</span>
-        <span>内置 {{ builtinCount }}</span>
-        <span>自定义 {{ customCount }}</span>
+        <span>{{ messages.total }} {{ templates.length }}</span>
+        <span>{{ messages.builtin }} {{ builtinCount }}</span>
+        <span>{{ messages.custom }} {{ customCount }}</span>
       </div>
     </article>
 
     <div class="section-heading model-management-header">
-      <h3>模板列表</h3>
+      <h3>{{ messages.listTitle }}</h3>
     </div>
 
     <article class="surface model-list-card">
@@ -103,27 +108,27 @@ function formatUpdatedAt(value: string) {
         >
           <div class="model-row-main">
             <strong>{{ template.name }}</strong>
-            <span>{{ template.description || "未填写说明" }}</span>
+            <span>{{ template.description || messages.emptyDescription }}</span>
           </div>
 
           <div class="model-row-side">
-            <span class="record-meta">{{ template.builtin ? "内置" : "自定义" }}</span>
+            <span class="record-meta">{{ template.builtin ? messages.builtin : messages.custom }}</span>
             <span class="record-meta">{{ formatUpdatedAt(template.updatedAt) }}</span>
-            <button class="text-button" type="button" @click.stop="editTemplate(template)">编辑</button>
+            <button class="text-button" type="button" @click.stop="editTemplate(template)">{{ commonMessages.edit }}</button>
             <button
               v-if="!template.builtin"
               class="text-button danger-text"
               type="button"
               @click.stop="removeTemplate(template)"
             >
-              删除
+              {{ commonMessages.delete }}
             </button>
           </div>
         </article>
       </div>
 
       <div v-else class="empty-state">
-        还没有可用模板。
+        {{ messages.empty }}
       </div>
     </article>
   </section>
