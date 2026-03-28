@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { getMessages } from "@/services/i18n";
 import progressBarUrl from "@/assets/progress-bar.webp";
+import type { JobStage } from "@/types/meeting";
 
 const route = useRoute();
 const store = useMeetingStore();
@@ -29,33 +30,92 @@ const stages = computed(() => {
   ];
 });
 
-const progressPercent = computed(() => {
+const displayProgressPercent = ref(0);
+const progressRunKey = ref("");
+
+const stageProgressBands: Record<JobStage, { min: number; max: number }> = {
+  idle: { min: 0, max: 0 },
+  uploaded: { min: 4, max: 8 },
+  queued: { min: 8, max: 14 },
+  transcribing: { min: 18, max: 72 },
+  speaker_processing: { min: 72, max: 96 },
+  summarizing: { min: 96, max: 99 },
+  completed: { min: 100, max: 100 },
+  failed: { min: 0, max: 99 },
+};
+
+function clampPercent(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function getProgressStage() {
   if (!job.value) {
-    return 0;
+    return "idle" as JobStage;
   }
 
-  if (job.value.overallStatus === "completed" || job.value.asrStatus === "completed") {
+  if (job.value.overallStatus !== "idle") {
+    return job.value.overallStatus as JobStage;
+  }
+
+  if (job.value.summaryStatus !== "idle") {
+    return job.value.summaryStatus as JobStage;
+  }
+
+  if (job.value.asrStatus !== "idle") {
+    return job.value.asrStatus as JobStage;
+  }
+
+  return job.value.uploadStatus as JobStage;
+}
+
+function resolveStageProgressPercent() {
+  const stage = getProgressStage();
+  const rawPercent = job.value?.progressPercent;
+
+  if (stage === "completed") {
     return 100;
   }
 
-  if (typeof job.value.progressPercent === "number") {
-    return Math.max(0, Math.min(100, Math.round(job.value.progressPercent)));
+  if (typeof rawPercent !== "number" || Number.isNaN(rawPercent)) {
+    return stageProgressBands[stage].min;
   }
 
-  if (job.value.overallStatus === "speaker_processing" || job.value.asrStatus === "speaker_processing") {
-    return 94;
+  if (stage === "failed") {
+    return clampPercent(rawPercent, 0, 99);
   }
 
-  if (job.value.overallStatus === "transcribing" || job.value.asrStatus === "transcribing") {
-    return 32;
-  }
+  const { min, max } = stageProgressBands[stage];
+  return clampPercent(rawPercent, min, max);
+}
 
-  if (job.value.overallStatus === "queued" || job.value.asrStatus === "queued") {
-    return 0;
-  }
+const progressPercent = computed(() => displayProgressPercent.value);
 
-  return 0;
-});
+watch(
+  () => ({
+    jobId: job.value?.id ?? "",
+    runKey: `${job.value?.id ?? ""}:${job.value?.processingStartedAtMs ?? 0}`,
+    stage: getProgressStage(),
+    rawPercent: job.value?.progressPercent ?? null,
+  }),
+  ({ jobId, runKey }) => {
+    if (!jobId) {
+      displayProgressPercent.value = 0;
+      progressRunKey.value = "";
+      return;
+    }
+
+    const nextPercent = resolveStageProgressPercent();
+
+    if (progressRunKey.value !== runKey) {
+      progressRunKey.value = runKey;
+      displayProgressPercent.value = nextPercent;
+      return;
+    }
+
+    displayProgressPercent.value = Math.max(displayProgressPercent.value, nextPercent);
+  },
+  { immediate: true },
+);
 
 const progressMessage = computed(() => {
   if (!job.value) {
@@ -68,7 +128,7 @@ const progressMessage = computed(() => {
   }
 
   return (
-    statusMessages.value[job.value.asrStatus as keyof typeof statusMessages.value] ?? job.value.asrStatus
+    statusMessages.value[job.value.overallStatus as keyof typeof statusMessages.value] ?? job.value.overallStatus
   );
 });
 
@@ -208,8 +268,8 @@ function classifyLogLine(line: string) {
 
         <div class="detail-progress-panel">
           <div class="detail-progress-meta">
-            <span class="detail-progress-label">{{ messages.progressEngine }}</span>
-            <StatusBadge :status="job.asrStatus" />
+            <span class="detail-progress-label">{{ messages.stageOverall }}</span>
+            <StatusBadge :status="job.overallStatus" />
           </div>
           <div class="detail-progress-track">
             <div class="detail-progress-fill" :style="{ width: `${progressPercent}%` }">
