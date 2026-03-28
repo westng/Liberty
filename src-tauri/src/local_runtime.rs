@@ -268,16 +268,7 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     )?;
 
     if let Some(ffmpeg_archive) = &platform.ffmpeg_archive {
-        let ffmpeg_archive_path = if ffmpeg_archive
-            .urls
-            .first()
-            .map(|value| value.to_ascii_lowercase().ends_with(".7z"))
-            .unwrap_or(false)
-        {
-            downloads_root.join("ffmpeg-runtime.7z")
-        } else {
-            downloads_root.join("ffmpeg-runtime.zip")
-        };
+        let ffmpeg_archive_path = resolve_ffmpeg_archive_path(&downloads_root, &platform, ffmpeg_archive);
         download_with_fallback(ffmpeg_archive, &ffmpeg_archive_path, &log_path)?;
         verify_sha256(&ffmpeg_archive_path, &ffmpeg_archive.sha256, &log_path)?;
         extract_archive(&ffmpeg_archive_path, &ffmpeg_root, &log_path)?;
@@ -742,6 +733,7 @@ fn extract_archive(archive_path: &Path, destination: &Path, log_path: &Path) -> 
     match extension.as_str() {
         "zip" => extract_zip(archive_path, destination, log_path),
         "7z" => extract_7z(archive_path, destination, log_path),
+        "gz" => extract_gzip_file(archive_path, destination, log_path),
         _ => Err(format!(
             "不支持的 ffmpeg 压缩包格式：{}",
             archive_path.display()
@@ -786,6 +778,21 @@ fn extract_7z(archive_path: &Path, destination: &Path, log_path: &Path) -> Local
     decompress_file(archive_path, destination).map_err(|err| err.to_string())
 }
 
+fn extract_gzip_file(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
+    append_install_log_line(log_path, "[runtime] extracting ffmpeg archive")?;
+    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
+    let output_name = archive_path
+        .file_stem()
+        .ok_or_else(|| format!("无法推断压缩包输出文件名：{}", archive_path.display()))?;
+    let output_path = destination.join(output_name);
+    let input = File::open(archive_path).map_err(|err| err.to_string())?;
+    let mut decoder = GzDecoder::new(input);
+    let mut output = File::create(&output_path).map_err(|err| err.to_string())?;
+    std::io::copy(&mut decoder, &mut output).map_err(|err| err.to_string())?;
+    output.flush().map_err(|err| err.to_string())?;
+    Ok(())
+}
+
 fn apply_zip_entry_permissions(output_path: &Path, unix_mode: Option<u32>) -> LocalResult<()> {
     #[cfg(unix)]
     {
@@ -821,6 +828,38 @@ fn resolve_python_executable(runtime_root: &Path, platform: &PlatformRuntime) ->
     }
 
     Err("未找到托管运行环境中的 Python 可执行文件。".into())
+}
+
+fn resolve_ffmpeg_archive_path(
+    downloads_root: &Path,
+    platform: &PlatformRuntime,
+    ffmpeg_archive: &DownloadAsset,
+) -> PathBuf {
+    let first_url = ffmpeg_archive
+        .urls
+        .first()
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    if first_url.ends_with(".7z") {
+        return downloads_root.join("ffmpeg-runtime.7z");
+    }
+
+    if first_url.ends_with(".gz") {
+        let file_name = platform
+            .ffmpeg_executable_candidates
+            .first()
+            .and_then(|value| Path::new(value).file_name())
+            .and_then(|value| value.to_str())
+            .unwrap_or(if cfg!(target_os = "windows") {
+                "ffmpeg-runtime.exe"
+            } else {
+                "ffmpeg-runtime"
+            });
+        return downloads_root.join(format!("{file_name}.gz"));
+    }
+
+    downloads_root.join("ffmpeg-runtime.zip")
 }
 
 fn resolve_ffmpeg_executable(runtime_root: &Path, platform: &PlatformRuntime) -> Option<PathBuf> {
