@@ -1067,11 +1067,44 @@ select:focus-visible {
   gap: 12px;
 }
 
+.job-title-line > div {
+  min-width: 0;
+}
+
 .job-title-line h4,
 .jobs-primary strong,
 .jobs-cell strong {
   margin: 0;
   font-size: 15px;
+}
+
+.job-title-line h4 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-job-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.recent-job-copy {
+  min-width: 0;
+}
+
+.recent-job-copy h4 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-job-action {
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .jobs-table {
@@ -1109,11 +1142,21 @@ select:focus-visible {
   gap: 4px;
 }
 
+.jobs-primary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .jobs-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.compact-job .text-button {
+  flex-shrink: 0;
 }
 
 .jobs-delete-button {

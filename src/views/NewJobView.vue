@@ -444,14 +444,14 @@ async function submit() {
               :key="job.id"
               class="job-item compact-job"
             >
-              <div class="job-title-line">
-                <div>
+              <div class="recent-job-row">
+                <div class="recent-job-copy">
                   <h4>{{ job.title }}</h4>
                   <div class="job-meta-line">
                     {{ formatMessage(messages.fileCount, { count: job.sourceFiles.length }) }} · {{ formatMessage(jobsMessages.minutes, { count: job.durationMinutes }) }}
                   </div>
                 </div>
-                <button class="text-button" type="button" @click="router.push(`/jobs/${job.id}`)">
+                <button class="text-button recent-job-action" type="button" @click="router.push(`/jobs/${job.id}`)">
                   {{ commonMessages.open }}
                 </button>
               </div>

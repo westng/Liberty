@@ -1,14 +1,12 @@
 use crate::local_db::{self, LocalResult, ManagedRuntimeState};
+use chrono::Local;
 use flate2::read::GzDecoder;
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
-    ffi::CStr,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
-    mem::MaybeUninit,
-    os::raw::{c_char, c_int, c_long},
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
@@ -919,84 +917,7 @@ fn runtime_log_prefix() -> String {
 }
 
 fn format_local_timestamp() -> String {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or_default();
-    format_local_timestamp_from_epoch(seconds)
-}
-
-fn format_local_timestamp_from_epoch(seconds: i64) -> String {
-    let mut time_value = seconds;
-    let mut local_time = MaybeUninit::<PlatformTm>::zeroed();
-    let format = b"%Y-%m-%d %H:%M:%S\0";
-    let mut buffer = [0 as c_char; 32];
-
-    let success = unsafe { platform_localtime(&mut time_value, local_time.as_mut_ptr()) };
-    if !success {
-        return seconds.to_string();
-    }
-
-    let written = unsafe {
-        strftime(
-            buffer.as_mut_ptr(),
-            buffer.len(),
-            format.as_ptr() as *const c_char,
-            local_time.as_ptr(),
-        )
-    };
-
-    if written == 0 {
-        return seconds.to_string();
-    }
-
-    unsafe { CStr::from_ptr(buffer.as_ptr()) }
-        .to_string_lossy()
-        .into_owned()
-}
-
-#[repr(C)]
-struct PlatformTm {
-    tm_sec: c_int,
-    tm_min: c_int,
-    tm_hour: c_int,
-    tm_mday: c_int,
-    tm_mon: c_int,
-    tm_year: c_int,
-    tm_wday: c_int,
-    tm_yday: c_int,
-    tm_isdst: c_int,
-    #[cfg(not(target_os = "windows"))]
-    tm_gmtoff: c_long,
-    #[cfg(not(target_os = "windows"))]
-    tm_zone: *const c_char,
-}
-
-unsafe fn platform_localtime(time_value: &mut i64, result: *mut PlatformTm) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        localtime_s(result, time_value as *const i64) == 0
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        !localtime_r(time_value as *const i64, result).is_null()
-    }
-}
-
-unsafe extern "C" {
-    #[cfg(target_os = "windows")]
-    fn localtime_s(result: *mut PlatformTm, time_value: *const i64) -> c_int;
-
-    #[cfg(not(target_os = "windows"))]
-    fn localtime_r(time_value: *const i64, result: *mut PlatformTm) -> *mut PlatformTm;
-
-    fn strftime(
-        output: *mut c_char,
-        max_size: usize,
-        format: *const c_char,
-        time_ptr: *const PlatformTm,
-    ) -> usize;
+    Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
 fn unix_timestamp_millis() -> u128 {

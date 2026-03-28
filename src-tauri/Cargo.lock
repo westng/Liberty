@@ -1822,6 +1822,7 @@ checksum = "b5b646652bf6661599e1da8901b3b9522896f01e736bad5f723fe7a3a27f899d"
 name = "liberty"
 version = "1.0.0"
 dependencies = [
+ "chrono",
  "flate2",
  "reqwest 0.12.28",
  "rusqlite",
