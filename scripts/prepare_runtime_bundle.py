@@ -41,7 +41,7 @@ PLATFORM_CONFIGS = {
     "windows-x64": {
         "python_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-pc-windows-msvc-install_only.tar.gz",
         "python_candidates": ["python/python.exe", "python/python3.exe"],
-        "ffmpeg_url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl.zip",
+        "ffmpeg_url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
         "ffmpeg_mode": "zip-bin-dir",
         "ffmpeg_executable": "ffmpeg.exe",
     },
