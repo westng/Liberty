@@ -12,6 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      LIBERTY_RUNTIME_BUNDLE_READY: "1"
     strategy:
       fail-fast: false
       matrix:

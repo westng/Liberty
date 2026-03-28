@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build:web": "vue-tsc --noEmit && vite build",
+    "prepare:runtime-bundle": "node ./scripts/prepare-runtime-bundle.mjs",
+    "build": "npm run prepare:runtime-bundle && npm run build:web",
     "preview": "vite preview",
     "tauri": "tauri"
   },
