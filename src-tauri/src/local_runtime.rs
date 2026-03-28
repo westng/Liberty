@@ -338,6 +338,7 @@ fn install_python_dependencies(
     bootstrap_pip(python_executable, log_path)?;
     upgrade_pip_tooling(python_executable, pip_indexes, log_path)?;
 
+    let mut requirements_installed = false;
     let mut last_error: Option<String> = None;
     for index in pip_indexes {
         let install_result = run_command_with_log(
@@ -360,14 +361,19 @@ fn install_python_dependencies(
             &format!("Installing Python dependencies via {}", index.label),
         );
         if let Ok(()) = install_result {
-            return Ok(());
+            requirements_installed = true;
+            break;
         }
 
         last_error = install_result.err();
     }
 
-    if let Some(error) = last_error {
-        return Err(error);
+    if !requirements_installed {
+        if let Some(error) = last_error {
+            return Err(error);
+        }
+
+        return Err("Python 依赖安装失败。".into());
     }
 
     install_pytorch_stack(python_executable, pip_indexes, log_path)
