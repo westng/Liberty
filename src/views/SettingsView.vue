@@ -128,29 +128,31 @@ const runtimeInstallProgress = computed(() => {
   let percent = runtimeStatus.value.status === "installing" ? 4 : 0;
   let label = messages.value.runtimeInstallPreparing;
 
-  const downloadProgressMatches = Array.from(
-    log.matchAll(/\[runtime\] download progress .*?\(([\d.]+)%\)/g),
+  const stageProgressMatches = Array.from(
+    log.matchAll(/\[runtime\] staging progress .*?\(([\d.]+)%\)/g),
   );
-  const lastDownloadProgress = downloadProgressMatches.at(-1)?.[1];
+  const lastStageProgress = stageProgressMatches.at(-1)?.[1];
 
-  if (lastDownloadProgress) {
-    percent = Math.max(percent, Math.min(36, Math.round(Number(lastDownloadProgress) * 0.36)));
+  if (lastStageProgress) {
+    percent = Math.max(percent, Math.min(18, Math.round(Number(lastStageProgress) * 0.18)));
     label = messages.value.runtimeInstallDownload;
-  } else if (normalized.includes("[runtime] downloading ")) {
+  } else if (normalized.includes("[runtime] staging bundled ")) {
     percent = Math.max(percent, 10);
     label = messages.value.runtimeInstallDownload;
   }
 
   const stageWeights = [
-    ["[runtime] verifying archive checksum", 42, messages.value.runtimeInstallVerify],
-    ["[runtime] extracting python runtime archive", 50, messages.value.runtimeInstallExtract],
-    ["[runtime] resolved python=", 58, messages.value.runtimeInstallResolvePython],
-    ["[runtime] Bootstrapping pip", 64, messages.value.runtimeInstallBootstrapPip],
-    ["[runtime] Upgrading pip via ", 72, messages.value.runtimeInstallUpgradePip],
-    ["Installing PyTorch", 82, messages.value.runtimeInstallPytorch],
-    ["Installing Python dependencies via ", 88, messages.value.runtimeInstallDependencies],
-    ["Validating PyTorch runtime", 94, messages.value.runtimeInstallValidate],
-    ["Downloading default FunASR models", 97, messages.value.runtimeInstallModels],
+    ["[runtime] locating bundled runtime resources", 8, messages.value.runtimeInstallPreparing],
+    ["[runtime] staging bundled Python runtime", 18, messages.value.runtimeInstallDownload],
+    ["[runtime] verifying bundled asset checksum", 28, messages.value.runtimeInstallVerify],
+    ["[runtime] extracting python runtime archive", 42, messages.value.runtimeInstallExtract],
+    ["[runtime] resolved python=", 54, messages.value.runtimeInstallResolvePython],
+    ["Validating bundled Python runtime", 64, messages.value.runtimeInstallBootstrapPip],
+    ["[runtime] staging bundled FFmpeg runtime", 74, messages.value.runtimeInstallUpgradePip],
+    ["Validating ffmpeg runtime", 82, messages.value.runtimeInstallPytorch],
+    ["[runtime] staging bundled FunASR models", 90, messages.value.runtimeInstallDependencies],
+    ["[runtime] extracting models archive", 96, messages.value.runtimeInstallModels],
+    ["[runtime] validating bundled models root", 98, messages.value.runtimeInstallValidate],
   ] as const;
 
   for (const [pattern, stagePercent, stageLabel] of stageWeights) {

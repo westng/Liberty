@@ -1,109 +1,63 @@
 {
-  "runtimeVersion": "2026.03.28-py39.25-cn1",
+  "runtimeVersion": "2026.03.28-bundled.1",
   "pythonVersion": "3.9.25",
-  "pipIndexes": [
-    {
-      "label": "清华 PyPI 镜像",
-      "url": "https://pypi.tuna.tsinghua.edu.cn/simple"
-    },
-    {
-      "label": "PyPI 官方",
-      "url": "https://pypi.org/simple"
-    }
-  ],
   "platforms": [
     {
       "platformId": "darwin-aarch64",
-      "pythonArchive": {
-        "sha256": "87275619c2706affa4d1090d2ca3dad354b6d69f8b85dbfafe38785870751b9a",
-        "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-aarch64-apple-darwin-install_only.tar.gz",
-          "https://v6.gh-proxy.org/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-aarch64-apple-darwin-install_only.tar.gz",
-          "https://edgeone.gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-aarch64-apple-darwin-install_only.tar.gz",
-          "https://gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-aarch64-apple-darwin-install_only.tar.gz"
-        ]
+      "pythonBundle": {
+        "fileName": "python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/bin/python3",
         "python/bin/python"
       ],
-      "ffmpegArchive": {
-        "sha256": "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa",
-        "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz",
-          "https://v6.gh-proxy.org/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz",
-          "https://edgeone.gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz",
-          "https://gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz"
-        ]
+      "ffmpegBundle": {
+        "fileName": "ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
-        "ffmpeg/ffmpeg-runtime",
-        "ffmpeg"
-      ]
+        "ffmpeg/ffmpeg"
+      ],
+      "modelsBundle": {
+        "fileName": "models-runtime.tar.gz"
+      }
     },
     {
       "platformId": "darwin-x64",
-      "pythonArchive": {
-        "sha256": "ace63cfe27a9487c4d72e1cb518be01c1d985271da0b2158e813801f7d3e5503",
-        "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-apple-darwin-install_only.tar.gz",
-          "https://v6.gh-proxy.org/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-apple-darwin-install_only.tar.gz",
-          "https://edgeone.gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-apple-darwin-install_only.tar.gz",
-          "https://gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-apple-darwin-install_only.tar.gz"
-        ]
+      "pythonBundle": {
+        "fileName": "python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/bin/python3",
         "python/bin/python"
       ],
-      "ffmpegArchive": {
-        "sha256": "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106",
-        "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz",
-          "https://v6.gh-proxy.org/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz",
-          "https://edgeone.gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz",
-          "https://gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz"
-        ]
+      "ffmpegBundle": {
+        "fileName": "ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
-        "ffmpeg/ffmpeg-runtime",
-        "ffmpeg"
-      ]
+        "ffmpeg/ffmpeg"
+      ],
+      "modelsBundle": {
+        "fileName": "models-runtime.tar.gz"
+      }
     },
     {
       "platformId": "windows-x64",
-      "pythonArchive": {
-        "sha256": "4fb1b416482ce94d73cfa140317a670c596c830671d137b07c26afe8c461768a",
-        "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-pc-windows-msvc-install_only.tar.gz",
-          "https://v6.gh-proxy.org/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-pc-windows-msvc-install_only.tar.gz",
-          "https://edgeone.gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-pc-windows-msvc-install_only.tar.gz",
-          "https://gh-proxy.com/https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-x86_64-pc-windows-msvc-install_only.tar.gz"
-        ]
+      "pythonBundle": {
+        "fileName": "python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/python.exe",
         "python/python3.exe"
       ],
-      "ffmpegArchive": {
-        "sha256": "2504f7cbfe8ad8c95beaec715683fe0fc9a913bdef37321e2ded8aa7dd5ea80b",
-        "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip",
-          "https://v6.gh-proxy.org/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip",
-          "https://edgeone.gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip",
-          "https://gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip"
-        ]
+      "ffmpegBundle": {
+        "fileName": "ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
-        "ffmpeg/ffmpeg-master-latest-win64-gpl-shared/bin/ffmpeg.exe",
-        "ffmpeg/bin/ffmpeg.exe"
-      ]
+        "ffmpeg/ffmpeg.exe"
+      ],
+      "modelsBundle": {
+        "fileName": "models-runtime.tar.gz"
+      }
     }
-  ],
-  "defaultModels": {
-    "model": "paraformer-zh",
-    "vadModel": "fsmn-vad",
-    "puncModel": "ct-punc",
-    "speakerModel": "cam++"
-  }
+  ]
 }

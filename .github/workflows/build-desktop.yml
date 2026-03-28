@@ -18,13 +18,15 @@ jobs:
         include:
           - name: macOS Apple Silicon
             os: macos-latest
+            platform_id: darwin-aarch64
             rust_target: aarch64-apple-darwin
             artifact_name: liberty-macos-aarch64
             artifact_path: |
               src-tauri/target/**/release/bundle/dmg/*.dmg
               src-tauri/target/**/release/bundle/macos/*.app.tar.gz
           - name: macOS Intel
-            os: macos-latest
+            os: macos-15-intel
+            platform_id: darwin-x64
             rust_target: x86_64-apple-darwin
             artifact_name: liberty-macos-x64
             artifact_path: |
@@ -32,6 +34,7 @@ jobs:
               src-tauri/target/**/release/bundle/macos/*.app.tar.gz
           - name: Windows x64
             os: windows-2022
+            platform_id: windows-x64
             rust_target: x86_64-pc-windows-msvc
             artifact_name: liberty-windows-x64
             artifact_path: |
@@ -42,16 +45,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup PNPM
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.30.3
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Enable Corepack PNPM
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.3 --activate
+          pnpm --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -66,8 +75,14 @@ jobs:
       - name: Install Dependencies
         shell: bash
         run: |
-          pnpm --version
           pnpm install --frozen-lockfile
+
+      - name: Prepare Bundled Runtime
+        shell: bash
+        run: |
+          python scripts/prepare_runtime_bundle.py \
+            --platform-id "${{ matrix.platform_id }}" \
+            --output-dir "runtime-bundles/${{ matrix.platform_id }}"
 
       - name: Build Tauri Bundle
         shell: bash
@@ -77,6 +92,7 @@ jobs:
         if: always()
         shell: bash
         run: |
+          find runtime-bundles -maxdepth 3 -type f -print || true
           find src-tauri/target -maxdepth 6 -type d -name bundle -print || true
           find src-tauri/target -maxdepth 8 -type f \( -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) -print || true
 

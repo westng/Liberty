@@ -1,7 +1,6 @@
 use crate::local_db::{self, LocalResult, ManagedRuntimeState};
-use chrono::Local;
+use chrono::Utc;
 use flate2::read::GzDecoder;
-use reqwest::blocking::Client;
 use sevenz_rust2::decompress_file;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -21,43 +20,33 @@ use std::os::unix::fs::PermissionsExt;
 
 static RUNTIME_INSTALLING: AtomicBool = AtomicBool::new(false);
 const RUNTIME_MANIFEST_JSON: &str = include_str!("../resources/runtime-manifest.json");
-const DOWNLOAD_RETRIES_PER_URL: usize = 3;
-const SLOW_DOWNLOAD_GRACE_SECONDS: u64 = 12;
-const SLOW_DOWNLOAD_MIN_BYTES: u64 = 512 * 1024;
-const SLOW_DOWNLOAD_MIN_TOTAL_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeManifest {
     runtime_version: String,
     python_version: String,
-    pip_indexes: Vec<PipIndex>,
     platforms: Vec<PlatformRuntime>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PipIndex {
-    label: String,
-    url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct PlatformRuntime {
     platform_id: String,
-    python_archive: DownloadAsset,
+    python_bundle: BundledAsset,
     python_executable_candidates: Vec<String>,
-    ffmpeg_archive: Option<DownloadAsset>,
+    ffmpeg_bundle: Option<BundledAsset>,
     #[serde(default)]
     ffmpeg_executable_candidates: Vec<String>,
+    models_bundle: BundledAsset,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct DownloadAsset {
+struct BundledAsset {
+    file_name: String,
+    #[serde(default)]
     sha256: String,
-    urls: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -159,7 +148,7 @@ pub fn resolve_python_runtime(
         return Err("手动配置的 Python 路径不存在，请检查系统设置。".into());
     }
 
-    Err("本地运行环境未安装，请前往系统设置下载并安装。".into())
+    Err("本地运行环境未安装，请前往系统设置安装内置环境。".into())
 }
 
 fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
@@ -197,7 +186,7 @@ fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
             .map(Path::new)
             .map(|path| !path.is_dir())
             .unwrap_or(true);
-        let ffmpeg_missing = if platform.ffmpeg_archive.is_some() {
+        let ffmpeg_missing = if platform.ffmpeg_bundle.is_some() {
             state
                 .install_root
                 .as_deref()
@@ -258,24 +247,60 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
             platform_id, manifest.runtime_version, manifest.python_version
         ),
     )?;
+    append_install_log_line(&log_path, "[runtime] locating bundled runtime resources")?;
 
-    let archive_path = downloads_root.join("python-runtime.tar.gz");
-    download_with_fallback(&platform.python_archive, &archive_path, &log_path)?;
-    verify_sha256(&archive_path, &platform.python_archive.sha256, &log_path)?;
-    extract_tar_gz(&archive_path, &runtime_root, &log_path)?;
+    let python_bundle_resource =
+        resolve_bundled_runtime_resource_path(app, &platform_id, &platform.python_bundle.file_name)?;
+    let python_bundle_path = downloads_root.join(&platform.python_bundle.file_name);
+    stage_bundled_asset(
+        &python_bundle_resource,
+        &python_bundle_path,
+        &log_path,
+        "staging bundled Python runtime",
+    )?;
+    verify_bundled_asset_sha256(&python_bundle_path, &platform.python_bundle.sha256, &log_path)?;
+    extract_archive(
+        &python_bundle_path,
+        &runtime_root,
+        &log_path,
+        "extracting python runtime archive",
+    )?;
 
     let python_executable = resolve_python_executable(&runtime_root, &platform)?;
+    ensure_unix_executable(&python_executable)?;
     append_install_log_line(
         &log_path,
         &format!("[runtime] resolved python={}", python_executable.display()),
     )?;
 
-    if let Some(ffmpeg_archive) = &platform.ffmpeg_archive {
-        let ffmpeg_archive_path = resolve_ffmpeg_archive_path(&downloads_root, &platform, ffmpeg_archive);
-        download_with_fallback(ffmpeg_archive, &ffmpeg_archive_path, &log_path)?;
-        verify_sha256(&ffmpeg_archive_path, &ffmpeg_archive.sha256, &log_path)?;
-        extract_archive(&ffmpeg_archive_path, &ffmpeg_root, &log_path)?;
+    let validate_path = resolve_script_resource_path(app, "runtime_validate.py")?;
+    run_command_with_log(
+        Command::new(&python_executable)
+            .env("PYTHONUTF8", "1")
+            .arg(&validate_path),
+        &log_path,
+        "Validating bundled Python runtime",
+    )?;
+
+    if let Some(ffmpeg_bundle) = &platform.ffmpeg_bundle {
+        let ffmpeg_bundle_resource =
+            resolve_bundled_runtime_resource_path(app, &platform_id, &ffmpeg_bundle.file_name)?;
+        let ffmpeg_bundle_path = downloads_root.join(&ffmpeg_bundle.file_name);
+        stage_bundled_asset(
+            &ffmpeg_bundle_resource,
+            &ffmpeg_bundle_path,
+            &log_path,
+            "staging bundled FFmpeg runtime",
+        )?;
+        verify_bundled_asset_sha256(&ffmpeg_bundle_path, &ffmpeg_bundle.sha256, &log_path)?;
+        extract_archive(
+            &ffmpeg_bundle_path,
+            &runtime_root,
+            &log_path,
+            "extracting ffmpeg archive",
+        )?;
         if let Some(ffmpeg_executable) = resolve_ffmpeg_executable(&runtime_root, &platform) {
+            ensure_unix_executable(&ffmpeg_executable)?;
             append_install_log_line(
                 &log_path,
                 &format!("[runtime] resolved ffmpeg={}", ffmpeg_executable.display()),
@@ -286,10 +311,28 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
         }
     }
 
-    let requirements_path = resolve_script_resource_path(app, "runtime_requirements.txt")?;
-    let warmup_path = resolve_script_resource_path(app, "runtime_warmup.py")?;
-    install_python_dependencies(&python_executable, &requirements_path, &manifest.pip_indexes, &log_path)?;
-    warmup_default_models(&python_executable, &warmup_path, &models_root, &log_path)?;
+    let models_bundle_resource =
+        resolve_bundled_runtime_resource_path(app, &platform_id, &platform.models_bundle.file_name)?;
+    let models_bundle_path = downloads_root.join(&platform.models_bundle.file_name);
+    stage_bundled_asset(
+        &models_bundle_resource,
+        &models_bundle_path,
+        &log_path,
+        "staging bundled FunASR models",
+    )?;
+    verify_bundled_asset_sha256(&models_bundle_path, &platform.models_bundle.sha256, &log_path)?;
+    extract_archive(
+        &models_bundle_path,
+        &runtime_root,
+        &log_path,
+        "extracting models archive",
+    )?;
+
+    if !models_root.is_dir() {
+        return Err("未找到托管运行环境中的 FunASR 模型目录。".into());
+    }
+
+    append_install_log_line(&log_path, "[runtime] validating bundled models root")?;
 
     let now = unix_timestamp_millis().to_string();
     let state = ManagedRuntimeState {
@@ -334,210 +377,6 @@ fn mark_install_failed(app: &AppHandle, error: &str) -> LocalResult<()> {
     local_db::save_runtime_state(app, &state)
 }
 
-fn install_python_dependencies(
-    python_executable: &Path,
-    requirements_path: &Path,
-    pip_indexes: &[PipIndex],
-    log_path: &Path,
-) -> LocalResult<()> {
-    bootstrap_pip(python_executable, log_path)?;
-    upgrade_pip_tooling(python_executable, pip_indexes, log_path)?;
-
-    let mut requirements_installed = false;
-    let mut last_error: Option<String> = None;
-    for index in pip_indexes {
-        let install_result = run_command_with_log(
-            Command::new(python_executable)
-                .env("PYTHONUTF8", "1")
-                .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
-                .arg("-m")
-                .arg("pip")
-                .arg("install")
-                .arg("--prefer-binary")
-                .arg("--retries")
-                .arg("2")
-                .arg("--timeout")
-                .arg("120")
-                .arg("-r")
-                .arg(requirements_path)
-                .arg("-i")
-                .arg(&index.url),
-            log_path,
-            &format!("Installing Python dependencies via {}", index.label),
-        );
-        if let Ok(()) = install_result {
-            requirements_installed = true;
-            break;
-        }
-
-        last_error = install_result.err();
-    }
-
-    if !requirements_installed {
-        if let Some(error) = last_error {
-            return Err(error);
-        }
-
-        return Err("Python 依赖安装失败。".into());
-    }
-
-    install_pytorch_stack(python_executable, pip_indexes, log_path)
-}
-
-fn install_pytorch_stack(
-    python_executable: &Path,
-    pip_indexes: &[PipIndex],
-    log_path: &Path,
-) -> LocalResult<()> {
-    let mut install_plans: Vec<(String, Vec<String>)> = Vec::new();
-
-    if cfg!(target_os = "windows") {
-        install_plans.push((
-            "Installing PyTorch CPU stack via PyTorch official index".into(),
-            vec![
-                "-m".into(),
-                "pip".into(),
-                "install".into(),
-                "--force-reinstall".into(),
-                "--no-cache-dir".into(),
-                "--prefer-binary".into(),
-                "--retries".into(),
-                "2".into(),
-                "--timeout".into(),
-                "120".into(),
-                "torch==2.2.2".into(),
-                "torchvision==0.17.2".into(),
-                "torchaudio==2.2.2".into(),
-                "--index-url".into(),
-                "https://download.pytorch.org/whl/cpu".into(),
-            ],
-        ));
-    }
-
-    for index in pip_indexes {
-        install_plans.push((
-            format!("Installing PyTorch stack via {}", index.label),
-            vec![
-                "-m".into(),
-                "pip".into(),
-                "install".into(),
-                "--force-reinstall".into(),
-                "--no-cache-dir".into(),
-                "--prefer-binary".into(),
-                "--retries".into(),
-                "2".into(),
-                "--timeout".into(),
-                "120".into(),
-                "torch==2.2.2".into(),
-                "torchvision==0.17.2".into(),
-                "torchaudio==2.2.2".into(),
-                "-i".into(),
-                index.url.clone(),
-            ],
-        ));
-    }
-
-    let mut last_error: Option<String> = None;
-    for (description, args) in install_plans {
-        let mut command = Command::new(python_executable);
-        command.env("PYTHONUTF8", "1").env("PIP_DISABLE_PIP_VERSION_CHECK", "1");
-        command.args(&args);
-
-        let install_result = run_command_with_log(&mut command, log_path, &description);
-        if let Ok(()) = install_result {
-            return Ok(());
-        }
-
-        last_error = install_result.err();
-    }
-
-    Err(last_error.unwrap_or_else(|| "PyTorch 运行时安装失败。".into()))
-}
-
-fn bootstrap_pip(python_executable: &Path, log_path: &Path) -> LocalResult<()> {
-    run_command_with_log(
-        Command::new(python_executable)
-            .env("PYTHONUTF8", "1")
-            .arg("-m")
-            .arg("ensurepip")
-            .arg("--upgrade"),
-        log_path,
-        "Bootstrapping pip",
-    )
-}
-
-fn upgrade_pip_tooling(
-    python_executable: &Path,
-    pip_indexes: &[PipIndex],
-    log_path: &Path,
-) -> LocalResult<()> {
-    let mut last_error: Option<String> = None;
-
-    for index in pip_indexes {
-        let upgrade_result = run_command_with_log(
-            Command::new(python_executable)
-                .env("PYTHONUTF8", "1")
-                .env("PIP_DISABLE_PIP_VERSION_CHECK", "1")
-                .arg("-m")
-                .arg("pip")
-                .arg("install")
-                .arg("--upgrade")
-                .arg("pip")
-                .arg("setuptools")
-                .arg("wheel")
-                .arg("--retries")
-                .arg("2")
-                .arg("--timeout")
-                .arg("120")
-                .arg("-i")
-                .arg(&index.url),
-            log_path,
-            &format!("Upgrading pip via {}", index.label),
-        );
-
-        if let Ok(()) = upgrade_result {
-            return Ok(());
-        }
-
-        last_error = upgrade_result.err();
-    }
-
-    Err(last_error.unwrap_or_else(|| "pip 工具升级失败。".into()))
-}
-
-fn warmup_default_models(
-    python_executable: &Path,
-    warmup_path: &Path,
-    models_root: &Path,
-    log_path: &Path,
-) -> LocalResult<()> {
-    let validate_path = warmup_path
-        .parent()
-        .map(|parent| parent.join("runtime_validate.py"))
-        .ok_or_else(|| "未找到 runtime_validate.py 所在目录。".to_string())?;
-
-    run_command_with_log(
-        Command::new(python_executable)
-            .env("PYTHONUTF8", "1")
-            .arg(&validate_path),
-        log_path,
-        "Validating PyTorch runtime",
-    )?;
-
-    run_command_with_log(
-        Command::new(python_executable)
-            .env("PYTHONUTF8", "1")
-            .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
-            .env("HF_HOME", models_root.join("huggingface"))
-            .env("TORCH_HOME", models_root.join("torch"))
-            .arg(warmup_path)
-            .arg("--models-root")
-            .arg(models_root),
-        log_path,
-        "Downloading default FunASR models",
-    )
-}
-
 fn run_command_with_log(
     command: &mut Command,
     log_path: &Path,
@@ -557,7 +396,10 @@ fn run_command_with_log(
         return Ok(());
     }
 
-    Err(format!("{description} 失败，退出码 {}。", output.status.code().unwrap_or(-1)))
+    Err(format!(
+        "{description} 失败，退出码 {}。",
+        output.status.code().unwrap_or(-1)
+    ))
 }
 
 fn reset_runtime_workspace(
@@ -584,77 +426,39 @@ fn reset_runtime_workspace(
     fs::write(runtime_root.join("install.log"), []).map_err(|err| err.to_string())
 }
 
-fn download_with_fallback(asset: &DownloadAsset, target_path: &Path, log_path: &Path) -> LocalResult<()> {
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(20))
-        .timeout(Duration::from_secs(900))
-        .tcp_keepalive(Duration::from_secs(30))
-        .no_proxy()
-        .user_agent("Liberty Runtime Installer/2026.03")
-        .build()
-        .map_err(|err| err.to_string())?;
-    let mut last_error = None;
-
-    for url in &asset.urls {
-        for attempt in 1..=DOWNLOAD_RETRIES_PER_URL {
-            append_install_log_line(
-                log_path,
-                &format!(
-                    "[runtime] downloading {url} (attempt {attempt}/{DOWNLOAD_RETRIES_PER_URL})"
-                ),
-            )?;
-            match download_to_path(&client, url, target_path, log_path) {
-                Ok(()) => return Ok(()),
-                Err(error) => {
-                    append_install_log_line(
-                        log_path,
-                        &format!("[runtime] download failed: {error}"),
-                    )?;
-                    last_error = Some(error);
-                }
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| "运行时资源下载失败。".into()))
-}
-
-fn download_to_path(
-    client: &Client,
-    url: &str,
+fn stage_bundled_asset(
+    source_path: &Path,
     target_path: &Path,
     log_path: &Path,
+    description: &str,
 ) -> LocalResult<()> {
-    let temp_path = target_path.with_extension("download");
-    let mut response = client
-        .get(url)
-        .send()
-        .and_then(|value| value.error_for_status())
-        .map_err(|err| err.to_string())?;
-    let total_bytes = response.content_length();
+    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
+    let total_bytes = source_path
+        .metadata()
+        .map_err(|err| err.to_string())?
+        .len();
+    append_install_log_line(
+        log_path,
+        &format!(
+            "[runtime] bundled asset size {} MB from {}",
+            bytes_to_mb(total_bytes),
+            source_path.display()
+        ),
+    )?;
+
+    let temp_path = target_path.with_extension("copying");
     let _ = fs::remove_file(&temp_path);
     let _ = fs::remove_file(target_path);
 
+    let mut source = File::open(source_path).map_err(|err| err.to_string())?;
     let mut target = File::create(&temp_path).map_err(|err| err.to_string())?;
-    let mut buffer = vec![0u8; 512 * 1024];
-    let mut downloaded_bytes: u64 = 0;
+    let mut buffer = vec![0u8; 1024 * 1024];
+    let mut copied_bytes: u64 = 0;
     let mut last_logged_bytes: u64 = 0;
     let mut last_log_at = Instant::now();
-    let started_at = Instant::now();
-
-    if let Some(total) = total_bytes {
-        append_install_log_line(
-            log_path,
-            &format!(
-                "[runtime] download size {} MB from {}",
-                bytes_to_mb(total),
-                url
-            ),
-        )?;
-    }
 
     loop {
-        let read = response.read(&mut buffer).map_err(|err| err.to_string())?;
+        let read = source.read(&mut buffer).map_err(|err| err.to_string())?;
         if read == 0 {
             break;
         }
@@ -662,67 +466,40 @@ fn download_to_path(
         target
             .write_all(&buffer[..read])
             .map_err(|err| err.to_string())?;
-        downloaded_bytes += read as u64;
+        copied_bytes += read as u64;
 
-        let should_log = downloaded_bytes.saturating_sub(last_logged_bytes) >= 8 * 1024 * 1024
+        let should_log = copied_bytes.saturating_sub(last_logged_bytes) >= 64 * 1024 * 1024
             || last_log_at.elapsed() >= Duration::from_secs(5);
-
-        if should_log {
-            match total_bytes {
-                Some(total) if total > 0 => {
-                    append_install_log_line(
-                        log_path,
-                        &format!(
-                            "[runtime] download progress {} / {} MB ({:.1}%)",
-                            bytes_to_mb(downloaded_bytes),
-                            bytes_to_mb(total),
-                            downloaded_bytes as f64 / total as f64 * 100.0
-                        ),
-                    )?;
-                }
-                _ => {
-                    append_install_log_line(
-                        log_path,
-                        &format!(
-                            "[runtime] download progress {} MB",
-                            bytes_to_mb(downloaded_bytes)
-                        ),
-                    )?;
-                }
-            }
-
-            last_logged_bytes = downloaded_bytes;
+        if should_log && total_bytes > 0 {
+            append_install_log_line(
+                log_path,
+                &format!(
+                    "[runtime] staging progress {} / {} MB ({:.1}%)",
+                    bytes_to_mb(copied_bytes),
+                    bytes_to_mb(total_bytes),
+                    copied_bytes as f64 / total_bytes as f64 * 100.0
+                ),
+            )?;
+            last_logged_bytes = copied_bytes;
             last_log_at = Instant::now();
-        }
-
-        let should_switch_source = total_bytes
-            .map(|total| total >= SLOW_DOWNLOAD_MIN_TOTAL_BYTES)
-            .unwrap_or(false)
-            && started_at.elapsed() >= Duration::from_secs(SLOW_DOWNLOAD_GRACE_SECONDS)
-            && downloaded_bytes < SLOW_DOWNLOAD_MIN_BYTES;
-
-        if should_switch_source {
-            let _ = fs::remove_file(&temp_path);
-            return Err(format!(
-                "当前下载源速度过慢，{} 秒内仅下载 {} MB，切换下一个源。",
-                SLOW_DOWNLOAD_GRACE_SECONDS,
-                bytes_to_mb(downloaded_bytes)
-            ));
         }
     }
 
     target.flush().map_err(|err| err.to_string())?;
     target.sync_all().map_err(|err| err.to_string())?;
-    fs::rename(&temp_path, target_path).map_err(|err| err.to_string())?;
-    Ok(())
+    fs::rename(&temp_path, target_path).map_err(|err| err.to_string())
 }
 
 fn bytes_to_mb(value: u64) -> String {
     format!("{:.1}", value as f64 / 1024.0 / 1024.0)
 }
 
-fn verify_sha256(path: &Path, expected: &str, log_path: &Path) -> LocalResult<()> {
-    append_install_log_line(log_path, "[runtime] verifying archive checksum")?;
+fn verify_bundled_asset_sha256(path: &Path, expected: &str, log_path: &Path) -> LocalResult<()> {
+    if expected.trim().is_empty() {
+        return Ok(());
+    }
+
+    append_install_log_line(log_path, "[runtime] verifying bundled asset checksum")?;
     let mut file = File::open(path).map_err(|err| err.to_string())?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
@@ -743,26 +520,47 @@ fn verify_sha256(path: &Path, expected: &str, log_path: &Path) -> LocalResult<()
     Err(format!("运行时资源校验失败，期望 {expected}，实际 {digest}。"))
 }
 
-fn extract_archive(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
-    let extension = archive_path
-        .extension()
+fn extract_archive(
+    archive_path: &Path,
+    destination: &Path,
+    log_path: &Path,
+    description: &str,
+) -> LocalResult<()> {
+    let file_name = archive_path
+        .file_name()
         .and_then(|value| value.to_str())
         .map(|value| value.to_ascii_lowercase())
         .unwrap_or_default();
 
-    match extension.as_str() {
-        "zip" => extract_zip(archive_path, destination, log_path),
-        "7z" => extract_7z(archive_path, destination, log_path),
-        "gz" => extract_gzip_file(archive_path, destination, log_path),
-        _ => Err(format!(
-            "不支持的 ffmpeg 压缩包格式：{}",
-            archive_path.display()
-        )),
+    if file_name.ends_with(".tar.gz") {
+        return extract_tar_gz(archive_path, destination, log_path, description);
     }
+
+    if file_name.ends_with(".zip") {
+        return extract_zip(archive_path, destination, log_path, description);
+    }
+
+    if file_name.ends_with(".7z") {
+        return extract_7z(archive_path, destination, log_path, description);
+    }
+
+    if file_name.ends_with(".gz") {
+        return extract_gzip_file(archive_path, destination, log_path, description);
+    }
+
+    Err(format!(
+        "不支持的运行时压缩包格式：{}",
+        archive_path.display()
+    ))
 }
 
-fn extract_zip(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
-    append_install_log_line(log_path, "[runtime] extracting ffmpeg archive")?;
+fn extract_zip(
+    archive_path: &Path,
+    destination: &Path,
+    log_path: &Path,
+    description: &str,
+) -> LocalResult<()> {
+    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
     fs::create_dir_all(destination).map_err(|err| err.to_string())?;
     let archive_file = File::open(archive_path).map_err(|err| err.to_string())?;
     let mut archive = ZipArchive::new(archive_file).map_err(|err| err.to_string())?;
@@ -792,14 +590,24 @@ fn extract_zip(archive_path: &Path, destination: &Path, log_path: &Path) -> Loca
     Ok(())
 }
 
-fn extract_7z(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
-    append_install_log_line(log_path, "[runtime] extracting ffmpeg archive")?;
+fn extract_7z(
+    archive_path: &Path,
+    destination: &Path,
+    log_path: &Path,
+    description: &str,
+) -> LocalResult<()> {
+    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
     fs::create_dir_all(destination).map_err(|err| err.to_string())?;
     decompress_file(archive_path, destination).map_err(|err| err.to_string())
 }
 
-fn extract_gzip_file(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
-    append_install_log_line(log_path, "[runtime] extracting ffmpeg archive")?;
+fn extract_gzip_file(
+    archive_path: &Path,
+    destination: &Path,
+    log_path: &Path,
+    description: &str,
+) -> LocalResult<()> {
+    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
     fs::create_dir_all(destination).map_err(|err| err.to_string())?;
     let output_name = archive_path
         .file_stem()
@@ -841,15 +649,23 @@ fn apply_zip_entry_permissions(output_path: &Path, unix_mode: Option<u32>) -> Lo
     Ok(())
 }
 
-fn extract_tar_gz(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
-    append_install_log_line(log_path, "[runtime] extracting python runtime archive")?;
+fn extract_tar_gz(
+    archive_path: &Path,
+    destination: &Path,
+    log_path: &Path,
+    description: &str,
+) -> LocalResult<()> {
+    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
     let archive_file = File::open(archive_path).map_err(|err| err.to_string())?;
     let decoder = GzDecoder::new(archive_file);
     let mut archive = tar::Archive::new(decoder);
     archive.unpack(destination).map_err(|err| err.to_string())
 }
 
-fn resolve_python_executable(runtime_root: &Path, platform: &PlatformRuntime) -> LocalResult<PathBuf> {
+fn resolve_python_executable(
+    runtime_root: &Path,
+    platform: &PlatformRuntime,
+) -> LocalResult<PathBuf> {
     for candidate in &platform.python_executable_candidates {
         let path = runtime_root.join(candidate);
         if path.is_file() {
@@ -858,38 +674,6 @@ fn resolve_python_executable(runtime_root: &Path, platform: &PlatformRuntime) ->
     }
 
     Err("未找到托管运行环境中的 Python 可执行文件。".into())
-}
-
-fn resolve_ffmpeg_archive_path(
-    downloads_root: &Path,
-    platform: &PlatformRuntime,
-    ffmpeg_archive: &DownloadAsset,
-) -> PathBuf {
-    let first_url = ffmpeg_archive
-        .urls
-        .first()
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_default();
-
-    if first_url.ends_with(".7z") {
-        return downloads_root.join("ffmpeg-runtime.7z");
-    }
-
-    if first_url.ends_with(".gz") {
-        let file_name = platform
-            .ffmpeg_executable_candidates
-            .first()
-            .and_then(|value| Path::new(value).file_name())
-            .and_then(|value| value.to_str())
-            .unwrap_or(if cfg!(target_os = "windows") {
-                "ffmpeg-runtime.exe"
-            } else {
-                "ffmpeg-runtime"
-            });
-        return downloads_root.join(format!("{file_name}.gz"));
-    }
-
-    downloads_root.join("ffmpeg-runtime.zip")
 }
 
 fn resolve_ffmpeg_executable(runtime_root: &Path, platform: &PlatformRuntime) -> Option<PathBuf> {
@@ -968,6 +752,80 @@ fn resolve_script_resource_path(app: &AppHandle, file_name: &str) -> LocalResult
     Err(format!("未找到内置脚本资源：{file_name}"))
 }
 
+fn resolve_bundled_runtime_resource_path(
+    app: &AppHandle,
+    platform_id: &str,
+    file_name: &str,
+) -> LocalResult<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(
+            resource_dir
+                .join("runtime-bundles")
+                .join(platform_id)
+                .join(file_name),
+        );
+        candidates.push(
+            resource_dir
+                .join("_up_")
+                .join("runtime-bundles")
+                .join(platform_id)
+                .join(file_name),
+        );
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    candidates.push(
+        manifest_dir
+            .join("../runtime-bundles")
+            .join(platform_id)
+            .join(file_name),
+    );
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(
+            current_dir
+                .join("runtime-bundles")
+                .join(platform_id)
+                .join(file_name),
+        );
+        candidates.push(
+            current_dir
+                .join("../runtime-bundles")
+                .join(platform_id)
+                .join(file_name),
+        );
+    }
+
+    if let Ok(executable_path) = std::env::current_exe() {
+        if let Some(executable_dir) = executable_path.parent() {
+            candidates.push(
+                executable_dir
+                    .join("runtime-bundles")
+                    .join(platform_id)
+                    .join(file_name),
+            );
+            candidates.push(
+                executable_dir
+                    .join("../Resources/runtime-bundles")
+                    .join(platform_id)
+                    .join(file_name),
+            );
+        }
+    }
+
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Ok(candidate.canonicalize().unwrap_or(candidate));
+        }
+    }
+
+    Err(format!(
+        "未找到当前平台的内置运行时资源：runtime-bundles/{platform_id}/{file_name}"
+    ))
+}
+
 fn load_manifest() -> LocalResult<RuntimeManifest> {
     serde_json::from_str(RUNTIME_MANIFEST_JSON).map_err(|err| err.to_string())
 }
@@ -1028,11 +886,11 @@ fn append_install_log_line(log_path: &Path, line: &str) -> LocalResult<()> {
 }
 
 fn runtime_log_prefix() -> String {
-    format!("[Liberty-下载进度-{}]", format_local_timestamp())
+    format!("[Liberty-下载进度-{}]", format_display_timestamp())
 }
 
-fn format_local_timestamp() -> String {
-    Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+fn format_display_timestamp() -> String {
+    Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }
 
 fn unix_timestamp_millis() -> u128 {
