@@ -17,12 +17,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = ROOT / "scripts" / "runtime_requirements.txt"
 VALIDATE_PATH = ROOT / "scripts" / "runtime_validate.py"
-WARMUP_PATH = ROOT / "scripts" / "runtime_warmup.py"
 
 PYTHON_BUNDLE_NAME = "python-runtime.tar.gz"
 FFMPEG_BUNDLE_NAME = "ffmpeg-runtime.tar.gz"
-MODELS_BUNDLE_NAME = "models-runtime.tar.gz"
-
 PLATFORM_CONFIGS = {
     "darwin-aarch64": {
         "python_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-aarch64-apple-darwin-install_only.tar.gz",
@@ -167,20 +164,6 @@ def validate_python_runtime(python_executable: Path) -> None:
     run([str(python_executable), str(VALIDATE_PATH)], env={"PYTHONUTF8": "1"})
 
 
-def warmup_models(python_executable: Path, models_root: Path) -> None:
-    models_root.mkdir(parents=True, exist_ok=True)
-    env = {
-        "PYTHONUTF8": "1",
-        "MODELSCOPE_CACHE": str(models_root / "modelscope"),
-        "HF_HOME": str(models_root / "huggingface"),
-        "TORCH_HOME": str(models_root / "torch"),
-    }
-    run(
-        [str(python_executable), str(WARMUP_PATH), "--models-root", str(models_root)],
-        env=env,
-    )
-
-
 def prepare_ffmpeg(config: dict[str, str], downloads_dir: Path, runtime_root: Path) -> None:
     ffmpeg_archive = downloads_dir / Path(config["ffmpeg_url"]).name
     ffmpeg_dir = runtime_root / "ffmpeg"
@@ -251,12 +234,10 @@ def main() -> None:
         python_executable = resolve_python_executable(runtime_root, config["python_candidates"])
         install_python_runtime(python_executable, platform_id)
         validate_python_runtime(python_executable)
-        warmup_models(python_executable, runtime_root / "models")
         prepare_ffmpeg(config, downloads_dir, runtime_root)
 
         create_tar_gz(runtime_root / "python", output_dir / PYTHON_BUNDLE_NAME)
         create_tar_gz(runtime_root / "ffmpeg", output_dir / FFMPEG_BUNDLE_NAME)
-        create_tar_gz(runtime_root / "models", output_dir / MODELS_BUNDLE_NAME)
 
     log(f"runtime bundle ready at {output_dir}")
 

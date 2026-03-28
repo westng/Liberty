@@ -16,10 +16,7 @@
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg"
-      ],
-      "modelsBundle": {
-        "fileName": "models-runtime.tar.gz"
-      }
+      ]
     },
     {
       "platformId": "darwin-x64",
@@ -35,10 +32,7 @@
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg"
-      ],
-      "modelsBundle": {
-        "fileName": "models-runtime.tar.gz"
-      }
+      ]
     },
     {
       "platformId": "windows-x64",
@@ -54,10 +48,7 @@
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg.exe"
-      ],
-      "modelsBundle": {
-        "fileName": "models-runtime.tar.gz"
-      }
+      ]
     }
   ]
 }

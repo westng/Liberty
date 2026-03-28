@@ -14,7 +14,6 @@ const scriptPath = "scripts/prepare_runtime_bundle.py";
 const expectedFiles = [
   `${outputDir}/python-runtime.tar.gz`,
   `${outputDir}/ffmpeg-runtime.tar.gz`,
-  `${outputDir}/models-runtime.tar.gz`,
 ];
 
 if (ifMissingOnly && expectedFiles.every((filePath) => existsSync(filePath))) {

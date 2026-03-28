@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { resolveTheme } from "@/services/appearance";
 import { getMessages } from "@/services/i18n";
 import type {
   LiquidGlassStyle,
   LocaleCode,
+  ManagedRuntimeStatus,
   LocalAsrDevice,
   SettingsState,
   ThemeMode,
@@ -24,6 +26,7 @@ const accentColors = [
 
 const store = useMeetingStore();
 const saveError = ref("");
+let runtimePollingId: number | null = null;
 
 const form = reactive({
   backendUrl: "",
@@ -70,6 +73,94 @@ const runtimeModeLabel = computed(() => {
   }
 
   return shellMessages.value.mockModeShort;
+});
+const runtimeStatus = computed(() => store.runtimeStatus.value);
+const runtimeInstallLog = computed(() => store.runtimeInstallLog.value);
+const runtimeInstallLogReversed = computed(() => {
+  const lines = runtimeInstallLog.value
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+
+  return lines.reverse().join("\n");
+});
+const runtimeActionLabel = computed(() =>
+  runtimeStatus.value.status === "ready"
+    ? messages.value.runtimeReinstallAction
+    : runtimeStatus.value.status === "installing"
+      ? messages.value.runtimeStatusInstalling
+      : messages.value.runtimeInstallAction,
+);
+const runtimeStatusLabel = computed(() => labelForRuntimeStatus(runtimeStatus.value));
+const runtimeStatusDescription = computed(() => {
+  if (runtimeStatus.value.lastError?.trim()) {
+    return runtimeStatus.value.lastError.trim();
+  }
+
+  switch (runtimeStatus.value.status) {
+    case "ready":
+      return messages.value.runtimeDescriptionReady;
+    case "installing":
+      return messages.value.runtimeDescriptionInstalling;
+    case "failed":
+    case "repair_required":
+      return messages.value.runtimeDescriptionFailed;
+    default:
+      return messages.value.runtimeDescriptionMissing;
+  }
+});
+const runtimeBusy = computed(() => runtimeStatus.value.status === "installing");
+const runtimeInstalledAtLabel = computed(() => formatRuntimeDate(runtimeStatus.value.installedAt));
+const runtimeInstallProgress = computed(() => {
+  const log = runtimeInstallLog.value;
+  const normalized = log.trim();
+
+  if (runtimeStatus.value.status === "ready" || normalized.includes("[runtime] install completed.")) {
+    return {
+      percent: 100,
+      label: messages.value.runtimeInstallCompleted,
+    };
+  }
+
+  let percent = runtimeStatus.value.status === "installing" ? 4 : 0;
+  let label = messages.value.runtimeInstallPreparing;
+
+  const stageProgressMatches = Array.from(
+    log.matchAll(/\[runtime\] staging progress .*?\(([\d.]+)%\)/g),
+  );
+  const lastStageProgress = stageProgressMatches.at(-1)?.[1];
+
+  if (lastStageProgress) {
+    percent = Math.max(percent, Math.min(52, Math.round(Number(lastStageProgress) * 0.52)));
+    label = messages.value.runtimeInstallDownload;
+  } else if (normalized.includes("[runtime] staging bundled ")) {
+    percent = Math.max(percent, 16);
+    label = messages.value.runtimeInstallDownload;
+  }
+
+  const stageWeights = [
+    ["[runtime] locating bundled runtime resources", 8, messages.value.runtimeInstallPreparing],
+    ["[runtime] staging bundled Python runtime", 22, messages.value.runtimeInstallDownload],
+    ["[runtime] verifying bundled asset checksum", 32, messages.value.runtimeInstallVerify],
+    ["[runtime] extracting python runtime archive", 44, messages.value.runtimeInstallExtract],
+    ["[runtime] resolved python=", 54, messages.value.runtimeInstallResolvePython],
+    ["Validating bundled Python runtime", 66, messages.value.runtimeInstallBootstrapPip],
+    ["[runtime] staging bundled FFmpeg runtime", 76, messages.value.runtimeInstallUpgradePip],
+    ["Validating ffmpeg runtime", 84, messages.value.runtimeInstallPytorch],
+    ["Downloading default FunASR models", 94, messages.value.runtimeInstallModels],
+  ] as const;
+
+  for (const [pattern, stagePercent, stageLabel] of stageWeights) {
+    if (normalized.includes(pattern)) {
+      percent = Math.max(percent, stagePercent);
+      label = stageLabel;
+    }
+  }
+
+  return {
+    percent: Math.max(0, Math.min(99, percent)),
+    label,
+  };
 });
 
 function createNextSettings(patch: Partial<SettingsState> = {}): SettingsState {
@@ -150,6 +241,62 @@ async function save() {
   }
 }
 
+async function refreshRuntimePanel() {
+  await store.refreshRuntimeStatus();
+  await store.refreshRuntimeInstallLog();
+}
+
+async function installManagedRuntime() {
+  saveError.value = "";
+
+  try {
+    await store.installManagedRuntime();
+    await refreshRuntimePanel();
+  } catch (error) {
+    saveError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function labelForRuntimeStatus(status: ManagedRuntimeStatus) {
+  switch (status.status) {
+    case "installing":
+      return messages.value.runtimeStatusInstalling;
+    case "ready":
+      return messages.value.runtimeStatusReady;
+    case "failed":
+      return messages.value.runtimeStatusFailed;
+    case "repair_required":
+      return messages.value.runtimeStatusRepair;
+    default:
+      return messages.value.runtimeStatusMissing;
+  }
+}
+
+function formatRuntimeDate(value?: string) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return commonMessages.value.dash;
+  }
+
+  const fromMillis = Number(normalized);
+  const date = Number.isFinite(fromMillis) && fromMillis > 0 ? new Date(fromMillis) : new Date(normalized);
+  return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString(store.settings.value.locale);
+}
+
+onMounted(() => {
+  void refreshRuntimePanel();
+
+  runtimePollingId = window.setInterval(() => {
+    void refreshRuntimePanel();
+  }, 1500);
+});
+
+onBeforeUnmount(() => {
+  if (runtimePollingId !== null) {
+    window.clearInterval(runtimePollingId);
+    runtimePollingId = null;
+  }
+});
 </script>
 
 <template>
@@ -255,6 +402,70 @@ async function save() {
               <span>{{ runtimeModeLabel }}</span>
               <span>{{ store.localMode.value ? messages.localDatabaseReady : messages.waitingLocalConfig }}</span>
             </div>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div class="settings-group">
+      <h3 class="settings-group-title">{{ messages.localRuntime }}</h3>
+      <article class="surface settings-block runtime-card">
+        <div class="runtime-card-head">
+          <div class="runtime-card-title-wrap">
+            <span class="runtime-card-title">{{ messages.managedRuntime }}</span>
+            <p class="runtime-card-hint">{{ messages.managedRuntimeHint }}</p>
+          </div>
+          <div class="runtime-card-status">
+            <span class="runtime-status-label">{{ messages.runtimeStatus }}</span>
+            <span class="runtime-status-badge" :class="`runtime-status-${runtimeStatus.status}`">
+              {{ runtimeStatusLabel }}
+            </span>
+          </div>
+        </div>
+
+        <div class="runtime-panel">
+          <div class="runtime-hero">
+            <p class="runtime-status-text">{{ runtimeStatusDescription }}</p>
+            <button class="text-button runtime-primary-action" type="button" :disabled="runtimeBusy"
+              @click="installManagedRuntime">
+              {{ runtimeActionLabel }}
+            </button>
+          </div>
+
+          <div v-if="runtimeStatus.status === 'installing' || runtimeInstallProgress.percent > 0"
+            class="runtime-progress-card">
+            <div class="runtime-progress-head">
+              <span>{{ messages.runtimeInstallProgress }}</span>
+              <strong>{{ runtimeInstallProgress.percent }}%</strong>
+            </div>
+            <div class="runtime-progress-track">
+              <span class="runtime-progress-bar" :style="{ width: `${runtimeInstallProgress.percent}%` }">
+                <img class="runtime-progress-media" :src="progressBarUrl" alt="" aria-hidden="true" />
+              </span>
+            </div>
+            <div class="runtime-progress-copy">
+              {{ runtimeInstallProgress.label }}
+            </div>
+          </div>
+
+          <div class="runtime-meta-grid">
+            <div class="runtime-meta-item">
+              <span>{{ messages.runtimeVersion }}</span>
+              <strong>{{ runtimeStatus.runtimeVersion || "—" }}</strong>
+            </div>
+            <div class="runtime-meta-item">
+              <span>{{ messages.runtimePythonVersion }}</span>
+              <strong>{{ runtimeStatus.pythonVersion || "—" }}</strong>
+            </div>
+            <div class="runtime-meta-item">
+              <span>{{ messages.runtimeInstalledAt }}</span>
+              <strong>{{ runtimeInstalledAtLabel }}</strong>
+            </div>
+          </div>
+
+          <div class="runtime-log">
+            <span class="runtime-log-title">{{ messages.runtimeInstallLog }}</span>
+            <pre>{{ runtimeInstallLogReversed || messages.runtimeInstallLogEmpty }}</pre>
           </div>
         </div>
       </article>
@@ -372,3 +583,284 @@ async function save() {
     </footer>
   </section>
 </template>
+
+<style scoped>
+.runtime-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.runtime-card {
+  display: grid;
+  gap: 22px;
+  padding: 18px 18px 16px;
+}
+
+.runtime-card::after {
+  display: none;
+}
+
+.runtime-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider-soft);
+}
+
+.runtime-card-title-wrap {
+  display: grid;
+  gap: 6px;
+  max-width: 760px;
+}
+
+.runtime-card-title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.runtime-card-hint {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.runtime-card-status {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.runtime-status-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.runtime-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 72%, transparent);
+}
+
+.runtime-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.runtime-status-ready {
+  color: rgb(31, 140, 84);
+  background: rgba(41, 171, 107, 0.14);
+}
+
+.runtime-status-installing {
+  color: rgb(191, 119, 9);
+  background: rgba(255, 176, 32, 0.16);
+}
+
+.runtime-status-failed,
+.runtime-status-repair_required {
+  color: rgb(191, 60, 60);
+  background: rgba(255, 106, 87, 0.16);
+}
+
+.runtime-status-text {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 760px;
+  font-size: 14px;
+}
+
+.runtime-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtime-progress-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-card) 96%, transparent) 0%,
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
+}
+
+.runtime-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.runtime-progress-head strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.runtime-progress-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--text-soft) 8%);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 80%, transparent);
+}
+
+.runtime-progress-bar {
+  display: block;
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  overflow: visible;
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--accent) 78%, white 22%) 0%,
+      var(--accent) 28%,
+      color-mix(in srgb, var(--accent) 58%, white 42%) 50%,
+      var(--accent) 72%,
+      color-mix(in srgb, var(--accent) 78%, white 22%) 100%);
+  background-size: 220% 100%;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
+  transition: width 220ms ease;
+  animation: runtime-progress-flow 1.8s linear infinite;
+}
+
+.runtime-progress-media {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  transform: translateY(-50%);
+  opacity: 0.98;
+  pointer-events: none;
+  z-index: 2;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.18));
+}
+
+.runtime-progress-copy {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@keyframes runtime-progress-flow {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-progress-bar {
+    animation: none;
+  }
+}
+
+.runtime-meta-item {
+  display: grid;
+  gap: 8px;
+  padding: 15px 16px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-card) 96%, transparent) 0%,
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 88%, transparent);
+}
+
+.runtime-meta-item span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.runtime-meta-item strong {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.runtime-primary-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.runtime-primary-action.text-button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.runtime-log {
+  display: grid;
+  gap: 10px;
+}
+
+.runtime-log-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.runtime-log pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-input) 94%, transparent) 0%,
+      color-mix(in srgb, var(--bg-card) 88%, transparent) 100%);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 980px) {
+  .runtime-card-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .runtime-card-status {
+    justify-content: space-between;
+    justify-items: stretch;
+  }
+
+  .runtime-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .runtime-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

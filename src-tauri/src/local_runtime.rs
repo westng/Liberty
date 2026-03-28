@@ -38,7 +38,7 @@ struct PlatformRuntime {
     ffmpeg_bundle: Option<BundledAsset>,
     #[serde(default)]
     ffmpeg_executable_candidates: Vec<String>,
-    models_bundle: BundledAsset,
+    models_bundle: Option<BundledAsset>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -311,28 +311,32 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
         }
     }
 
-    let models_bundle_resource =
-        resolve_bundled_runtime_resource_path(app, &platform_id, &platform.models_bundle.file_name)?;
-    let models_bundle_path = downloads_root.join(&platform.models_bundle.file_name);
-    stage_bundled_asset(
-        &models_bundle_resource,
-        &models_bundle_path,
-        &log_path,
-        "staging bundled FunASR models",
-    )?;
-    verify_bundled_asset_sha256(&models_bundle_path, &platform.models_bundle.sha256, &log_path)?;
-    extract_archive(
-        &models_bundle_path,
-        &runtime_root,
-        &log_path,
-        "extracting models archive",
-    )?;
+    if let Some(models_bundle) = &platform.models_bundle {
+        let models_bundle_resource =
+            resolve_bundled_runtime_resource_path(app, &platform_id, &models_bundle.file_name)?;
+        let models_bundle_path = downloads_root.join(&models_bundle.file_name);
+        stage_bundled_asset(
+            &models_bundle_resource,
+            &models_bundle_path,
+            &log_path,
+            "staging bundled FunASR models",
+        )?;
+        verify_bundled_asset_sha256(&models_bundle_path, &models_bundle.sha256, &log_path)?;
+        extract_archive(
+            &models_bundle_path,
+            &runtime_root,
+            &log_path,
+            "extracting models archive",
+        )?;
+        append_install_log_line(&log_path, "[runtime] validating bundled models root")?;
+    } else {
+        let warmup_path = resolve_script_resource_path(app, "runtime_warmup.py")?;
+        warmup_default_models(&python_executable, &warmup_path, &models_root, &log_path)?;
+    }
 
     if !models_root.is_dir() {
         return Err("未找到托管运行环境中的 FunASR 模型目录。".into());
     }
-
-    append_install_log_line(&log_path, "[runtime] validating bundled models root")?;
 
     let now = unix_timestamp_millis().to_string();
     let state = ManagedRuntimeState {
@@ -400,6 +404,26 @@ fn run_command_with_log(
         "{description} 失败，退出码 {}。",
         output.status.code().unwrap_or(-1)
     ))
+}
+
+fn warmup_default_models(
+    python_executable: &Path,
+    warmup_path: &Path,
+    models_root: &Path,
+    log_path: &Path,
+) -> LocalResult<()> {
+    run_command_with_log(
+        Command::new(python_executable)
+            .env("PYTHONUTF8", "1")
+            .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
+            .env("HF_HOME", models_root.join("huggingface"))
+            .env("TORCH_HOME", models_root.join("torch"))
+            .arg(warmup_path)
+            .arg("--models-root")
+            .arg(models_root),
+        log_path,
+        "Downloading default FunASR models",
+    )
 }
 
 fn reset_runtime_workspace(
