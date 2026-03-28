@@ -2,6 +2,7 @@ use crate::local_db::{self, LocalResult, ManagedRuntimeState};
 use chrono::Local;
 use flate2::read::GzDecoder;
 use reqwest::blocking::Client;
+use sevenz_rust2::decompress_file;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -267,10 +268,19 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     )?;
 
     if let Some(ffmpeg_archive) = &platform.ffmpeg_archive {
-        let ffmpeg_archive_path = downloads_root.join("ffmpeg-runtime.zip");
+        let ffmpeg_archive_path = if ffmpeg_archive
+            .urls
+            .first()
+            .map(|value| value.to_ascii_lowercase().ends_with(".7z"))
+            .unwrap_or(false)
+        {
+            downloads_root.join("ffmpeg-runtime.7z")
+        } else {
+            downloads_root.join("ffmpeg-runtime.zip")
+        };
         download_with_fallback(ffmpeg_archive, &ffmpeg_archive_path, &log_path)?;
         verify_sha256(&ffmpeg_archive_path, &ffmpeg_archive.sha256, &log_path)?;
-        extract_zip(&ffmpeg_archive_path, &ffmpeg_root, &log_path)?;
+        extract_archive(&ffmpeg_archive_path, &ffmpeg_root, &log_path)?;
         if let Some(ffmpeg_executable) = resolve_ffmpeg_executable(&runtime_root, &platform) {
             append_install_log_line(
                 &log_path,
@@ -722,6 +732,23 @@ fn verify_sha256(path: &Path, expected: &str, log_path: &Path) -> LocalResult<()
     Err(format!("运行时资源校验失败，期望 {expected}，实际 {digest}。"))
 }
 
+fn extract_archive(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
+    let extension = archive_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    match extension.as_str() {
+        "zip" => extract_zip(archive_path, destination, log_path),
+        "7z" => extract_7z(archive_path, destination, log_path),
+        _ => Err(format!(
+            "不支持的 ffmpeg 压缩包格式：{}",
+            archive_path.display()
+        )),
+    }
+}
+
 fn extract_zip(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
     append_install_log_line(log_path, "[runtime] extracting ffmpeg archive")?;
     fs::create_dir_all(destination).map_err(|err| err.to_string())?;
@@ -751,6 +778,12 @@ fn extract_zip(archive_path: &Path, destination: &Path, log_path: &Path) -> Loca
     }
 
     Ok(())
+}
+
+fn extract_7z(archive_path: &Path, destination: &Path, log_path: &Path) -> LocalResult<()> {
+    append_install_log_line(log_path, "[runtime] extracting ffmpeg archive")?;
+    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
+    decompress_file(archive_path, destination).map_err(|err| err.to_string())
 }
 
 fn apply_zip_entry_permissions(output_path: &Path, unix_mode: Option<u32>) -> LocalResult<()> {

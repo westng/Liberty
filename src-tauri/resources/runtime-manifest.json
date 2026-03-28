@@ -1,5 +1,5 @@
 {
-  "runtimeVersion": "2026.03.28-py39.25-ffmpeg3",
+  "runtimeVersion": "2026.03.28-py39.25-ffmpeg4",
   "pythonVersion": "3.9.25",
   "pipIndexes": [
     {
@@ -74,9 +74,9 @@
         "python/python3.exe"
       ],
       "ffmpegArchive": {
-        "sha256": "8748283d821613d930b0e7be685aaa9df4ca6f0ad4d0c42fd02622b3623463c6",
+        "sha256": "b5b4ff1f4c6f7837b87f8e4ce73d14decb0bcfc703c5131964fdbbf326fc5be3",
         "urls": [
-          "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1-essentials_build.zip"
+          "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1-essentials_build.7z"
         ]
       },
       "ffmpegExecutableCandidates": [
