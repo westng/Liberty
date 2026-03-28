@@ -180,6 +180,8 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
                 .unwrap_or("not-configured")
         ),
     )?;
+
+    validate_runtime_tools_for_job(&dir, &input_file, resolved_runtime.ffmpeg_path.as_deref())?;
     sync_process_log(app, job_id, &dir)?;
 
     let mut command = Command::new(&resolved_runtime.python_path);
@@ -266,6 +268,54 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
     sync_process_log(app, job_id, &dir)?;
 
     Ok(())
+}
+
+fn validate_runtime_tools_for_job(
+    job_dir: &Path,
+    input_file: &str,
+    ffmpeg_path: Option<&str>,
+) -> LocalResult<()> {
+    let input_suffix = Path::new(input_file)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    if input_suffix == "wav" {
+        return Ok(());
+    }
+
+    let ffmpeg = ffmpeg_path
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "当前文件需要 ffmpeg 进行音频解码，但本地运行环境中未找到 ffmpeg。".to_string())?;
+
+    append_process_log_line(job_dir, &format!("[runner] validating ffmpeg={ffmpeg}"))?;
+    let output = Command::new(ffmpeg)
+        .arg("-hide_banner")
+        .arg("-version")
+        .output()
+        .map_err(|err| {
+            format!(
+                "任务启动前检测 ffmpeg 失败：{}。请重新安装本地运行环境。",
+                err
+            )
+        })?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    if !output.stdout.is_empty() {
+        append_process_log_line(job_dir, &String::from_utf8_lossy(&output.stdout))?;
+    }
+    if !output.stderr.is_empty() {
+        append_process_log_line(job_dir, &String::from_utf8_lossy(&output.stderr))?;
+    }
+
+    Err(format!(
+        "任务启动前检测 ffmpeg 失败，退出码 {}。请重新安装本地运行环境。",
+        output.status.code().unwrap_or(-1)
+    ))
 }
 
 fn stream_child_logs(
