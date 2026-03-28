@@ -102,6 +102,8 @@ export interface MeetingJob {
   processingStartedAtMs?: number;
   processingFinishedAtMs?: number;
   processingDurationSeconds?: number;
+  progressPercent?: number;
+  progressMessage?: string;
   createdAt: string;
   hotwords: string[];
   lang: string;

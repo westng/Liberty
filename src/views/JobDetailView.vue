@@ -4,13 +4,17 @@ import { RouterLink, useRoute } from "vue-router";
 import StatusBadge from "@/components/StatusBadge.vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { getMessages } from "@/services/i18n";
+import progressBarUrl from "@/assets/progress-bar.webp";
 
 const route = useRoute();
 const store = useMeetingStore();
 const messages = computed(() => getMessages(store.settings.value.locale).jobDetail);
 const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
+const statusMessages = computed(() => getMessages(store.settings.value.locale).status);
 
 const job = computed(() => store.getJobById(route.params.id as string));
+
+const ansiPattern = /\u001b\[[0-9;]*m/g;
 
 const stages = computed(() => {
   if (!job.value) {
@@ -24,6 +28,92 @@ const stages = computed(() => {
     { label: messages.value.stageOverall, status: job.value.overallStatus },
   ];
 });
+
+const progressPercent = computed(() => {
+  if (!job.value) {
+    return 0;
+  }
+
+  if (job.value.overallStatus === "completed" || job.value.asrStatus === "completed") {
+    return 100;
+  }
+
+  if (typeof job.value.progressPercent === "number") {
+    return Math.max(0, Math.min(100, Math.round(job.value.progressPercent)));
+  }
+
+  if (job.value.overallStatus === "speaker_processing" || job.value.asrStatus === "speaker_processing") {
+    return 94;
+  }
+
+  if (job.value.overallStatus === "transcribing" || job.value.asrStatus === "transcribing") {
+    return 32;
+  }
+
+  if (job.value.overallStatus === "queued" || job.value.asrStatus === "queued") {
+    return 0;
+  }
+
+  return 0;
+});
+
+const progressMessage = computed(() => {
+  if (!job.value) {
+    return "";
+  }
+
+  const explicit = job.value.progressMessage?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  return (
+    statusMessages.value[job.value.asrStatus as keyof typeof statusMessages.value] ?? job.value.asrStatus
+  );
+});
+
+const logEntries = computed(() => {
+  const raw = job.value?.processLog ?? "";
+  return raw
+    .split(/[\r\n]+/)
+    .map((line) => line.replace(ansiPattern, "").trim())
+    .filter((line) => line.length > 0)
+    .reverse()
+    .map((line, index) => ({
+      id: `${index}-${line.slice(0, 24)}`,
+      text: line,
+      tone: classifyLogLine(line),
+    }));
+});
+
+function classifyLogLine(line: string) {
+  const normalized = line.toLowerCase();
+  if (
+    normalized.includes("traceback")
+    || normalized.includes("permissionerror")
+    || normalized.includes("runtimeerror")
+    || normalized.includes("error")
+    || normalized.includes("failed")
+    || normalized.includes("失败")
+  ) {
+    return "error";
+  }
+
+  if (normalized.includes("warning") || normalized.includes("warn")) {
+    return "warning";
+  }
+
+  if (
+    normalized.includes("completed")
+    || normalized.includes("success")
+    || normalized.includes("已完成")
+    || normalized.includes("完成")
+  ) {
+    return "success";
+  }
+
+  return "info";
+}
 </script>
 
 <template>
@@ -110,19 +200,47 @@ const stages = computed(() => {
         </div>
       </article>
 
+      <article class="surface detail-progress-card full-span">
+        <div class="section-heading">
+          <h3>{{ messages.progressSection }}</h3>
+          <strong class="detail-progress-percent">{{ progressPercent }}%</strong>
+        </div>
+
+        <div class="detail-progress-panel">
+          <div class="detail-progress-meta">
+            <span class="detail-progress-label">{{ messages.progressEngine }}</span>
+            <StatusBadge :status="job.asrStatus" />
+          </div>
+          <div class="detail-progress-track">
+            <div class="detail-progress-fill" :style="{ width: `${progressPercent}%` }">
+              <img class="detail-progress-media" :src="progressBarUrl" alt="" aria-hidden="true" />
+            </div>
+          </div>
+          <p class="section-copy detail-progress-copy">
+            {{ progressMessage }}
+          </p>
+        </div>
+      </article>
+
       <article class="surface detail-log-card full-span">
         <div class="section-heading">
-          <h3>{{ messages.errorSection }}</h3>
+          <h3>{{ messages.logSection }}</h3>
         </div>
         <div v-if="job.failureReason" class="note-block error-block">
           {{ job.failureReason }}
         </div>
-        <pre
-          v-if="job.processLog"
-          class="log-block"
-        ><code>{{ job.processLog }}</code></pre>
+        <div v-if="logEntries.length" class="job-log-list">
+          <div
+            v-for="entry in logEntries"
+            :key="entry.id"
+            class="job-log-entry"
+            :class="`job-log-entry-${entry.tone}`"
+          >
+            {{ entry.text }}
+          </div>
+        </div>
         <div v-else class="empty-state">
-          {{ messages.noError }}
+          {{ messages.noLog }}
         </div>
       </article>
     </div>

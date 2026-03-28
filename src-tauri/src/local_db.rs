@@ -139,6 +139,8 @@ pub struct MeetingJob {
     pub processing_started_at_ms: Option<u64>,
     pub processing_finished_at_ms: Option<u64>,
     pub processing_duration_seconds: Option<u32>,
+    pub progress_percent: Option<u32>,
+    pub progress_message: Option<String>,
     pub created_at: String,
     #[serde(default)]
     pub hotwords: Vec<String>,
@@ -247,6 +249,7 @@ struct ProgressSnapshot {
     stage: String,
     status_message: Option<String>,
     failure_reason: Option<String>,
+    progress_percent: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -318,7 +321,7 @@ pub fn list_jobs(app: &AppHandle) -> LocalResult<Vec<MeetingJob>> {
 pub fn get_job(app: &AppHandle, job_id: &str) -> LocalResult<MeetingJob> {
     init_database(app)?;
     let conn = open_connection(app)?;
-    load_job(&conn, job_id)
+    load_job(app, &conn, job_id)
 }
 
 pub fn get_settings(app: &AppHandle) -> LocalResult<AppSettings> {
@@ -1437,24 +1440,33 @@ fn read_legacy_job(job_dir: &Path) -> LocalResult<MeetingJob> {
 }
 
 fn apply_progress_snapshot(job: &mut MeetingJob, progress: &ProgressSnapshot) {
+    job.progress_percent = progress.progress_percent;
+    job.progress_message = progress
+        .status_message
+        .clone()
+        .filter(|value| !value.trim().is_empty());
+
     match progress.stage.as_str() {
         "queued" => {
             job.upload_status = "uploaded".into();
             job.asr_status = "queued".into();
             job.summary_status = "idle".into();
             job.overall_status = "queued".into();
+            job.progress_percent = Some(job.progress_percent.unwrap_or(0));
         }
         "transcribing" => {
             job.upload_status = "uploaded".into();
             job.asr_status = "transcribing".into();
             job.summary_status = "idle".into();
             job.overall_status = "transcribing".into();
+            job.progress_percent = Some(job.progress_percent.unwrap_or(12));
         }
         "speaker_processing" => {
             job.upload_status = "uploaded".into();
             job.asr_status = "speaker_processing".into();
             job.summary_status = "idle".into();
             job.overall_status = "speaker_processing".into();
+            job.progress_percent = Some(job.progress_percent.unwrap_or(92));
         }
         "completed" => {
             job.upload_status = "uploaded".into();
@@ -1463,6 +1475,7 @@ fn apply_progress_snapshot(job: &mut MeetingJob, progress: &ProgressSnapshot) {
                 job.summary_status = "idle".into();
             }
             job.overall_status = "completed".into();
+            job.progress_percent = Some(100);
         }
         "failed" => {
             job.asr_status = "failed".into();
@@ -1592,7 +1605,7 @@ fn replace_segments_tx(
     Ok(())
 }
 
-fn load_job(conn: &Connection, job_id: &str) -> LocalResult<MeetingJob> {
+fn load_job(app: &AppHandle, conn: &Connection, job_id: &str) -> LocalResult<MeetingJob> {
     let base = conn
         .query_row(
             "SELECT id, title, created_at, duration_minutes, lang, enable_speaker,
@@ -1611,6 +1624,8 @@ fn load_job(conn: &Connection, job_id: &str) -> LocalResult<MeetingJob> {
                     processing_started_at_ms: row.get::<_, Option<i64>>(11)?.map(|value| value as u64),
                     processing_finished_at_ms: row.get::<_, Option<i64>>(12)?.map(|value| value as u64),
                     processing_duration_seconds: row.get::<_, Option<i64>>(13)?.map(|value| value as u32),
+                    progress_percent: None,
+                    progress_message: None,
                     hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(20)?)
                         .unwrap_or_default(),
                     lang: row.get(4)?,
@@ -1675,6 +1690,16 @@ fn load_job(conn: &Connection, job_id: &str) -> LocalResult<MeetingJob> {
     if job.summary_runs.is_empty() && job.summary_status == "queued" {
         job.summary_status = "idle".into();
     }
+
+    let dir = job_dir(app, &job.id)?;
+    if let Ok(progress) = read_json::<ProgressSnapshot>(&dir.join("progress.json")) {
+        apply_progress_snapshot(&mut job, &progress);
+    }
+
+    job.process_log = fs::read_to_string(dir.join("process.log"))
+        .ok()
+        .map(|content| content.trim_end().to_string())
+        .filter(|content| !content.is_empty());
 
     Ok(job)
 }

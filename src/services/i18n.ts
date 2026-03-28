@@ -231,6 +231,8 @@ type MessageTree = {
     deleting: string;
   };
   jobDetail: {
+    progressSection: string;
+    progressEngine: string;
     stageUploaded: string;
     stageAsr: string;
     stageSummary: string;
@@ -244,8 +246,8 @@ type MessageTree = {
     settingsSection: string;
     language: string;
     speakerDiarization: string;
-    errorSection: string;
-    noError: string;
+    logSection: string;
+    noLog: string;
     notFound: string;
   };
   workbench: {
@@ -673,6 +675,8 @@ const messages: Record<LocaleCode, MessageTree> = {
       deleting: "删除中...",
     },
     jobDetail: {
+      progressSection: "处理进度",
+      progressEngine: "转写引擎",
       stageUploaded: "上传完成",
       stageAsr: "转写引擎",
       stageSummary: "AI 总结",
@@ -686,8 +690,8 @@ const messages: Record<LocaleCode, MessageTree> = {
       settingsSection: "任务设置",
       language: "语言",
       speakerDiarization: "说话人分离",
-      errorSection: "异常信息",
-      noError: "当前没有错误记录。",
+      logSection: "处理日志",
+      noLog: "当前还没有处理日志。",
       notFound: "没有找到这个任务。",
     },
     workbench: {
@@ -1115,6 +1119,8 @@ const messages: Record<LocaleCode, MessageTree> = {
       deleting: "Deleting...",
     },
     jobDetail: {
+      progressSection: "Processing Progress",
+      progressEngine: "Transcription Engine",
       stageUploaded: "Upload",
       stageAsr: "Transcription",
       stageSummary: "AI Summary",
@@ -1128,8 +1134,8 @@ const messages: Record<LocaleCode, MessageTree> = {
       settingsSection: "Job Settings",
       language: "Language",
       speakerDiarization: "Speaker Diarization",
-      errorSection: "Errors",
-      noError: "No error logs yet.",
+      logSection: "Processing Log",
+      noLog: "No processing logs yet.",
       notFound: "This job could not be found.",
     },
     workbench: {

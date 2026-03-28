@@ -8,11 +8,14 @@ use crate::local_runtime;
 use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    process::{Command, ExitStatus, Stdio},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
 
@@ -213,16 +216,15 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
             .env("TORCH_HOME", Path::new(models_root).join("torch"));
     }
 
-    let output = command
-        .output()
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|err| format!("无法启动本地 Python 处理进程: {err}"))?;
+    let status = stream_child_logs(app, job_id, &dir, &mut child)?;
 
-    append_process_log(&dir, &output.stdout)?;
-    append_process_log(&dir, &output.stderr)?;
-    sync_process_log(app, job_id, &dir)?;
-
-    if !output.status.success() {
-        let code = output.status.code().unwrap_or(-1);
+    if !status.success() {
+        let code = status.code().unwrap_or(-1);
         let detailed = read_runner_failure_reason(&dir)
             .or_else(|| summarize_process_log(&dir, 12))
             .unwrap_or_else(|| format!("本地 Python 处理失败，退出码 {code}。"));
@@ -266,6 +268,60 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
     Ok(())
 }
 
+fn stream_child_logs(
+    app: &AppHandle,
+    job_id: &str,
+    job_dir: &Path,
+    child: &mut std::process::Child,
+) -> LocalResult<ExitStatus> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "本地 Python 处理进程未返回 stdout 管道。".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "本地 Python 处理进程未返回 stderr 管道。".to_string())?;
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+
+    spawn_log_reader(stdout, tx.clone());
+    spawn_log_reader(stderr, tx.clone());
+    drop(tx);
+
+    let mut last_sync_at = Instant::now();
+    while let Ok(chunk) = rx.recv() {
+        append_process_log(job_dir, &chunk)?;
+        if last_sync_at.elapsed() >= Duration::from_millis(400) {
+            sync_process_log(app, job_id, job_dir)?;
+            last_sync_at = Instant::now();
+        }
+    }
+
+    let status = child.wait().map_err(|err| err.to_string())?;
+    sync_process_log(app, job_id, job_dir)?;
+    Ok(status)
+}
+
+fn spawn_log_reader<R>(mut stream: R, tx: mpsc::Sender<Vec<u8>>)
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 4096];
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => {
+                    if tx.send(buffer[..read].to_vec()).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+}
+
 fn build_initial_job(input: CreateJobInput, runner_script_path: String) -> MeetingJob {
     MeetingJob {
         id: make_job_id(),
@@ -275,6 +331,8 @@ fn build_initial_job(input: CreateJobInput, runner_script_path: String) -> Meeti
         processing_started_at_ms: None,
         processing_finished_at_ms: None,
         processing_duration_seconds: None,
+        progress_percent: Some(0),
+        progress_message: Some("等待开始处理。".into()),
         created_at: input.created_at,
         hotwords: input.hotwords,
         lang: input.lang,

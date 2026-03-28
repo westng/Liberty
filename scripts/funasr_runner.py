@@ -42,6 +42,7 @@ def write_progress(
     stage: str,
     status_message: str,
     failure_reason: Optional[str] = None,
+    progress_percent: Optional[int] = None,
 ):
     write_json(
         job_dir / "progress.json",
@@ -49,6 +50,7 @@ def write_progress(
             "stage": stage,
             "statusMessage": status_message,
             "failureReason": failure_reason,
+            "progressPercent": progress_percent,
             "updatedAt": str(time.time_ns()),
         },
     )
@@ -109,6 +111,7 @@ def build_model(auto_model_cls, wants_speaker: bool) -> tuple[object, str]:
         "model": os.getenv("FUNASR_MODEL", "paraformer-zh"),
         "vad_model": os.getenv("FUNASR_VAD_MODEL", "fsmn-vad"),
         "punc_model": os.getenv("FUNASR_PUNC_MODEL", "ct-punc"),
+        "disable_update": True,
     }
     if wants_speaker:
         model_kwargs["spk_model"] = os.getenv("FUNASR_SPK_MODEL", "cam++")
@@ -247,18 +250,18 @@ def main():
     wants_speaker = args.speaker.lower() == "true"
 
     if not input_path.exists():
-        write_progress(job_dir, "failed", "输入文件不存在。", "输入文件不存在。")
+        write_progress(job_dir, "failed", "输入文件不存在。", "输入文件不存在。", 0)
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
-    write_progress(job_dir, "transcribing", "正在准备音频文件。")
+    write_progress(job_dir, "transcribing", "正在准备音频文件。", progress_percent=8)
     prepared_input = prepare_input_media(job_dir, input_path)
 
-    write_progress(job_dir, "transcribing", "正在加载本地 FunASR 模型。")
+    write_progress(job_dir, "transcribing", "正在加载本地 FunASR 模型。", progress_percent=18)
 
     try:
         from funasr import AutoModel
     except Exception as error:
-        write_progress(job_dir, "failed", "导入 funasr 失败。", str(error))
+        write_progress(job_dir, "failed", "导入 funasr 失败。", str(error), 18)
         raise
 
     model, resolved_device = build_model(AutoModel, wants_speaker)
@@ -271,7 +274,7 @@ def main():
         f", speaker={'true' if wants_speaker else 'false'}"
     )
 
-    write_progress(job_dir, "transcribing", "正在进行本地转写。")
+    write_progress(job_dir, "transcribing", "正在进行本地转写。", progress_percent=32)
     result = model.generate(
         input=str(prepared_input),
         batch_size_s=batch_size_s,
@@ -283,7 +286,7 @@ def main():
         raise RuntimeError("FunASR 返回结果格式不可识别。")
 
     if wants_speaker:
-        write_progress(job_dir, "speaker_processing", "正在整理说话人结果。")
+        write_progress(job_dir, "speaker_processing", "正在整理说话人结果。", progress_percent=94)
 
     transcript_segments, speaker_segments = extract_segments(payload, wants_speaker)
     if not transcript_segments:
@@ -298,7 +301,7 @@ def main():
             "failureReason": None,
         },
     )
-    write_progress(job_dir, "completed", "本地处理已完成。")
+    write_progress(job_dir, "completed", "本地处理已完成。", progress_percent=100)
 
 
 if __name__ == "__main__":
@@ -310,6 +313,6 @@ if __name__ == "__main__":
     except Exception as error:
         failure_message = f"{error.__class__.__name__}: {error}"
         if current_job_dir is not None:
-            write_progress(current_job_dir, "failed", failure_message, failure_message)
+            write_progress(current_job_dir, "failed", failure_message, failure_message, 0)
         traceback.print_exc()
         sys.exit(1)

@@ -1,5 +1,5 @@
 {
-  "runtimeVersion": "2026.03.28-py39.25-ffmpeg1",
+  "runtimeVersion": "2026.03.28-py39.25-ffmpeg2",
   "pythonVersion": "3.9.25",
   "pipIndexes": [
     {
@@ -24,6 +24,16 @@
       "pythonExecutableCandidates": [
         "python/bin/python3",
         "python/bin/python"
+      ],
+      "ffmpegArchive": {
+        "sha256": "8d7917c1cebd7a29e68c0a0a6cc4ecc3fe05c7fffed958636c7018b319afdda4",
+        "urls": [
+          "https://evermeet.cx/ffmpeg/ffmpeg-7.1.1.zip"
+        ]
+      },
+      "ffmpegExecutableCandidates": [
+        "ffmpeg/ffmpeg",
+        "ffmpeg"
       ]
     },
     {
@@ -38,6 +48,16 @@
       "pythonExecutableCandidates": [
         "python/bin/python3",
         "python/bin/python"
+      ],
+      "ffmpegArchive": {
+        "sha256": "8d7917c1cebd7a29e68c0a0a6cc4ecc3fe05c7fffed958636c7018b319afdda4",
+        "urls": [
+          "https://evermeet.cx/ffmpeg/ffmpeg-7.1.1.zip"
+        ]
+      },
+      "ffmpegExecutableCandidates": [
+        "ffmpeg/ffmpeg",
+        "ffmpeg"
       ]
     },
     {

@@ -35,6 +35,7 @@ def main():
         "vad_model": os.getenv("FUNASR_VAD_MODEL", "fsmn-vad"),
         "punc_model": os.getenv("FUNASR_PUNC_MODEL", "ct-punc"),
         "device": "cpu",
+        "disable_update": True,
     }
 
     log("Downloading default ASR/VAD/PUNC models...")

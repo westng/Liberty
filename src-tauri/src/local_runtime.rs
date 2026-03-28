@@ -4,8 +4,11 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
+    ffi::CStr,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
+    mem::MaybeUninit,
+    os::raw::{c_char, c_int, c_long},
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
@@ -13,6 +16,9 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 use zip::ZipArchive;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 static RUNTIME_INSTALLING: AtomicBool = AtomicBool::new(false);
 const RUNTIME_MANIFEST_JSON: &str = include_str!("../resources/runtime-manifest.json");
@@ -730,6 +736,25 @@ fn extract_zip(archive_path: &Path, destination: &Path, log_path: &Path) -> Loca
         let mut output = File::create(&output_path).map_err(|err| err.to_string())?;
         std::io::copy(&mut entry, &mut output).map_err(|err| err.to_string())?;
         output.flush().map_err(|err| err.to_string())?;
+        apply_zip_entry_permissions(&output_path, entry.unix_mode())?;
+    }
+
+    Ok(())
+}
+
+fn apply_zip_entry_permissions(output_path: &Path, unix_mode: Option<u32>) -> LocalResult<()> {
+    #[cfg(unix)]
+    {
+        if let Some(mode) = unix_mode {
+            fs::set_permissions(output_path, fs::Permissions::from_mode(mode))
+                .map_err(|err| err.to_string())?;
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = output_path;
+        let _ = unix_mode;
     }
 
     Ok(())
@@ -768,7 +793,31 @@ fn resolve_ffmpeg_executable(runtime_root: &Path, platform: &PlatformRuntime) ->
 fn resolve_managed_ffmpeg_path(runtime_root: &Path) -> LocalResult<Option<PathBuf>> {
     let manifest = load_manifest()?;
     let platform = current_platform_manifest(&manifest)?;
-    Ok(resolve_ffmpeg_executable(runtime_root, &platform))
+    let ffmpeg_path = resolve_ffmpeg_executable(runtime_root, &platform);
+    if let Some(path) = ffmpeg_path.as_ref() {
+        ensure_unix_executable(path)?;
+    }
+    Ok(ffmpeg_path)
+}
+
+fn ensure_unix_executable(path: &Path) -> LocalResult<()> {
+    #[cfg(unix)]
+    {
+        let metadata = fs::metadata(path).map_err(|err| err.to_string())?;
+        let mut permissions = metadata.permissions();
+        let mode = permissions.mode();
+        if mode & 0o111 == 0 {
+            permissions.set_mode(mode | 0o755);
+            fs::set_permissions(path, permissions).map_err(|err| err.to_string())?;
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+
+    Ok(())
 }
 
 fn resolve_script_resource_path(app: &AppHandle, file_name: &str) -> LocalResult<PathBuf> {
@@ -861,7 +910,93 @@ fn append_install_log(log_path: &Path, bytes: &[u8]) -> LocalResult<()> {
 }
 
 fn append_install_log_line(log_path: &Path, line: &str) -> LocalResult<()> {
-    append_install_log(log_path, format!("{line}\n").as_bytes())
+    let prefix = runtime_log_prefix();
+    append_install_log(log_path, format!("{prefix} {line}\n").as_bytes())
+}
+
+fn runtime_log_prefix() -> String {
+    format!("[Liberty-下载进度-{}]", format_local_timestamp())
+}
+
+fn format_local_timestamp() -> String {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    format_local_timestamp_from_epoch(seconds)
+}
+
+fn format_local_timestamp_from_epoch(seconds: i64) -> String {
+    let mut time_value = seconds;
+    let mut local_time = MaybeUninit::<PlatformTm>::zeroed();
+    let format = b"%Y-%m-%d %H:%M:%S\0";
+    let mut buffer = [0 as c_char; 32];
+
+    let success = unsafe { platform_localtime(&mut time_value, local_time.as_mut_ptr()) };
+    if !success {
+        return seconds.to_string();
+    }
+
+    let written = unsafe {
+        strftime(
+            buffer.as_mut_ptr(),
+            buffer.len(),
+            format.as_ptr() as *const c_char,
+            local_time.as_ptr(),
+        )
+    };
+
+    if written == 0 {
+        return seconds.to_string();
+    }
+
+    unsafe { CStr::from_ptr(buffer.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[repr(C)]
+struct PlatformTm {
+    tm_sec: c_int,
+    tm_min: c_int,
+    tm_hour: c_int,
+    tm_mday: c_int,
+    tm_mon: c_int,
+    tm_year: c_int,
+    tm_wday: c_int,
+    tm_yday: c_int,
+    tm_isdst: c_int,
+    #[cfg(not(target_os = "windows"))]
+    tm_gmtoff: c_long,
+    #[cfg(not(target_os = "windows"))]
+    tm_zone: *const c_char,
+}
+
+unsafe fn platform_localtime(time_value: &mut i64, result: *mut PlatformTm) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        localtime_s(result, time_value as *const i64) == 0
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        !localtime_r(time_value as *const i64, result).is_null()
+    }
+}
+
+unsafe extern "C" {
+    #[cfg(target_os = "windows")]
+    fn localtime_s(result: *mut PlatformTm, time_value: *const i64) -> c_int;
+
+    #[cfg(not(target_os = "windows"))]
+    fn localtime_r(time_value: *const i64, result: *mut PlatformTm) -> *mut PlatformTm;
+
+    fn strftime(
+        output: *mut c_char,
+        max_size: usize,
+        format: *const c_char,
+        time_ptr: *const PlatformTm,
+    ) -> usize;
 }
 
 fn unix_timestamp_millis() -> u128 {

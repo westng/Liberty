@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { resolveTheme } from "@/services/appearance";
 import { getMessages } from "@/services/i18n";
@@ -78,10 +79,18 @@ const runtimeModeLabel = computed(() => {
 
 const runtimeStatus = computed(() => store.runtimeStatus.value);
 const runtimeInstallLog = computed(() => store.runtimeInstallLog.value);
+const runtimeInstallLogReversed = computed(() => {
+  const lines = runtimeInstallLog.value
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
+
+  return lines.reverse().join("\n");
+});
 const runtimeActionLabel = computed(() =>
   runtimeStatus.value.status === "ready"
-  || runtimeStatus.value.status === "failed"
-  || runtimeStatus.value.status === "repair_required"
+    || runtimeStatus.value.status === "failed"
+    || runtimeStatus.value.status === "repair_required"
     ? messages.value.runtimeReinstallAction
     : messages.value.runtimeInstallAction,
 );
@@ -306,30 +315,18 @@ onBeforeUnmount(() => {
           </div>
           <div class="setting-control">
             <div class="preview-grid preview-grid-3">
-              <button
-                class="preview-card"
-                :class="{ active: store.settings.value.themeMode === 'auto' }"
-                type="button"
-                @click="setThemeMode('auto')"
-              >
+              <button class="preview-card" :class="{ active: store.settings.value.themeMode === 'auto' }" type="button"
+                @click="setThemeMode('auto')">
                 <span class="preview-art preview-theme preview-theme-auto"></span>
                 <span class="preview-label">{{ messages.auto }}</span>
               </button>
-              <button
-                class="preview-card"
-                :class="{ active: store.settings.value.themeMode === 'light' }"
-                type="button"
-                @click="setThemeMode('light')"
-              >
+              <button class="preview-card" :class="{ active: store.settings.value.themeMode === 'light' }" type="button"
+                @click="setThemeMode('light')">
                 <span class="preview-art preview-theme preview-theme-light"></span>
                 <span class="preview-label">{{ messages.light }}</span>
               </button>
-              <button
-                class="preview-card"
-                :class="{ active: store.settings.value.themeMode === 'dark' }"
-                type="button"
-                @click="setThemeMode('dark')"
-              >
+              <button class="preview-card" :class="{ active: store.settings.value.themeMode === 'dark' }" type="button"
+                @click="setThemeMode('dark')">
                 <span class="preview-art preview-theme preview-theme-dark"></span>
                 <span class="preview-label">{{ messages.dark }}</span>
               </button>
@@ -344,28 +341,15 @@ onBeforeUnmount(() => {
           </div>
           <div class="setting-control">
             <div class="preview-grid preview-grid-2">
-              <button
-                class="preview-card"
-                :class="{ active: store.settings.value.liquidGlassStyle === 'transparent' }"
-                type="button"
-                @click="setGlassStyle('transparent')"
-              >
-                <span
-                  class="preview-art preview-glass preview-glass-transparent"
-                  :class="glassPreviewThemeClass"
-                ></span>
+              <button class="preview-card" :class="{ active: store.settings.value.liquidGlassStyle === 'transparent' }"
+                type="button" @click="setGlassStyle('transparent')">
+                <span class="preview-art preview-glass preview-glass-transparent"
+                  :class="glassPreviewThemeClass"></span>
                 <span class="preview-label">{{ messages.transparent }}</span>
               </button>
-              <button
-                class="preview-card"
-                :class="{ active: store.settings.value.liquidGlassStyle === 'tinted' }"
-                type="button"
-                @click="setGlassStyle('tinted')"
-              >
-                <span
-                  class="preview-art preview-glass preview-glass-tinted"
-                  :class="glassPreviewThemeClass"
-                ></span>
+              <button class="preview-card" :class="{ active: store.settings.value.liquidGlassStyle === 'tinted' }"
+                type="button" @click="setGlassStyle('tinted')">
+                <span class="preview-art preview-glass preview-glass-tinted" :class="glassPreviewThemeClass"></span>
                 <span class="preview-label">{{ messages.tinted }}</span>
               </button>
             </div>
@@ -377,10 +361,8 @@ onBeforeUnmount(() => {
             <span class="settings-label">{{ messages.locale }}</span>
           </div>
           <div class="setting-control setting-control-inline">
-            <select
-              :value="store.settings.value.locale"
-              @change="setLocale(($event.target as HTMLSelectElement).value as LocaleCode)"
-            >
+            <select :value="store.settings.value.locale"
+              @change="setLocale(($event.target as HTMLSelectElement).value as LocaleCode)">
               <option value="zh-CN">{{ messages.localeZh }}</option>
               <option value="en-US">{{ messages.localeEn }}</option>
             </select>
@@ -398,23 +380,11 @@ onBeforeUnmount(() => {
           </div>
           <div class="setting-control">
             <div class="color-row">
-              <div
-                v-for="color in accentColors"
-                :key="color"
-                class="color-option"
-              >
-                <button
-                  class="color-dot"
-                  :class="{ active: store.settings.value.accentColor.toLowerCase() === color }"
-                  :style="{ background: color }"
-                  type="button"
-                  :title="messages.colorLabels[color]"
-                  @click="setAccentColor(color)"
-                ></button>
-                <span
-                  v-if="store.settings.value.accentColor.toLowerCase() === color"
-                  class="color-option-label"
-                >
+              <div v-for="color in accentColors" :key="color" class="color-option">
+                <button class="color-dot" :class="{ active: store.settings.value.accentColor.toLowerCase() === color }"
+                  :style="{ background: color }" type="button" :title="messages.colorLabels[color]"
+                  @click="setAccentColor(color)"></button>
+                <span v-if="store.settings.value.accentColor.toLowerCase() === color" class="color-option-label">
                   {{ messages.colorLabels[color] }}
                 </span>
               </div>
@@ -452,10 +422,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="runtime-card-status">
             <span class="runtime-status-label">{{ messages.runtimeStatus }}</span>
-            <span
-              class="runtime-status-badge"
-              :class="`runtime-status-${runtimeStatus.status}`"
-            >
+            <span class="runtime-status-badge" :class="`runtime-status-${runtimeStatus.status}`">
               {{ runtimeStatusLabel }}
             </span>
           </div>
@@ -464,29 +431,22 @@ onBeforeUnmount(() => {
         <div class="runtime-panel">
           <div class="runtime-hero">
             <p class="runtime-status-text">{{ runtimeStatusDescription }}</p>
-            <button
-              class="text-button runtime-primary-action"
-              type="button"
-              :disabled="runtimeBusy"
-              @click="installManagedRuntime"
-            >
+            <button class="text-button runtime-primary-action" type="button" :disabled="runtimeBusy"
+              @click="installManagedRuntime">
               {{ runtimeBusy ? messages.runtimeStatusInstalling : runtimeActionLabel }}
             </button>
           </div>
 
-          <div
-            v-if="runtimeStatus.status === 'installing' || runtimeInstallProgress.percent > 0"
-            class="runtime-progress-card"
-          >
+          <div v-if="runtimeStatus.status === 'installing' || runtimeInstallProgress.percent > 0"
+            class="runtime-progress-card">
             <div class="runtime-progress-head">
               <span>{{ messages.runtimeInstallProgress }}</span>
               <strong>{{ runtimeInstallProgress.percent }}%</strong>
             </div>
             <div class="runtime-progress-track">
-              <span
-                class="runtime-progress-bar"
-                :style="{ width: `${runtimeInstallProgress.percent}%` }"
-              ></span>
+              <span class="runtime-progress-bar" :style="{ width: `${runtimeInstallProgress.percent}%` }">
+                <img class="runtime-progress-media" :src="progressBarUrl" alt="" aria-hidden="true" />
+              </span>
             </div>
             <div class="runtime-progress-copy">
               {{ runtimeInstallProgress.label }}
@@ -510,7 +470,7 @@ onBeforeUnmount(() => {
 
           <div class="runtime-log">
             <span class="runtime-log-title">{{ messages.runtimeInstallLog }}</span>
-            <pre>{{ runtimeInstallLog || messages.runtimeInstallLogEmpty }}</pre>
+            <pre>{{ runtimeInstallLogReversed || messages.runtimeInstallLogEmpty }}</pre>
           </div>
         </div>
       </article>
@@ -522,12 +482,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.manualPythonOverrideHint }}</p>
           </div>
           <div class="setting-control">
-            <input
-              id="python-path"
-              v-model="form.pythonPath"
-              :placeholder="messages.pythonPathPlaceholder"
-              @blur="save"
-            />
+            <input id="python-path" v-model="form.pythonPath" :placeholder="messages.pythonPathPlaceholder"
+              @blur="save" />
           </div>
         </div>
 
@@ -557,12 +513,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.defaultHotwordsHint }}</p>
           </div>
           <div class="setting-control">
-            <textarea
-              id="default-hotwords"
-              v-model="form.defaultHotwords"
-              :placeholder="messages.defaultHotwordsPlaceholder"
-              @blur="save"
-            />
+            <textarea id="default-hotwords" v-model="form.defaultHotwords"
+              :placeholder="messages.defaultHotwordsPlaceholder" @blur="save" />
           </div>
         </div>
 
@@ -572,12 +524,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.defaultSummaryTemplateHint }}</p>
           </div>
           <div class="setting-control">
-            <input
-              id="summary-template"
-              v-model="form.summaryTemplate"
-              :placeholder="messages.defaultSummaryTemplatePlaceholder"
-              @blur="save"
-            />
+            <input id="summary-template" v-model="form.summaryTemplate"
+              :placeholder="messages.defaultSummaryTemplatePlaceholder" @blur="save" />
           </div>
         </div>
 
@@ -587,14 +535,7 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.concurrencyHint }}</p>
           </div>
           <div class="setting-control setting-control-inline">
-            <input
-              id="concurrency"
-              v-model.number="form.concurrency"
-              type="number"
-              min="1"
-              max="8"
-              @blur="save"
-            />
+            <input id="concurrency" v-model.number="form.concurrency" type="number" min="1" max="8" @blur="save" />
           </div>
         </div>
 
@@ -604,14 +545,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.localAsrThreadsHint }}</p>
           </div>
           <div class="setting-control setting-control-inline">
-            <input
-              id="local-asr-threads"
-              v-model.number="form.localAsrThreads"
-              type="number"
-              min="0"
-              max="32"
-              @blur="save"
-            />
+            <input id="local-asr-threads" v-model.number="form.localAsrThreads" type="number" min="0" max="32"
+              @blur="save" />
           </div>
         </div>
 
@@ -621,15 +556,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.localAsrBatchSizeSecondsHint }}</p>
           </div>
           <div class="setting-control setting-control-inline">
-            <input
-              id="local-asr-batch-size-seconds"
-              v-model.number="form.localAsrBatchSizeSeconds"
-              type="number"
-              min="30"
-              max="1200"
-              step="30"
-              @blur="save"
-            />
+            <input id="local-asr-batch-size-seconds" v-model.number="form.localAsrBatchSizeSeconds" type="number"
+              min="30" max="1200" step="30" @blur="save" />
           </div>
         </div>
       </article>
@@ -644,12 +572,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.backendUrlHint }}</p>
           </div>
           <div class="setting-control">
-            <input
-              id="backend-url"
-              v-model="form.backendUrl"
-              :placeholder="messages.backendUrlPlaceholder"
-              @blur="save"
-            />
+            <input id="backend-url" v-model="form.backendUrl" :placeholder="messages.backendUrlPlaceholder"
+              @blur="save" />
           </div>
         </div>
 
@@ -659,14 +583,8 @@ onBeforeUnmount(() => {
             <p class="settings-hint">{{ messages.apiTokenHint }}</p>
           </div>
           <div class="setting-control">
-            <input
-              id="api-token"
-              v-model="form.apiToken"
-              type="password"
-              :placeholder="messages.apiTokenPlaceholder"
-              autocomplete="off"
-              @blur="save"
-            />
+            <input id="api-token" v-model="form.apiToken" type="password" :placeholder="messages.apiTokenPlaceholder"
+              autocomplete="off" @blur="save" />
           </div>
         </div>
       </article>
@@ -796,11 +714,9 @@ onBeforeUnmount(() => {
   padding: 14px 16px;
   border-radius: 18px;
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in srgb, var(--bg-card) 96%, transparent) 0%,
-      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%
-    );
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%);
   border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
 }
 
@@ -821,7 +737,6 @@ onBeforeUnmount(() => {
 
 .runtime-progress-track {
   position: relative;
-  overflow: hidden;
   height: 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-input) 92%, var(--text-soft) 8%);
@@ -833,19 +748,32 @@ onBeforeUnmount(() => {
   position: relative;
   height: 100%;
   border-radius: inherit;
+  overflow: visible;
   background:
-    linear-gradient(
-      90deg,
+    linear-gradient(90deg,
       color-mix(in srgb, var(--accent) 78%, white 22%) 0%,
       var(--accent) 28%,
       color-mix(in srgb, var(--accent) 58%, white 42%) 50%,
       var(--accent) 72%,
-      color-mix(in srgb, var(--accent) 78%, white 22%) 100%
-    );
+      color-mix(in srgb, var(--accent) 78%, white 22%) 100%);
   background-size: 220% 100%;
   box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
   transition: width 220ms ease;
   animation: runtime-progress-flow 1.8s linear infinite;
+}
+
+.runtime-progress-media {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  transform: translateY(-50%);
+  opacity: 0.98;
+  pointer-events: none;
+  z-index: 2;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.18));
 }
 
 .runtime-progress-copy {
@@ -876,11 +804,9 @@ onBeforeUnmount(() => {
   padding: 15px 16px;
   border-radius: 18px;
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in srgb, var(--bg-card) 96%, transparent) 0%,
-      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%
-    );
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%);
   border: 1px solid color-mix(in srgb, var(--divider-soft) 88%, transparent);
 }
 
@@ -924,11 +850,9 @@ onBeforeUnmount(() => {
   padding: 14px 16px;
   border-radius: 16px;
   background:
-    linear-gradient(
-      180deg,
+    linear-gradient(180deg,
       color-mix(in srgb, var(--bg-input) 94%, transparent) 0%,
-      color-mix(in srgb, var(--bg-card) 88%, transparent) 100%
-    );
+      color-mix(in srgb, var(--bg-card) 88%, transparent) 100%);
   border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
   color: var(--text-secondary);
   font-size: 12px;
