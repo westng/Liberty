@@ -1,5 +1,5 @@
 {
-  "runtimeVersion": "2026.03.28-py39.25-ffmpeg4",
+  "runtimeVersion": "2026.03.28-py39.25-ffmpeg5",
   "pythonVersion": "3.9.25",
   "pipIndexes": [
     {
@@ -26,9 +26,9 @@
         "python/bin/python"
       ],
       "ffmpegArchive": {
-        "sha256": "8d7917c1cebd7a29e68c0a0a6cc4ecc3fe05c7fffed958636c7018b319afdda4",
+        "sha256": "07fa0fb57f28427f9d38ed43c37448df0da1f205c939bab36b50980378ad86a5",
         "urls": [
-          "https://evermeet.cx/ffmpeg/ffmpeg-7.1.1.zip"
+          "https://deolaha.ca/pub/ffmpeg/ffmpeg-8.1.7z"
         ]
       },
       "ffmpegExecutableCandidates": [
@@ -50,9 +50,9 @@
         "python/bin/python"
       ],
       "ffmpegArchive": {
-        "sha256": "8d7917c1cebd7a29e68c0a0a6cc4ecc3fe05c7fffed958636c7018b319afdda4",
+        "sha256": "07fa0fb57f28427f9d38ed43c37448df0da1f205c939bab36b50980378ad86a5",
         "urls": [
-          "https://evermeet.cx/ffmpeg/ffmpeg-7.1.1.zip"
+          "https://deolaha.ca/pub/ffmpeg/ffmpeg-8.1.7z"
         ]
       },
       "ffmpegExecutableCandidates": [
