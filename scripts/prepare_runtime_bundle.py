@@ -161,6 +161,23 @@ def install_python_runtime(python_executable: Path, platform_id: str) -> None:
     if platform_id == "windows-x64":
         torch_cmd.extend(["--index-url", "https://download.pytorch.org/whl/cpu"])
     run(torch_cmd, env=env)
+    run(
+        [
+            str(python_executable),
+            "-m",
+            "pip",
+            "install",
+            "--force-reinstall",
+            "--no-cache-dir",
+            "--prefer-binary",
+            "--retries",
+            "2",
+            "--timeout",
+            "120",
+            "numpy<2",
+        ],
+        env=env,
+    )
 
 
 def validate_python_runtime(python_executable: Path) -> None:
