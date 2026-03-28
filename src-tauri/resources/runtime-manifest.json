@@ -86,16 +86,16 @@
         "python/python3.exe"
       ],
       "ffmpegArchive": {
-        "sha256": "8883a3dffbd0a16cf4ef95206ea05283f78908dbfb118f73c83f4951dcc06d77",
+        "sha256": "2504f7cbfe8ad8c95beaec715683fe0fc9a913bdef37321e2ded8aa7dd5ea80b",
         "urls": [
-          "https://cdn.gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64.gz",
-          "https://v6.gh-proxy.org/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64.gz",
-          "https://edgeone.gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64.gz",
-          "https://gh-proxy.com/https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64.gz"
+          "https://cdn.gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip",
+          "https://v6.gh-proxy.org/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip",
+          "https://edgeone.gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip",
+          "https://gh-proxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-01-14-13-00/ffmpeg-master-latest-win64-gpl-shared.zip"
         ]
       },
       "ffmpegExecutableCandidates": [
-        "ffmpeg/ffmpeg-runtime.exe",
+        "ffmpeg/ffmpeg-master-latest-win64-gpl-shared/bin/ffmpeg.exe",
         "ffmpeg/bin/ffmpeg.exe"
       ]
     }

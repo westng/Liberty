@@ -277,6 +277,7 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
                 &log_path,
                 &format!("[runtime] resolved ffmpeg={}", ffmpeg_executable.display()),
             )?;
+            validate_ffmpeg_runtime(&ffmpeg_executable, &log_path)?;
         } else {
             return Err("未找到托管运行环境中的 ffmpeg 可执行文件。".into());
         }
@@ -791,6 +792,16 @@ fn extract_gzip_file(archive_path: &Path, destination: &Path, log_path: &Path) -
     std::io::copy(&mut decoder, &mut output).map_err(|err| err.to_string())?;
     output.flush().map_err(|err| err.to_string())?;
     Ok(())
+}
+
+fn validate_ffmpeg_runtime(ffmpeg_path: &Path, log_path: &Path) -> LocalResult<()> {
+    run_command_with_log(
+        Command::new(ffmpeg_path)
+            .arg("-hide_banner")
+            .arg("-version"),
+        log_path,
+        "Validating ffmpeg runtime",
+    )
 }
 
 fn apply_zip_entry_permissions(output_path: &Path, unix_mode: Option<u32>) -> LocalResult<()> {
