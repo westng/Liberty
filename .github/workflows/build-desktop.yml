@@ -1,10 +1,31 @@
 name: Build Desktop Bundles
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create or update a GitHub Release with the built bundles"
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: "Release tag for manual publishing, for example v1.0.0"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark the GitHub Release as a prerelease"
+        required: false
+        type: boolean
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -103,3 +124,95 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.create_release)
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve Release Settings
+        id: release
+        shell: bash
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${INPUT_RELEASE_TAG}"
+          fi
+
+          if [[ -z "${tag}" ]]; then
+            echo "::error::release_tag is required when publishing from a non-tag manual run."
+            exit 1
+          fi
+
+          if [[ "${tag}" != v* ]]; then
+            echo "::error::Release tags must start with v, for example v1.0.0."
+            exit 1
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${INPUT_PRERELEASE:-false}" >> "$GITHUB_OUTPUT"
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: release-assets
+
+      - name: Prepare Release Assets
+        id: assets
+        shell: bash
+        run: |
+          mkdir -p release-upload
+
+          while IFS= read -r -d '' file; do
+            artifact_name="$(basename "$(dirname "${file}")")"
+            file_name="$(basename "${file}")"
+            cp "${file}" "release-upload/${artifact_name}-${file_name}"
+          done < <(
+            find release-assets -type f \
+              \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" \) \
+              -print0
+          )
+
+          asset_count="$(find release-upload -type f | wc -l | tr -d ' ')"
+          if [[ "${asset_count}" == "0" ]]; then
+            echo "::error::No release assets were found in downloaded build artifacts."
+            exit 1
+          fi
+
+          find release-upload -maxdepth 1 -type f -print | sort
+          echo "count=${asset_count}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          mapfile -t assets < <(find release-upload -maxdepth 1 -type f | sort)
+
+          release_args=(
+            --title "Liberty ${RELEASE_TAG}"
+            --generate-notes
+            --verify-tag
+          )
+
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
+          else
+            gh release create "${RELEASE_TAG}" "${assets[@]}" "${release_args[@]}"
+          fi
