@@ -7,16 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       create_release:
-        description: "Create or update a GitHub Release with the built bundles"
+        description: "是否发布到 GitHub Release"
         required: false
         type: boolean
         default: false
-      release_tag:
-        description: "Release tag for manual publishing, for example v1.0.0"
-        required: false
-        type: string
       prerelease:
-        description: "Mark the GitHub Release as a prerelease"
+        description: "是否标记为预发布版本"
         required: false
         type: boolean
         default: false
@@ -136,30 +132,48 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Resolve Release Settings
         id: release
         shell: bash
         env:
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
           INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             tag="${GITHUB_REF_NAME}"
           else
-            tag="${INPUT_RELEASE_TAG}"
+            version="$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")"
+            tag="v${version}"
           fi
 
           if [[ -z "${tag}" ]]; then
-            echo "::error::release_tag is required when publishing from a non-tag manual run."
+            echo "::error::无法解析发布版本号。"
             exit 1
           fi
 
           if [[ "${tag}" != v* ]]; then
-            echo "::error::Release tags must start with v, for example v1.0.0."
+            echo "::error::发布标签必须以 v 开头，例如 v1.0.0。"
             exit 1
           fi
 
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${tag}" \
+              -f sha="${GITHUB_SHA}" >/dev/null
+          fi
+
+          target_commit="${GITHUB_SHA}"
+          if git rev-parse "${tag}^{commit}" >/dev/null 2>&1; then
+            target_commit="$(git rev-parse "${tag}^{commit}")"
+          fi
+
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "target_commit=${target_commit}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${INPUT_PRERELEASE:-false}" >> "$GITHUB_OUTPUT"
 
       - name: Download Build Artifacts
@@ -185,12 +199,26 @@ jobs:
 
           asset_count="$(find release-upload -type f | wc -l | tr -d ' ')"
           if [[ "${asset_count}" == "0" ]]; then
-            echo "::error::No release assets were found in downloaded build artifacts."
+            echo "::error::下载的构建产物中未找到可发布文件。"
             exit 1
           fi
 
           find release-upload -maxdepth 1 -type f -print | sort
           echo "count=${asset_count}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Release Notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          TARGET_COMMIT: ${{ steps.release.outputs.target_commit }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="${RELEASE_TAG}" \
+            -f target_commitish="${TARGET_COMMIT}" \
+            --jq ".body" > release-notes.md
 
       - name: Publish Release
         shell: bash
@@ -203,7 +231,7 @@ jobs:
 
           release_args=(
             --title "Liberty ${RELEASE_TAG}"
-            --generate-notes
+            --notes-file release-notes.md
             --verify-tag
           )
 
@@ -212,6 +240,27 @@ jobs:
           fi
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq ".id")"
+            python3 - <<'PY'
+          import json
+          import os
+
+          with open("release-notes.md", encoding="utf-8") as release_notes:
+              body = release_notes.read()
+
+          payload = {
+              "name": f"Liberty {os.environ['RELEASE_TAG']}",
+              "body": body,
+              "prerelease": os.environ.get("PRERELEASE") == "true",
+          }
+
+          with open("release-update.json", "w", encoding="utf-8") as release_update:
+              json.dump(payload, release_update)
+          PY
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              --input release-update.json >/dev/null
             gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
           else
             gh release create "${RELEASE_TAG}" "${assets[@]}" "${release_args[@]}"
