@@ -25,6 +25,8 @@
 
 Liberty is a desktop workspace for meeting media processing, designed around a complete pipeline of local transcription, AI summarization, and result organization. The project is built with Tauri 2, Vue 3, TypeScript, Rust, and Python, with a strong focus on local execution, native desktop workflows, and centralized configuration.
 
+![Liberty Screenshot](docs/images/QQ20260501-113612.png)
+
 ## Overview
 
 Liberty turns raw meeting audio or video files into structured, reviewable output:
