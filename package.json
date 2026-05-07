@@ -6,13 +6,13 @@
   "type": "module",
   "scripts": {
     "dev:web": "vite",
-    "prepare:runtime-bundle:if-missing": "PIP_CACHE_DIR=$PWD/.pip-cache node ./scripts/prepare-runtime-bundle.mjs --if-missing",
+    "prepare:runtime-bundle:if-missing": "node ./scripts/prepare-runtime-bundle.mjs --if-missing",
     "dev": "npm run prepare:runtime-bundle:if-missing && npm run dev:web",
     "build:web": "vue-tsc --noEmit && vite build",
-    "prepare:runtime-bundle": "PIP_CACHE_DIR=$PWD/.pip-cache node ./scripts/prepare-runtime-bundle.mjs",
+    "prepare:runtime-bundle": "node ./scripts/prepare-runtime-bundle.mjs",
     "build": "npm run prepare:runtime-bundle && npm run build:web",
     "preview": "vite preview",
-    "tauri": "CARGO_HOME=$PWD/src-tauri/.cargo-home tauri"
+    "tauri": "node ./scripts/run-tauri.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

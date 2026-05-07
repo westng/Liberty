@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import path from "node:path";
 import process from "node:process";
 
 if (process.env.LIBERTY_RUNTIME_BUNDLE_READY === "1") {
@@ -56,6 +57,10 @@ const result = spawnSync(
     outputDir,
   ],
   {
+    env: {
+      ...process.env,
+      PIP_CACHE_DIR: path.join(process.cwd(), ".pip-cache"),
+    },
     stdio: "inherit",
     windowsHide: true,
   },
