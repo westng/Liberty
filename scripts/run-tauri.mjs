@@ -10,12 +10,21 @@ const result = spawnSync(tauriBin, process.argv.slice(2), {
     ...process.env,
     CARGO_HOME: path.join(process.cwd(), "src-tauri", ".cargo-home"),
   },
+  shell: process.platform === "win32",
   stdio: "inherit",
   windowsHide: true,
 });
 
 if (typeof result.status === "number") {
   process.exit(result.status);
+}
+
+if (result.error) {
+  console.error(`[run-tauri] failed to start ${tauriBin}: ${result.error.message}`);
+}
+
+if (result.signal) {
+  console.error(`[run-tauri] tauri process exited from signal ${result.signal}`);
 }
 
 process.exit(1);
