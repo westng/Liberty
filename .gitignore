@@ -1,6 +1,8 @@
 .DS_Store
 ._*
 node_modules/
+.pnpm-store/
+.pip-cache/
 dist/
 .vite/
 .venv/
@@ -11,6 +13,7 @@ artifacts/.docx-venv/
 artifacts/*-render/
 src-tauri/target/
 src-tauri/target-check/
+src-tauri/.cargo-home/
 __pycache__/
 *.pyc
 runtime-bundles/*

@@ -7,6 +7,7 @@ type MessageTree = {
     models: string;
     templates: string;
     members: string;
+    pet: string;
     settings: string;
   };
   routeTitles: Record<string, string>;
@@ -336,10 +337,10 @@ type MessageTree = {
     usingCurrent: string;
     deleteCurrent: string;
   };
-  models: {
-    title: string;
-    copy: string;
-    add: string;
+    models: {
+      title: string;
+      copy: string;
+      add: string;
     total: string;
     enabled: string;
     defaultLabel: string;
@@ -364,11 +365,14 @@ type MessageTree = {
     apiKeyPlaceholder: string;
     model: string;
     modelPlaceholder: string;
+    modelHelp: string;
     enabledSwitch: string;
-    defaultSwitch: string;
-    save: string;
-    reset: string;
-  };
+      defaultSwitch: string;
+      save: string;
+      reset: string;
+      saveSuccessCreated: string;
+      saveSuccessUpdated: string;
+    };
   templates: {
     title: string;
     copy: string;
@@ -468,6 +472,7 @@ const messages: Record<LocaleCode, MessageTree> = {
       models: "模型管理",
       templates: "模板管理",
       members: "人员管理",
+      pet: "宠物中心",
       settings: "系统设置",
     },
     routeTitles: {
@@ -478,6 +483,7 @@ const messages: Record<LocaleCode, MessageTree> = {
       models: "模型管理",
       templates: "模板管理",
       members: "人员管理",
+      pet: "宠物中心",
       aiSummary: "AI 总结",
       settings: "系统设置",
     },
@@ -853,10 +859,13 @@ const messages: Record<LocaleCode, MessageTree> = {
       apiKeyPlaceholder: "sk-...",
       model: "Model",
       modelPlaceholder: "例如：gpt-4.1",
+      modelHelp: "这里要填接口真正的 model id，例如 `deepseek-v4-flash`、`deepseek-chat`、`gpt-4.1`，不要填展示名称。",
       enabledSwitch: "启用该模型",
       defaultSwitch: "设为默认模型",
       save: "保存模型",
       reset: "清空表单",
+      saveSuccessCreated: "模型“{name}”已保存。",
+      saveSuccessUpdated: "模型“{name}”已更新。",
     },
     templates: {
       title: "总结模板",
@@ -957,6 +966,7 @@ const messages: Record<LocaleCode, MessageTree> = {
       models: "Models",
       templates: "Templates",
       members: "Members",
+      pet: "Pet",
       settings: "Settings",
     },
     routeTitles: {
@@ -967,6 +977,7 @@ const messages: Record<LocaleCode, MessageTree> = {
       models: "Model Management",
       templates: "Template Management",
       members: "Member Management",
+      pet: "Pet Center",
       aiSummary: "AI Summary",
       settings: "Settings",
     },
@@ -1344,10 +1355,13 @@ const messages: Record<LocaleCode, MessageTree> = {
       apiKeyPlaceholder: "sk-...",
       model: "Model",
       modelPlaceholder: "Example: gpt-4.1",
+      modelHelp: "Use the provider's actual model id here, such as `deepseek-v4-flash`, `deepseek-chat`, or `gpt-4.1`, not the display label.",
       enabledSwitch: "Enable this model",
       defaultSwitch: "Use as default model",
       save: "Save Model",
       reset: "Reset Form",
+      saveSuccessCreated: "Model \"{name}\" has been saved.",
+      saveSuccessUpdated: "Model \"{name}\" has been updated.",
     },
     templates: {
       title: "Summary Templates",

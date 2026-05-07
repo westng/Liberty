@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager};
 pub type LocalResult<T> = Result<T, String>;
 
 const BUILTIN_TEMPLATE_TIMESTAMP: &str = "2026-04-28T00:00:00.000Z";
+const MAX_DAILY_INTERACTION_PER_SOURCE: i64 = 20;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +118,56 @@ pub struct MeetingMember {
     pub is_recorder: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetProfile {
+    pub id: String,
+    pub name: String,
+    pub level: i64,
+    pub experience: i64,
+    pub stage: String,
+    pub current_mood: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetSettings {
+    pub pet_id: String,
+    pub desktop_enabled: bool,
+    pub always_on_top: bool,
+    pub muted: bool,
+    pub focus_mode_enabled: bool,
+    pub proactive_level: i64,
+    pub last_window_x: Option<f64>,
+    pub last_window_y: Option<f64>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetCosmeticUnlock {
+    pub id: String,
+    pub pet_id: String,
+    pub cosmetic_type: String,
+    pub cosmetic_key: String,
+    pub unlocked_at: String,
+    pub equipped: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetEventLedgerEntry {
+    pub id: String,
+    pub pet_id: String,
+    pub event_type: String,
+    pub event_source: String,
+    pub event_value: i64,
+    pub event_time: String,
+    pub metadata: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -815,6 +866,103 @@ pub fn list_meeting_members(app: &AppHandle) -> LocalResult<Vec<MeetingMember>> 
         .map_err(|err| err.to_string())
 }
 
+pub fn get_pet_profile(app: &AppHandle) -> LocalResult<PetProfile> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_default_pet_exists(&conn)?;
+    load_pet_profile(&conn)
+}
+
+pub fn save_pet_profile(app: &AppHandle, profile: &PetProfile) -> LocalResult<PetProfile> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_default_pet_exists(&conn)?;
+    let tx = conn.unchecked_transaction().map_err(|err| err.to_string())?;
+    save_pet_profile_tx(&tx, profile)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    load_pet_profile(&conn)
+}
+
+pub fn get_pet_settings(app: &AppHandle) -> LocalResult<PetSettings> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_default_pet_exists(&conn)?;
+    load_pet_settings(&conn)
+}
+
+pub fn save_pet_settings(app: &AppHandle, settings: &PetSettings) -> LocalResult<PetSettings> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_default_pet_exists(&conn)?;
+    save_pet_settings_inner(&conn, settings)?;
+    load_pet_settings(&conn)
+}
+
+pub fn list_pet_event_ledger(app: &AppHandle, limit: usize) -> LocalResult<Vec<PetEventLedgerEntry>> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_default_pet_exists(&conn)?;
+    load_pet_event_ledger(&conn, limit)
+}
+
+pub fn list_pet_cosmetic_unlocks(app: &AppHandle) -> LocalResult<Vec<PetCosmeticUnlock>> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_default_pet_exists(&conn)?;
+    load_pet_cosmetic_unlocks(&conn)
+}
+
+pub fn apply_pet_growth_event(
+    app: &AppHandle,
+    event_type: &str,
+    event_source: &str,
+    event_value: i64,
+    mood: &str,
+    metadata: Option<&str>,
+) -> LocalResult<PetProfile> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    ensure_default_pet_exists_tx(&tx)?;
+    let mut profile = load_pet_profile_tx(&tx)?;
+
+    if event_type == "interaction" {
+        let todays_count = count_pet_events_for_today_tx(&tx, event_type, event_source)?;
+        if todays_count >= MAX_DAILY_INTERACTION_PER_SOURCE {
+            return Err(format!(
+                "今天的{}互动已经达到上限（{}次）。",
+                pet_interaction_label(event_source),
+                MAX_DAILY_INTERACTION_PER_SOURCE
+            ));
+        }
+    }
+
+    let previous_stage = profile.stage.clone();
+    let now = chrono::Utc::now().to_rfc3339();
+    let next_experience = (profile.experience + event_value).max(0);
+    profile.experience = next_experience;
+    profile.level = pet_level_from_experience(next_experience);
+    profile.stage = pet_stage_from_level(profile.level).to_string();
+    profile.current_mood = mood.to_string();
+    profile.updated_at = now.clone();
+    save_pet_profile_tx(&tx, &profile)?;
+    ensure_pet_stage_cosmetic_unlocks_tx(&tx, &profile, &previous_stage, &now)?;
+    insert_pet_event_ledger_tx(
+        &tx,
+        &PetEventLedgerEntry {
+            id: format!("pet-event-{}", unix_timestamp_millis()),
+            pet_id: profile.id.clone(),
+            event_type: event_type.to_string(),
+            event_source: event_source.to_string(),
+            event_value,
+            event_time: now,
+            metadata: metadata.map(|value| value.to_string()),
+        },
+    )?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(profile)
+}
+
 pub fn save_meeting_member(app: &AppHandle, member: &MeetingMember) -> LocalResult<()> {
     init_database(app)?;
 
@@ -1170,11 +1318,58 @@ fn apply_schema(conn: &Connection) -> LocalResult<()> {
           updated_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS pet_profile (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          level INTEGER NOT NULL DEFAULT 1,
+          experience INTEGER NOT NULL DEFAULT 0,
+          stage TEXT NOT NULL,
+          current_mood TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_settings (
+          pet_id TEXT PRIMARY KEY,
+          desktop_enabled INTEGER NOT NULL DEFAULT 1,
+          always_on_top INTEGER NOT NULL DEFAULT 1,
+          muted INTEGER NOT NULL DEFAULT 0,
+          focus_mode_enabled INTEGER NOT NULL DEFAULT 0,
+          proactive_level INTEGER NOT NULL DEFAULT 2,
+          last_window_x REAL,
+          last_window_y REAL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_cosmetic_unlocks (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          cosmetic_type TEXT NOT NULL,
+          cosmetic_key TEXT NOT NULL,
+          unlocked_at TEXT NOT NULL,
+          equipped INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_event_ledger (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          event_source TEXT NOT NULL,
+          event_value INTEGER NOT NULL DEFAULT 0,
+          event_time TEXT NOT NULL,
+          metadata TEXT,
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_job_source_files_job_id ON job_source_files(job_id);
         CREATE INDEX IF NOT EXISTS idx_segments_job_id ON transcript_segments(job_id, segment_type, segment_order);
         CREATE INDEX IF NOT EXISTS idx_ai_runs_job_id ON ai_summary_runs(job_id, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_meeting_members_sort_order ON meeting_members(sort_order ASC, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_event_ledger_time ON pet_event_ledger(event_time DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_cosmetic_unlocks_pet_id ON pet_cosmetic_unlocks(pet_id, unlocked_at DESC);
         CREATE INDEX IF NOT EXISTS idx_runtime_state_status ON runtime_state(status);
         ",
     )
@@ -1376,6 +1571,341 @@ fn save_meeting_member_tx(tx: &Transaction<'_>, member: &MeetingMember) -> Local
     .map_err(|err| err.to_string())?;
 
     Ok(())
+}
+
+fn load_pet_profile(conn: &Connection) -> LocalResult<PetProfile> {
+    conn.query_row(
+        "SELECT id, name, level, experience, stage, current_mood, created_at, updated_at
+         FROM pet_profile
+         WHERE id = 'default-pet'",
+        [],
+        |row| {
+            Ok(PetProfile {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                level: row.get(2)?,
+                experience: row.get(3)?,
+                stage: row.get(4)?,
+                current_mood: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        },
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn load_pet_profile_tx(tx: &Transaction<'_>) -> LocalResult<PetProfile> {
+    tx.query_row(
+        "SELECT id, name, level, experience, stage, current_mood, created_at, updated_at
+         FROM pet_profile
+         WHERE id = 'default-pet'",
+        [],
+        |row| {
+            Ok(PetProfile {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                level: row.get(2)?,
+                experience: row.get(3)?,
+                stage: row.get(4)?,
+                current_mood: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        },
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn save_pet_profile_tx(tx: &Transaction<'_>, profile: &PetProfile) -> LocalResult<()> {
+    tx.execute(
+        "INSERT INTO pet_profile (
+            id, name, level, experience, stage, current_mood, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            level = excluded.level,
+            experience = excluded.experience,
+            stage = excluded.stage,
+            current_mood = excluded.current_mood,
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at",
+        params![
+            profile.id,
+            profile.name,
+            profile.level,
+            profile.experience,
+            profile.stage,
+            profile.current_mood,
+            profile.created_at,
+            profile.updated_at
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn load_pet_settings(conn: &Connection) -> LocalResult<PetSettings> {
+    conn.query_row(
+        "SELECT pet_id, desktop_enabled, always_on_top, muted, focus_mode_enabled,
+                proactive_level, last_window_x, last_window_y, updated_at
+         FROM pet_settings
+         WHERE pet_id = 'default-pet'",
+        [],
+        |row| {
+            Ok(PetSettings {
+                pet_id: row.get(0)?,
+                desktop_enabled: row.get::<_, i64>(1)? != 0,
+                always_on_top: row.get::<_, i64>(2)? != 0,
+                muted: row.get::<_, i64>(3)? != 0,
+                focus_mode_enabled: row.get::<_, i64>(4)? != 0,
+                proactive_level: row.get(5)?,
+                last_window_x: row.get(6)?,
+                last_window_y: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        },
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn save_pet_settings_inner(conn: &Connection, settings: &PetSettings) -> LocalResult<()> {
+    conn.execute(
+        "INSERT INTO pet_settings (
+            pet_id, desktop_enabled, always_on_top, muted, focus_mode_enabled,
+            proactive_level, last_window_x, last_window_y, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(pet_id) DO UPDATE SET
+            desktop_enabled = excluded.desktop_enabled,
+            always_on_top = excluded.always_on_top,
+            muted = excluded.muted,
+            focus_mode_enabled = excluded.focus_mode_enabled,
+            proactive_level = excluded.proactive_level,
+            last_window_x = excluded.last_window_x,
+            last_window_y = excluded.last_window_y,
+            updated_at = excluded.updated_at",
+        params![
+            settings.pet_id,
+            if settings.desktop_enabled { 1 } else { 0 },
+            if settings.always_on_top { 1 } else { 0 },
+            if settings.muted { 1 } else { 0 },
+            if settings.focus_mode_enabled { 1 } else { 0 },
+            settings.proactive_level,
+            settings.last_window_x,
+            settings.last_window_y,
+            settings.updated_at
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn load_pet_event_ledger(conn: &Connection, limit: usize) -> LocalResult<Vec<PetEventLedgerEntry>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, pet_id, event_type, event_source, event_value, event_time, metadata
+             FROM pet_event_ledger
+             WHERE pet_id = 'default-pet'
+             ORDER BY datetime(event_time) DESC, event_time DESC
+             LIMIT ?1",
+        )
+        .map_err(|err| err.to_string())?;
+    let rows = stmt
+        .query_map(params![limit as i64], |row| {
+            Ok(PetEventLedgerEntry {
+                id: row.get(0)?,
+                pet_id: row.get(1)?,
+                event_type: row.get(2)?,
+                event_source: row.get(3)?,
+                event_value: row.get(4)?,
+                event_time: row.get(5)?,
+                metadata: row.get(6)?,
+            })
+        })
+        .map_err(|err| err.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())
+}
+
+fn load_pet_cosmetic_unlocks(conn: &Connection) -> LocalResult<Vec<PetCosmeticUnlock>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, pet_id, cosmetic_type, cosmetic_key, unlocked_at, equipped
+             FROM pet_cosmetic_unlocks
+             WHERE pet_id = 'default-pet'
+             ORDER BY datetime(unlocked_at) DESC, unlocked_at DESC",
+        )
+        .map_err(|err| err.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(PetCosmeticUnlock {
+                id: row.get(0)?,
+                pet_id: row.get(1)?,
+                cosmetic_type: row.get(2)?,
+                cosmetic_key: row.get(3)?,
+                unlocked_at: row.get(4)?,
+                equipped: row.get::<_, i64>(5)? != 0,
+            })
+        })
+        .map_err(|err| err.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())
+}
+
+fn insert_pet_event_ledger_tx(tx: &Transaction<'_>, entry: &PetEventLedgerEntry) -> LocalResult<()> {
+    tx.execute(
+        "INSERT INTO pet_event_ledger (
+            id, pet_id, event_type, event_source, event_value, event_time, metadata
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            entry.id,
+            entry.pet_id,
+            entry.event_type,
+            entry.event_source,
+            entry.event_value,
+            entry.event_time,
+            entry.metadata
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn count_pet_events_for_today_tx(
+    tx: &Transaction<'_>,
+    event_type: &str,
+    event_source: &str,
+) -> LocalResult<i64> {
+    tx.query_row(
+        "SELECT COUNT(1)
+         FROM pet_event_ledger
+         WHERE event_type = ?1
+           AND event_source = ?2
+           AND date(event_time, 'localtime') = date('now', 'localtime')",
+        params![event_type, event_source],
+        |row| row.get(0),
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn pet_interaction_label(event_source: &str) -> &'static str {
+    match event_source {
+        "tap" => "点击",
+        "pet" => "抚摸",
+        "feed" => "投喂",
+        "encourage" => "鼓励",
+        _ => "互动",
+    }
+}
+
+fn ensure_pet_stage_cosmetic_unlocks_tx(
+    tx: &Transaction<'_>,
+    profile: &PetProfile,
+    previous_stage: &str,
+    unlocked_at: &str,
+) -> LocalResult<()> {
+    if previous_stage == profile.stage {
+        return Ok(());
+    }
+
+    let (cosmetic_type, cosmetic_key) = match profile.stage.as_str() {
+        "growing" => ("accessory", "sprout-ribbon"),
+        "mature" => ("accessory", "golden-bell"),
+        _ => return Ok(()),
+    };
+
+    tx.execute(
+        "INSERT OR IGNORE INTO pet_cosmetic_unlocks (
+            id, pet_id, cosmetic_type, cosmetic_key, unlocked_at, equipped
+         ) VALUES (?1, ?2, ?3, ?4, ?5, 1)",
+        params![
+            format!("pet-cosmetic-{}-{}", profile.id, cosmetic_key),
+            profile.id,
+            cosmetic_type,
+            cosmetic_key,
+            unlocked_at
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn ensure_default_pet_exists(conn: &Connection) -> LocalResult<()> {
+    let existing = conn
+        .query_row(
+            "SELECT id FROM pet_profile WHERE id = 'default-pet'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|err| err.to_string())?;
+    if existing.is_some() {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO pet_profile (
+            id, name, level, experience, stage, current_mood, created_at, updated_at
+         ) VALUES ('default-pet', 'Libby', 1, 0, 'baby', 'idle', ?1, ?1)",
+        params![now],
+    )
+    .map_err(|err| err.to_string())?;
+    conn.execute(
+        "INSERT INTO pet_settings (
+            pet_id, desktop_enabled, always_on_top, muted, focus_mode_enabled,
+            proactive_level, last_window_x, last_window_y, updated_at
+         ) VALUES ('default-pet', 1, 1, 0, 0, 2, NULL, NULL, ?1)",
+        params![chrono::Utc::now().to_rfc3339()],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn ensure_default_pet_exists_tx(tx: &Transaction<'_>) -> LocalResult<()> {
+    let existing = tx
+        .query_row(
+            "SELECT id FROM pet_profile WHERE id = 'default-pet'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|err| err.to_string())?;
+    if existing.is_some() {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    tx.execute(
+        "INSERT INTO pet_profile (
+            id, name, level, experience, stage, current_mood, created_at, updated_at
+         ) VALUES ('default-pet', 'Libby', 1, 0, 'baby', 'idle', ?1, ?1)",
+        params![now],
+    )
+    .map_err(|err| err.to_string())?;
+    tx.execute(
+        "INSERT INTO pet_settings (
+            pet_id, desktop_enabled, always_on_top, muted, focus_mode_enabled,
+            proactive_level, last_window_x, last_window_y, updated_at
+         ) VALUES ('default-pet', 1, 1, 0, 0, 2, NULL, NULL, ?1)",
+        params![chrono::Utc::now().to_rfc3339()],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn pet_level_from_experience(experience: i64) -> i64 {
+    (experience.div_euclid(20) + 1).max(1)
+}
+
+fn pet_stage_from_level(level: i64) -> &'static str {
+    if level >= 8 {
+        "mature"
+    } else if level >= 4 {
+        "growing"
+    } else {
+        "baby"
+    }
 }
 
 fn load_runtime_state(

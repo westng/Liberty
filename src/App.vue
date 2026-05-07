@@ -3,18 +3,23 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
 import { useMeetingStore } from "@/composables/useMeetingStore";
+import { usePetStore } from "@/composables/usePetStore";
 import { formatMessage, getMessages } from "@/services/i18n";
+import { applyPetDesktopState, isPetDesktopWindowOpen, togglePetDesktopWindow } from "@/services/window";
 import { getProcessMetrics, openExternalUrl } from "@/services/system";
 import type { ProcessMetrics } from "@/types/meeting";
 
 const route = useRoute();
 const router = useRouter();
 const store = useMeetingStore();
+const petStore = usePetStore();
 const routeHistory = ref<string[]>([]);
 const routeHistoryIndex = ref(-1);
 const knownJobStatuses = new Map<string, string>();
 let didHydrateJobStatuses = false;
 let metricsPollingId: number | null = null;
+let didRecordPetDailyOpen = false;
+const desktopPetVisible = ref(false);
 const processMetrics = ref<ProcessMetrics>({
   cpuPercent: 0,
   memoryMb: 0,
@@ -28,6 +33,7 @@ const navItems = computed(() => [
   { label: messages.value.nav.models, to: "/models" },
   { label: messages.value.nav.templates, to: "/templates" },
   { label: messages.value.nav.members, to: "/members" },
+  { label: messages.value.nav.pet, to: "/pet" },
   { label: messages.value.nav.settings, to: "/settings" },
 ]);
 const isStandaloneRoute = computed(() => Boolean(route.meta.standalone));
@@ -118,6 +124,17 @@ watch(
       const previousStatus = knownJobStatuses.get(job.id);
       nextStatuses.set(job.id, job.status);
 
+      if (
+        previousStatus
+        && previousStatus !== "transcribing"
+        && job.status === "transcribing"
+      ) {
+        void petStore.applyWorkflowEvent({
+          eventType: "transcription_started",
+          metadata: job.title,
+        }).catch(() => undefined);
+      }
+
       if (previousStatus && previousStatus !== "completed" && job.status === "completed") {
         void notifyJobCompleted(job.title);
       }
@@ -133,6 +150,8 @@ watch(
 
 onMounted(() => {
   void store.ensureSettingsLoaded();
+  void ensurePetDesktopWindow();
+  void syncDesktopPetVisibility();
   updateGraphicsMemoryEstimate();
   window.addEventListener("resize", updateGraphicsMemoryEstimate);
   void refreshToolbarMetrics();
@@ -219,6 +238,57 @@ async function openProjectGithub() {
   await openExternalUrl("https://github.com/westng/Liberty");
 }
 
+async function ensurePetDesktopWindow() {
+  if (route.name === "pet-desktop") {
+    return;
+  }
+
+  try {
+    await petStore.loadPetState();
+    if (!didRecordPetDailyOpen) {
+      didRecordPetDailyOpen = true;
+      void petStore.applyWorkflowEvent({
+        eventType: "daily_open",
+        metadata: "Liberty app opened",
+      }).catch(() => undefined);
+    }
+    const settings = petStore.settings.value;
+
+    if (settings?.desktopEnabled) {
+      desktopPetVisible.value = await applyPetDesktopState({
+        desktopEnabled: settings.desktopEnabled,
+        alwaysOnTop: settings.alwaysOnTop,
+        lastWindowX: settings.lastWindowX,
+        lastWindowY: settings.lastWindowY,
+      });
+    }
+  } catch {
+    // Keep the main app usable even if the pet window fails to open.
+  }
+}
+
+async function syncDesktopPetVisibility() {
+  try {
+    desktopPetVisible.value = await isPetDesktopWindowOpen();
+  } catch {
+    desktopPetVisible.value = false;
+  }
+}
+
+async function toggleToolbarPetDesktop() {
+  await petStore.loadPetState();
+  const current = petStore.settings.value;
+  if (!current) {
+    return;
+  }
+
+  desktopPetVisible.value = await togglePetDesktopWindow({
+    alwaysOnTop: current.alwaysOnTop,
+    lastWindowX: current.lastWindowX,
+    lastWindowY: current.lastWindowY,
+  });
+}
+
 async function notifyJobCompleted(jobTitle: string) {
   if (typeof window === "undefined" || typeof Notification === "undefined") {
     return;
@@ -237,6 +307,15 @@ async function notifyJobCompleted(jobTitle: string) {
   new Notification(messages.value.shell.jobCompletedTitle, {
     body: formatMessage(messages.value.shell.jobCompletedBody, { title: jobTitle }),
   });
+
+  try {
+    await petStore.applyWorkflowEvent({
+      eventType: "transcription_completed",
+      metadata: jobTitle,
+    });
+  } catch {
+    // Pet updates are best-effort only.
+  }
 }
 
 async function refreshToolbarMetrics() {
@@ -343,6 +422,16 @@ function updateGraphicsMemoryEstimate() {
                   <strong class="toolbar-metric-value">{{ metric.value }}</strong>
                 </div>
               </div>
+              <button
+                class="toolbar-pet-toggle"
+                type="button"
+                :aria-pressed="desktopPetVisible"
+                :title="desktopPetVisible ? '关闭桌面宠物' : '打开桌面宠物'"
+                @click="toggleToolbarPetDesktop"
+              >
+                <span class="toolbar-pet-dot" :data-active="desktopPetVisible"></span>
+                {{ desktopPetVisible ? "桌宠已开" : "桌宠已关" }}
+              </button>
               <div class="toolbar-pill">
                 <span class="toolbar-pill-dot"></span>
                 {{ toolbarStatus }}

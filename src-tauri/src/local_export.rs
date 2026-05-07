@@ -10,6 +10,9 @@ use xmltree::{Element, EmitterConfig, XMLNode};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 const TEMPLATE_DOCX_BYTES: &[u8] = include_bytes!("../../artifacts/会议纪要模板.docx");
+const FIXED_MEETING_TIME: &str = "9:00";
+const FIXED_MEETING_LOCATION: &str = "小会议室";
+const FIXED_MEETING_HOST: &str = "冯吉琼";
 
 #[derive(Debug, Clone, Default)]
 struct ExportDocData {
@@ -195,6 +198,10 @@ fn build_export_doc_data(job: &MeetingJob, summary: &AiSummaryResult, members: &
             }
         }
     }
+
+    data.meeting_time = FIXED_MEETING_TIME.to_string();
+    data.meeting_location = FIXED_MEETING_LOCATION.to_string();
+    data.host = FIXED_MEETING_HOST.to_string();
 
     data
 }
@@ -1101,5 +1108,71 @@ mod tests {
         let data = build_export_doc_data(&job, &summary, &members);
         assert_eq!(data.recorder, "肖明容");
         assert_eq!(data.attendees, "李兰、段世琼");
+    }
+
+    #[test]
+    fn build_export_doc_data_overrides_fixed_meeting_fields() {
+        let overview = SAMPLE_OVERVIEW
+            .replace("会议时间：待补充", "会议时间：10:30")
+            .replace("会议地点：待补充", "会议地点：大会议室")
+            .replace("会议主持人：待补充", "会议主持人：张三");
+        let job = MeetingJob {
+            id: "job-4".into(),
+            title: "例会".into(),
+            source_files: Vec::new(),
+            duration_minutes: 0,
+            processing_started_at_ms: None,
+            processing_finished_at_ms: None,
+            processing_duration_seconds: None,
+            progress_percent: None,
+            progress_message: None,
+            created_at: String::new(),
+            hotwords: Vec::new(),
+            lang: "zh".into(),
+            enable_speaker: true,
+            summary_template: "表格版会议纪要".into(),
+            upload_status: "completed".into(),
+            asr_status: "completed".into(),
+            summary_status: "completed".into(),
+            overall_status: "completed".into(),
+            failure_reason: None,
+            transcript_segments: vec![TranscriptSegment {
+                id: "seg-1".into(),
+                start_ms: 0,
+                end_ms: 1,
+                speaker: Some("李兰".into()),
+                text: "测试".into(),
+            }],
+            speaker_segments: Vec::new(),
+            summary: crate::local_db::MeetingSummary {
+                overview: overview.clone(),
+                topics: vec!["五一接待准备".into()],
+                decisions: Vec::new(),
+                action_items: Vec::new(),
+                risks: Vec::new(),
+                follow_ups: Vec::new(),
+            },
+            summary_runs: Vec::new(),
+            active_summary_run_id: None,
+            export_formats: Vec::new(),
+            last_exported_at: None,
+            process_log: None,
+            python_path: None,
+            runner_script_path: None,
+        };
+        let summary = AiSummaryResult {
+            title: "例会".into(),
+            overview,
+            topics: vec!["五一接待准备".into()],
+            decisions: Vec::new(),
+            action_items: Vec::new(),
+            risks: Vec::new(),
+            follow_ups: Vec::new(),
+        };
+
+        let data = build_export_doc_data(&job, &summary, &[]);
+        assert_eq!(data.meeting_time, FIXED_MEETING_TIME);
+        assert_eq!(data.meeting_location, FIXED_MEETING_LOCATION);
+        assert_eq!(data.host, FIXED_MEETING_HOST);
     }
 }

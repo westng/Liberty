@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm, message } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -83,6 +83,7 @@ async function syncWindowTitle(isEdit: boolean) {
 
 async function save() {
   const validation = validateDraft();
+  const isEditing = !!selectedId.value;
 
   if (validation) {
     errorMessage.value = validation;
@@ -101,6 +102,13 @@ async function save() {
   draft.value = { ...(aiStore.getModelById(draft.value.id) ?? draft.value) };
   errorMessage.value = "";
   await syncWindowTitle(true);
+  await message(
+    formatMessage(
+      isEditing ? messages.value.saveSuccessUpdated : messages.value.saveSuccessCreated,
+      { name: draft.value.name },
+    ),
+    { title: messages.value.title, kind: "info" },
+  );
 }
 
 async function removeModel() {
@@ -168,6 +176,7 @@ function resetDraft() {
         <div class="field">
           <label for="model-id">{{ messages.model }}</label>
           <input id="model-id" v-model="draft.model" :placeholder="messages.modelPlaceholder" />
+          <p class="field-copy">{{ messages.modelHelp }}</p>
         </div>
 
         <div class="field-grid two-col">

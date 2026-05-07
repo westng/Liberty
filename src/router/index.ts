@@ -46,6 +46,12 @@ const router = createRouter({
       meta: { title: "人员管理", titleKey: "members" },
     },
     {
+      path: "/pet",
+      name: "pet",
+      component: () => import("@/views/PetManagementView.vue"),
+      meta: { title: "宠物中心", titleKey: "pet" },
+    },
+    {
       path: "/ai-summary",
       name: "ai-summary",
       component: () => import("@/views/AiSummaryView.vue"),
@@ -80,6 +86,12 @@ const router = createRouter({
       name: "member-editor",
       component: () => import("@/views/MemberEditorView.vue"),
       meta: { title: "人员编辑", standalone: true },
+    },
+    {
+      path: "/pet-desktop",
+      name: "pet-desktop",
+      component: () => import("@/views/PetDesktopView.vue"),
+      meta: { title: "桌面宠物", standalone: true },
     },
   ],
 });

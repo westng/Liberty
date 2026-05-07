@@ -3,6 +3,7 @@ import { applyAppearance } from "@/services/appearance";
 import { createEmptyMeetingSummary, summaryResultToMeetingSummary } from "@/services/aiStorage";
 import { createLocalAiService } from "@/services/localAi";
 import { createLocalMeetingService } from "@/services/localMeeting";
+import { createLocalPetService } from "@/services/localPet";
 import { createLocalRuntimeService } from "@/services/localRuntime";
 import { createLocalSettingsService } from "@/services/localSettings";
 import { createMeetingApi } from "@/services/api";
@@ -46,6 +47,7 @@ const state = reactive({
 });
 
 const localAiService = createLocalAiService();
+const localPetService = createLocalPetService();
 const localRuntimeService = createLocalRuntimeService();
 const localSettingsService = createLocalSettingsService();
 let localPollingId: number | null = null;
@@ -274,9 +276,27 @@ function maybeStartRuntimeAutoInstall() {
   }
 
   runtimeAutoInstallAttempted = true;
-  void installManagedRuntime().catch(() => {
+  void beginManagedRuntimeInstall().catch(() => {
     runtimeAutoInstallAttempted = false;
   });
+}
+
+async function beginManagedRuntimeInstall() {
+  if (runtimeInstallPromise) {
+    return runtimeInstallPromise;
+  }
+
+  runtimeInstallPromise = (async () => {
+    state.runtimeStatus = await localRuntimeService.install();
+    await refreshRuntimeInstallLog();
+    syncLocalPolling();
+    syncRuntimePolling();
+    return state.runtimeStatus;
+  })().finally(() => {
+    runtimeInstallPromise = null;
+  });
+
+  return runtimeInstallPromise;
 }
 
 function sleep(ms: number) {
@@ -378,6 +398,11 @@ export function useMeetingStore() {
         files: [firstFile],
       });
 
+      void localPetService.applyWorkflowEvent({
+        eventType: "job_created",
+        metadata: created.title,
+      }).catch(() => undefined);
+
       syncLocalPolling();
       hydratedJobIds.add(created.id);
       return replaceJob(created);
@@ -385,6 +410,10 @@ export function useMeetingStore() {
 
     if (api.value) {
       const created = await api.value.createJob(input);
+      void localPetService.applyWorkflowEvent({
+        eventType: "job_created",
+        metadata: created.title,
+      }).catch(() => undefined);
       hydratedJobIds.add(created.id);
       return replaceJob(created);
     }
@@ -497,22 +526,7 @@ export function useMeetingStore() {
 
   async function installManagedRuntime() {
     await ensureSettingsLoaded();
-
-    if (runtimeInstallPromise) {
-      return runtimeInstallPromise;
-    }
-
-    runtimeInstallPromise = (async () => {
-      state.runtimeStatus = await localRuntimeService.install();
-      await refreshRuntimeInstallLog();
-      syncLocalPolling();
-      syncRuntimePolling();
-      return state.runtimeStatus;
-    })().finally(() => {
-      runtimeInstallPromise = null;
-    });
-
-    return runtimeInstallPromise;
+    return beginManagedRuntimeInstall();
   }
 
   async function ensureManagedRuntimeReadyForLocalWork() {
@@ -547,6 +561,12 @@ export function useMeetingStore() {
 
   async function saveSummaryRun(run: AiSummaryRun) {
     await localAiService.saveSummaryRun(run);
+    if (run.status === "completed") {
+      void localPetService.applyWorkflowEvent({
+        eventType: "ai_summary_completed",
+        metadata: run.jobId,
+      }).catch(() => undefined);
+    }
     await refreshJobRuns(run.jobId);
   }
 

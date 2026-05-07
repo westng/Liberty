@@ -453,6 +453,36 @@ select:focus-visible {
   color: var(--text-muted);
 }
 
+.toolbar-pet-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-pill);
+  background: var(--shell-tile-bg);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.toolbar-pet-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--stroke-soft));
+  background: color-mix(in srgb, var(--bg-input) 84%, var(--accent) 16%);
+  color: var(--text-main);
+}
+
+.toolbar-pet-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+.toolbar-pet-dot[data-active="true"] {
+  background: var(--success);
+}
+
 .toolbar-icon-btn {
   width: 36px;
   height: 36px;

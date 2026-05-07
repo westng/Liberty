@@ -27,6 +27,8 @@ Liberty is a desktop workspace for meeting media processing, designed around a c
 
 ![Liberty Screenshot](docs/images/QQ20260501-113612.png)
 
+![Liberty Pet Center](docs/images/QQ20260507-172410.png)
+
 ## Overview
 
 Liberty turns raw meeting audio or video files into structured, reviewable output:

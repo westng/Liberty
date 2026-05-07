@@ -19,6 +19,16 @@ export type ManagedRuntimeInstallStatus =
   | "ready"
   | "failed"
   | "repair_required";
+export type PetMood = "idle" | "cheerful" | "excited" | "proud" | "needy" | "sleepy" | "bored";
+export type PetStage = "baby" | "growing" | "mature";
+export type PetInteractionAction = "tap" | "pet" | "feed" | "encourage";
+export type PetWorkflowEventType =
+  | "job_created"
+  | "transcription_started"
+  | "transcription_completed"
+  | "ai_summary_completed"
+  | "export_completed"
+  | "daily_open";
 
 export interface TranscriptSegment {
   id: string;
@@ -90,6 +100,53 @@ export interface MeetingMember {
 export interface MeetingMemberImportResult {
   created: number;
   updated: number;
+}
+
+export interface PetProfile {
+  id: string;
+  name: string;
+  level: number;
+  experience: number;
+  stage: PetStage;
+  currentMood: PetMood;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PetSettings {
+  petId: string;
+  desktopEnabled: boolean;
+  alwaysOnTop: boolean;
+  muted: boolean;
+  focusModeEnabled: boolean;
+  proactiveLevel: number;
+  lastWindowX?: number;
+  lastWindowY?: number;
+  updatedAt: string;
+}
+
+export interface PetCosmeticUnlock {
+  id: string;
+  petId: string;
+  cosmeticType: string;
+  cosmeticKey: string;
+  unlockedAt: string;
+  equipped: boolean;
+}
+
+export interface PetEventLedgerEntry {
+  id: string;
+  petId: string;
+  eventType: string;
+  eventSource: string;
+  eventValue: number;
+  eventTime: string;
+  metadata?: string;
+}
+
+export interface PetWorkflowEventInput {
+  eventType: PetWorkflowEventType;
+  metadata?: string;
 }
 
 export interface AiSummaryRun {

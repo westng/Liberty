@@ -3,6 +3,7 @@ mod local_db;
 mod local_export;
 mod local_jobs;
 mod local_members;
+mod local_pet;
 mod local_runtime;
 mod local_settings;
 mod process_utils;
@@ -39,9 +40,17 @@ pub fn run() {
             local_members::import_meeting_members_excel,
             local_members::list_meeting_members,
             local_members::save_meeting_member,
+            local_pet::apply_pet_interaction,
+            local_pet::apply_pet_workflow_event,
+            local_pet::get_pet_profile,
+            local_pet::get_pet_settings,
+            local_pet::list_pet_cosmetic_unlocks,
+            local_pet::list_pet_event_ledger,
+            local_pet::save_pet_profile,
             local_runtime::get_runtime_install_log,
             local_runtime::get_runtime_status,
             local_runtime::install_runtime,
+            local_pet::save_pet_settings,
             local_settings::get_settings,
             local_settings::save_settings,
             system::get_process_metrics,

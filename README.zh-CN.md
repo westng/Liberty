@@ -27,6 +27,8 @@ Liberty 是一款面向桌面端的会议音视频处理工作台，围绕“本
 
 ![Liberty 项目截图](docs/images/QQ20260501-112920.png)
 
+![Liberty 宠物中心界面](docs/images/QQ20260507-172352.png)
+
 ## 项目概述
 
 Liberty 用于将原始会议音视频文件转换为结构化、可审阅、可导出的结果：
