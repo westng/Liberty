@@ -4,9 +4,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { usePetStore } from "@/composables/usePetStore";
 import {
-  getPetSpriteFrameCountForEnvironment,
+  getPetSpriteFrameCountForGroup,
   getPetSpriteScale,
-  getPetSpriteUrlForEnvironment,
+  getPetSpriteUrlForGroup,
+  resolvePetVisualAction,
 } from "@/services/petSprites";
 import { buildInteractionBubbles } from "@/services/petDialogues";
 import type { PetEventLedgerEntry, PetInteractionAction } from "@/types/meeting";
@@ -30,6 +31,7 @@ let petInteractStreak = 0;
 let lastBubbleShownAt = 0;
 let lastLocalInteractionAction: PetInteractionAction | null = null;
 let lastLocalInteractionAt = 0;
+const spokenTimeReminderKeys = new Set<string>();
 const activeEventId = ref("");
 const activeBubbleText = ref("");
 const activeBubbleKey = ref("");
@@ -39,11 +41,7 @@ const BUBBLE_VISIBLE_MS = 9000;
 const DRAG_THRESHOLD_PX = 8;
 const PROACTIVE_IDLE_GUARD_MS = 6000;
 const LOCAL_INTERACTION_DEDUP_MS = 1500;
-const RECENT_MOOD_HOLD_MS = 18_000;
-const NEEDY_AFTER_MS = 30_000;
-const SLEEPY_AFTER_MS = 90_000;
-const BORED_AFTER_MS = 8 * 60_000;
-const ANIMATION_FRAME_INTERVAL_MS = 1500;
+const ANIMATION_FRAME_INTERVAL_MS = 1000;
 
 const EVENT_BUBBLES = {
   daily_open: [
@@ -201,12 +199,39 @@ async function maybeSpeakProactively() {
     return;
   }
 
-  const bubbleText = getBubbleByKey("proactive", `proactive-${Date.now()}`);
+  const timeReminderKey = getDueTimeReminderKey(new Date());
+  const bubbleKey = timeReminderKey ?? "proactive";
+  const bubbleText = getBubbleByKey(bubbleKey, `${bubbleKey}-${Date.now()}`);
   if (bubbleText) {
-    showBubbleText(bubbleText, "proactive");
+    if (timeReminderKey) {
+      spokenTimeReminderKeys.add(getTimeReminderDailyKey(timeReminderKey, new Date()));
+    }
+    showBubbleText(bubbleText, bubbleKey);
   }
 
   scheduleProactiveSpeech();
+}
+
+function getDueTimeReminderKey(now: Date) {
+  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
+  const candidates = [
+    { key: "timeLunch", start: 11 * 60 + 50, end: 12 * 60 },
+    { key: "timeNap", start: 13 * 60, end: 13 * 60 + 30 },
+    { key: "timeOffwork", start: 17 * 60 + 20, end: 17 * 60 + 40 },
+  ];
+  const matched = candidates.find(({ key, start, end }) => {
+    if (minuteOfDay < start || minuteOfDay > end) {
+      return false;
+    }
+
+    return !spokenTimeReminderKeys.has(getTimeReminderDailyKey(key, now));
+  });
+
+  return matched?.key;
+}
+
+function getTimeReminderDailyKey(key: string, now: Date) {
+  return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${key}`;
 }
 
 function showBubbleText(text: string, key = text) {
@@ -260,44 +285,6 @@ function shouldSuppressInteractionEvent(event?: PetEventLedgerEntry | null) {
 
 const bubbleText = computed(() => activeBubbleText.value);
 const showBubble = computed(() => activeBubbleText.value.trim().length > 0);
-const latestEventAtMs = computed(() => {
-  const value = petStore.events.value[0]?.eventTime;
-  if (!value) {
-    return 0;
-  }
-
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-});
-const visualMood = computed(() => {
-  const persistedMood = petStore.profile.value?.currentMood ?? "idle";
-  const fallbackMood = persistedMood === "excited" ? "idle" : persistedMood;
-
-  if (environmentState.value) {
-    return persistedMood;
-  }
-
-  const latestEventAt = latestEventAtMs.value;
-  if (!latestEventAt) {
-    return "idle";
-  }
-
-  const idleMs = Math.max(0, visualStateNow.value - latestEventAt);
-  if (idleMs <= RECENT_MOOD_HOLD_MS) {
-    return fallbackMood;
-  }
-  if (idleMs >= SLEEPY_AFTER_MS) {
-    return "sleepy";
-  }
-  if (idleMs >= BORED_AFTER_MS) {
-    return "bored";
-  }
-  if (idleMs >= NEEDY_AFTER_MS) {
-    return "needy";
-  }
-
-  return "idle";
-});
 const environmentState = computed(() => {
   const jobs = meetingStore.jobs.value;
 
@@ -316,10 +303,17 @@ const environmentState = computed(() => {
 
   return null;
 });
+const visualAction = computed(() =>
+  resolvePetVisualAction({
+    environmentState: environmentState.value,
+    latestEvent: petStore.events.value[0],
+    mood: petStore.profile.value?.currentMood ?? "idle",
+    nowMs: visualStateNow.value,
+  }),
+);
 
 const petSpriteUrl = computed(() => {
-  const mood = visualMood.value;
-  return getPetSpriteUrlForEnvironment(environmentState.value, mood, spriteFrameIndex.value);
+  return getPetSpriteUrlForGroup(visualAction.value, spriteFrameIndex.value);
 });
 
 const petSpriteStyle = computed(() => {
@@ -361,8 +355,7 @@ onMounted(async () => {
   }, 1000);
 
   animationTimer = window.setInterval(() => {
-    const mood = visualMood.value;
-    const frameCount = getPetSpriteFrameCountForEnvironment(environmentState.value, mood);
+    const frameCount = getPetSpriteFrameCountForGroup(visualAction.value);
     spriteFrameIndex.value = (spriteFrameIndex.value + 1) % Math.max(frameCount, 1);
   }, ANIMATION_FRAME_INTERVAL_MS);
 
@@ -399,15 +392,11 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => visualMood.value,
+  () => visualAction.value,
   () => {
     spriteFrameIndex.value = 0;
   },
 );
-
-watch(environmentState, () => {
-  spriteFrameIndex.value = 0;
-});
 
 watch(
   () => petStore.events.value[0]?.id ?? "",

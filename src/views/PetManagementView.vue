@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { message } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useMeetingStore } from "@/composables/useMeetingStore";
 import { usePetStore } from "@/composables/usePetStore";
-import { getPetCoverUrl } from "@/services/petSprites";
+import {
+  getPetSpriteFrameCountForGroup,
+  getPetSpriteScale,
+  getPetSpriteUrlForGroup,
+  resolvePetVisualAction,
+} from "@/services/petSprites";
 import { applyPetDesktopState, isPetDesktopWindowOpen, togglePetDesktopWindow } from "@/services/window";
 import type { PetInteractionAction } from "@/types/meeting";
 
@@ -12,9 +17,13 @@ const meetingStore = useMeetingStore();
 const petStore = usePetStore();
 const currentWindow = getCurrentWindow();
 let refreshTimer: number | null = null;
+let coverAnimationTimer: number | null = null;
 const petNameDraft = ref("");
 const petNameSaving = ref(false);
 const desktopPetVisible = ref(false);
+const petCoverFrameIndex = ref(0);
+const petVisualStateNow = ref(Date.now());
+const ANIMATION_FRAME_INTERVAL_MS = 1000;
 
 const settingsForm = reactive({
   desktopEnabled: true,
@@ -129,7 +138,37 @@ function formatEventMetadata(source: string, metadata?: string | null) {
 }
 
 const progressRatio = computed(() => ((petStore.stageProgress.value ?? 0) / 20) * 100);
-const petCoverUrl = computed(() => getPetCoverUrl());
+const petCoverMood = computed(() => petStore.profile.value?.currentMood ?? "idle");
+const petCoverEnvironmentState = computed(() => {
+  const jobs = meetingStore.jobs.value;
+
+  if (jobs.some((job) => job.overallStatus === "transcribing")) {
+    return "transcribing";
+  }
+  if (jobs.some((job) => job.overallStatus === "speaker_processing")) {
+    return "speaker_processing";
+  }
+  if (jobs.some((job) => job.overallStatus === "summarizing")) {
+    return "summarizing";
+  }
+  if (jobs.some((job) => job.overallStatus === "queued")) {
+    return "queued";
+  }
+
+  return null;
+});
+const petCoverAction = computed(() =>
+  resolvePetVisualAction({
+    environmentState: petCoverEnvironmentState.value,
+    latestEvent: petStore.events.value[0],
+    mood: petCoverMood.value,
+    nowMs: petVisualStateNow.value,
+  }),
+);
+const petCoverUrl = computed(() => getPetSpriteUrlForGroup(petCoverAction.value, petCoverFrameIndex.value));
+const petCoverStyle = computed(() => ({
+  transform: `scale(${getPetSpriteScale(petStore.profile.value?.stage ?? "baby")})`,
+}));
 const unlockedCosmeticsLabel = computed(() =>
   petStore.cosmetics.value.map((item) => {
     if (item.cosmeticKey === "sprout-ribbon") {
@@ -150,8 +189,13 @@ onMounted(async () => {
   await syncDesktopPetVisibility();
   window.addEventListener("focus", handleWindowFocus);
   refreshTimer = window.setInterval(() => {
+    petVisualStateNow.value = Date.now();
     void petStore.refresh();
   }, 4000);
+  coverAnimationTimer = window.setInterval(() => {
+    const frameCount = getPetSpriteFrameCountForGroup(petCoverAction.value);
+    petCoverFrameIndex.value = (petCoverFrameIndex.value + 1) % Math.max(frameCount, 1);
+  }, ANIMATION_FRAME_INTERVAL_MS);
 });
 
 onBeforeUnmount(() => {
@@ -160,6 +204,14 @@ onBeforeUnmount(() => {
     window.clearInterval(refreshTimer);
     refreshTimer = null;
   }
+  if (coverAnimationTimer !== null) {
+    window.clearInterval(coverAnimationTimer);
+    coverAnimationTimer = null;
+  }
+});
+
+watch(petCoverAction, () => {
+  petCoverFrameIndex.value = 0;
 });
 
 async function handleWindowFocus() {
@@ -293,7 +345,7 @@ const locale = computed(() => meetingStore.settings.value.locale);
       <article class="surface pet-companion-card">
         <div class="pet-companion-visual">
           <div class="pet-avatar-shell pet-avatar-shell-large" :data-stage="petStore.profile.value?.stage ?? 'baby'">
-            <img class="pet-cover-image" :src="petCoverUrl" alt="" draggable="false" />
+            <img class="pet-cover-image" :src="petCoverUrl" :style="petCoverStyle" alt="" draggable="false" />
           </div>
           <div class="pet-presence-badge">
             <strong>{{ stageLabel }}</strong>
@@ -539,7 +591,7 @@ const locale = computed(() => meetingStore.settings.value.locale);
 }
 
 .pet-companion-card {
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
   gap: 22px;
   align-items: center;
 }
@@ -596,9 +648,9 @@ const locale = computed(() => meetingStore.settings.value.locale);
 }
 
 .pet-avatar-shell-large {
-  width: 292px;
-  height: 292px;
-  border-radius: 42px;
+  width: 190px;
+  height: 190px;
+  border-radius: 32px;
 }
 
 .pet-cover-image {

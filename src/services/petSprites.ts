@@ -1,25 +1,37 @@
-import fallbackPetImageUrl from "@/assets/pet-angel.png";
-import type { JobStage, PetMood, PetStage } from "@/types/meeting";
+import type { JobStage, PetEventLedgerEntry, PetMood, PetStage } from "@/types/meeting";
 
-type PetImageGroup = "stand" | "work" | "sleepy" | "snow" | "coffee" | "read-books" | "Snow-King";
+export type PetImageGroup =
+  | "crush"
+  | "defecate"
+  | "drive"
+  | "eat"
+  | "pants"
+  | "read"
+  | "rope"
+  | "run"
+  | "slack"
+  | "sleep"
+  | "snow"
+  | "toy"
+  | "work";
 type PetFrameEntry = {
   frame: number;
   url: string;
 };
 
-const petImageModules = import.meta.glob("../assets/images/pet/*.png", {
+const petImageModules = import.meta.glob("../assets/images/*/*.png", {
   eager: true,
   import: "default",
 }) as Record<string, string>;
 
 const moodImageGroupMap: Record<PetMood, PetImageGroup> = {
-  idle: "stand",
+  idle: "slack",
   cheerful: "snow",
-  excited: "work",
-  proud: "Snow-King",
-  needy: "coffee",
-  sleepy: "sleepy",
-  bored: "read-books",
+  excited: "run",
+  proud: "eat",
+  needy: "toy",
+  sleepy: "sleep",
+  bored: "read",
 };
 
 const stageScaleMap: Record<PetStage, number> = {
@@ -34,21 +46,44 @@ function parsePetFrameFilename(path: string): { group: PetImageGroup; frame: num
     return null;
   }
 
-  const matched = filename.match(/^(.+)-(\d+)\.png$/);
+  const matched = filename.match(/^(\d+)\.png$/);
   if (!matched) {
     return null;
   }
 
-  const [, groupName, frameValue] = matched;
+  const groupName = path.split("/").at(-2);
+  if (!isPetImageGroup(groupName)) {
+    return null;
+  }
+
+  const [, frameValue] = matched;
   const frame = Number.parseInt(frameValue, 10);
   if (!Number.isFinite(frame) || frame <= 0) {
     return null;
   }
 
   return {
-    group: groupName as PetImageGroup,
+    group: groupName,
     frame,
   };
+}
+
+function isPetImageGroup(value: string | undefined): value is PetImageGroup {
+  return (
+    value === "crush" ||
+    value === "defecate" ||
+    value === "drive" ||
+    value === "eat" ||
+    value === "pants" ||
+    value === "read" ||
+    value === "rope" ||
+    value === "run" ||
+    value === "slack" ||
+    value === "sleep" ||
+    value === "snow" ||
+    value === "toy" ||
+    value === "work"
+  );
 }
 
 function getPetImageGroupByMood(mood: PetMood = "idle") {
@@ -58,17 +93,17 @@ function getPetImageGroupByMood(mood: PetMood = "idle") {
 export function getPetImageGroupForEnvironment(environmentState?: JobStage | null, mood: PetMood = "idle") {
   switch (environmentState) {
     case "queued":
-      return "coffee";
+      return "slack";
     case "transcribing":
     case "speaker_processing":
     case "summarizing":
       return "work";
     case "completed":
-      return "Snow-King";
+      return "snow";
     case "failed":
-      return "sleepy";
+      return "pants";
     case "uploaded":
-      return "read-books";
+      return "read";
     case "idle":
     default:
       return getPetImageGroupByMood(mood);
@@ -97,22 +132,38 @@ function buildPetImageGroups() {
 }
 
 const petImageGroups = buildPetImageGroups();
-const coverImageUrl = new URL("../assets/images/cover.png", import.meta.url).href;
+
+function getFirstAvailablePetImageUrl(...groups: PetImageGroup[]) {
+  for (const group of groups) {
+    const firstFrame = petImageGroups.get(group)?.[0]?.url;
+    if (firstFrame) {
+      return firstFrame;
+    }
+  }
+
+  return Object.values(petImageModules)[0] ?? "";
+}
+
+const coverImageUrl = getFirstAvailablePetImageUrl("slack", "snow", "work");
 
 export function getPetCoverUrl() {
   return coverImageUrl;
 }
 
-export function getPetSpriteUrl(mood: PetMood = "idle", frameIndex = 0) {
-  const group = getPetImageGroupByMood(mood);
+export function getPetSpriteUrlForGroup(group: PetImageGroup, frameIndex = 0) {
   const frames = petImageGroups.get(group);
 
   if (!frames?.length) {
-    return fallbackPetImageUrl;
+    return coverImageUrl;
   }
 
   const safeIndex = Math.abs(frameIndex) % frames.length;
-  return frames[safeIndex]?.url ?? frames[0]?.url ?? fallbackPetImageUrl;
+  return frames[safeIndex]?.url ?? frames[0]?.url ?? coverImageUrl;
+}
+
+export function getPetSpriteUrl(mood: PetMood = "idle", frameIndex = 0) {
+  const group = getPetImageGroupByMood(mood);
+  return getPetSpriteUrlForGroup(group, frameIndex);
 }
 
 export function getPetSpriteUrlForEnvironment(
@@ -121,14 +172,7 @@ export function getPetSpriteUrlForEnvironment(
   frameIndex = 0,
 ) {
   const group = getPetImageGroupForEnvironment(environmentState, mood);
-  const frames = petImageGroups.get(group);
-
-  if (!frames?.length) {
-    return fallbackPetImageUrl;
-  }
-
-  const safeIndex = Math.abs(frameIndex) % frames.length;
-  return frames[safeIndex]?.url ?? frames[0]?.url ?? fallbackPetImageUrl;
+  return getPetSpriteUrlForGroup(group, frameIndex);
 }
 
 export function getPetSpriteFrameCount(mood: PetMood = "idle") {
@@ -136,11 +180,116 @@ export function getPetSpriteFrameCount(mood: PetMood = "idle") {
   return petImageGroups.get(group)?.length ?? 1;
 }
 
+export function getPetSpriteFrameCountForGroup(group: PetImageGroup) {
+  return petImageGroups.get(group)?.length ?? 1;
+}
+
 export function getPetSpriteFrameCountForEnvironment(environmentState: JobStage | null | undefined, mood: PetMood = "idle") {
   const group = getPetImageGroupForEnvironment(environmentState, mood);
-  return petImageGroups.get(group)?.length ?? 1;
+  return getPetSpriteFrameCountForGroup(group);
 }
 
 export function getPetSpriteScale(stage: PetStage = "baby") {
   return stageScaleMap[stage] ?? 1;
+}
+
+type PetVisualActionInput = {
+  environmentState?: JobStage | null;
+  latestEvent?: PetEventLedgerEntry | null;
+  mood?: PetMood;
+  nowMs?: number;
+};
+
+const RECENT_EVENT_ACTION_HOLD_MS = 45_000;
+const NEEDY_AFTER_MS = 30_000;
+const DAILY_ACTION_BUCKET_MS = 2 * 60_000;
+const dailyIdleActions: PetImageGroup[] = [
+  "slack",
+  "toy",
+  "rope",
+  "drive",
+  "crush",
+  "defecate",
+  "eat",
+  "pants",
+  "read",
+  "run",
+  "sleep",
+  "snow",
+  "work",
+];
+
+export function resolvePetVisualAction({
+  environmentState,
+  latestEvent,
+  mood = "idle",
+  nowMs = Date.now(),
+}: PetVisualActionInput): PetImageGroup {
+  if (environmentState) {
+    return getPetImageGroupForEnvironment(environmentState, mood);
+  }
+
+  const latestEventAt = parsePetEventTime(latestEvent);
+  const idleMs = latestEventAt ? Math.max(0, nowMs - latestEventAt) : 0;
+
+  if (latestEvent && idleMs <= RECENT_EVENT_ACTION_HOLD_MS) {
+    return getPetImageGroupForRecentEvent(latestEvent, mood);
+  }
+
+  if (!latestEventAt) {
+    return getDailyIdleAction(0, nowMs);
+  }
+
+  if (idleMs >= NEEDY_AFTER_MS) {
+    return getDailyIdleAction(latestEventAt, idleMs);
+  }
+
+  return getPetImageGroupByMood(mood);
+}
+
+function parsePetEventTime(event?: PetEventLedgerEntry | null) {
+  const value = event?.eventTime;
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getPetImageGroupForRecentEvent(event: PetEventLedgerEntry, mood: PetMood): PetImageGroup {
+  if (event.eventType === "interaction") {
+    switch (event.eventSource) {
+      case "feed":
+        return "eat";
+      case "encourage":
+        return "rope";
+      case "pet":
+        return "crush";
+      case "tap":
+        return "toy";
+      default:
+        return getPetImageGroupByMood(mood);
+    }
+  }
+
+  switch (event.eventType) {
+    case "job_created":
+      return "drive";
+    case "transcription_started":
+      return "work";
+    case "transcription_completed":
+    case "ai_summary_completed":
+    case "export_completed":
+      return "snow";
+    case "daily_open":
+      return "slack";
+    default:
+      return getPetImageGroupByMood(mood);
+  }
+}
+
+function getDailyIdleAction(latestEventAt: number, idleMs: number): PetImageGroup {
+  const bucket = Math.floor((latestEventAt + idleMs) / DAILY_ACTION_BUCKET_MS);
+  return dailyIdleActions[bucket % dailyIdleActions.length] ?? "slack";
 }

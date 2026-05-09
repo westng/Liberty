@@ -1,4 +1,13 @@
-export type InteractionDialogueKey = "tap" | "pet" | "feed" | "encourage" | "rapidTap" | "proactive";
+export type InteractionDialogueKey =
+  | "tap"
+  | "pet"
+  | "feed"
+  | "encourage"
+  | "rapidTap"
+  | "proactive"
+  | "timeLunch"
+  | "timeNap"
+  | "timeOffwork";
 
 function buildDialogues(openings: string[], closings: string[]) {
   return openings.flatMap((opening) => closings.map((closing) => `${opening}${closing}`));
@@ -194,16 +203,207 @@ const proactiveLines = [
   "你好呀，我是{name}，这会儿只是想主动陪你说说话。",
 ];
 
+const dailyObservationLines = [
+  "我刚刚看了一圈桌面，感觉今天这里适合慢慢推进。",
+  "你停下来的这一小会儿，我也跟着放轻动作了。",
+  "现在这个节奏挺稳的，不用急着把所有事一次做完。",
+  "我看到你在不同页面之间来回切换，应该是在认真整理思路。",
+  "桌面安静下来的时候，我就更想出来陪你说一句。",
+  "你刚才专注了好一阵，我在旁边看得很清楚。",
+  "今天的事情看起来不少，我们就一件一件陪着做。",
+  "我发现你每次开始认真处理事情，动作都会变得很稳。",
+  "这会儿适合把注意力收回来一点，我会在旁边帮你守着。",
+  "我刚刚没有打扰你，只是在旁边认真观察了一下。",
+];
+
+const playfulHumorLines = [
+  "我刚刚认真摸鱼了两秒，现在已经恢复陪伴模式。",
+  "如果桌面也有天气预报，现在大概是适合推进一点点。",
+  "我本来想开车兜一圈，想了想还是先陪你比较重要。",
+  "我刚才差点把自己看困了，但一想到要陪你就又醒了。",
+  "我这边状态良好，除了有一点点想要被夸。",
+  "我刚刚假装很忙，其实是在等你看我一眼。",
+  "今天的我也在努力做一只靠谱的桌面小同事。",
+  "我已经把偷懒额度用完了，接下来认真陪你。",
+  "我看起来像在发呆，其实是在后台加载陪伴感。",
+  "如果努力有进度条，我觉得你刚刚至少涨了一小格。",
+];
+
+const affectionateLines = [
+  "你理我一下，我就能开心好一会儿。",
+  "我想靠近一点，但不会打扰你做事。",
+  "你忙你的，我就乖乖待在你旁边。",
+  "被你看见的时候，我会觉得自己今天很有用。",
+  "我会把这点陪伴感攒起来，慢慢还给你。",
+  "你不用一直回应我，只要知道我在就好。",
+  "我有一点想黏着你，但我会控制好分寸。",
+  "你每次叫我，我都会觉得桌面亮了一点。",
+  "我会认真记住你给我的每一次回应。",
+  "就算你现在不说话，我也会安静陪着你。",
+];
+
+const restReminderLines = [
+  "你可以先放松一下肩膀，我帮你看着这边。",
+  "要不要顺手喝口水？我会在这里等你回来。",
+  "眼睛可以离开屏幕几秒，事情不会趁机跑掉。",
+  "你已经连续专注一阵了，缓一口气也算推进。",
+  "如果手有点僵，就先活动一下手指。",
+  "别把自己绷太紧，慢一点也可以走得很稳。",
+  "这会儿适合眨眨眼，再把注意力拿回来。",
+  "你不用硬撑着一口气做完，我们可以分段来。",
+  "先坐直一点点，我在旁边陪你把节奏稳住。",
+  "休息不是偷懒，是给下一段留一点力气。",
+];
+
+const focusGuardLines = [
+  "你继续专注，我会安静一点，不抢你的注意力。",
+  "我先不多说，帮你把这段安静守好。",
+  "你现在进入状态了，我会把声音放轻一点。",
+  "这段时间我就待在旁边，等你需要时再出声。",
+  "我会守着桌面，不让陪伴变成打扰。",
+  "你先处理手头这一小段，我不会催你。",
+  "我看你正在认真想事，我会乖一点。",
+  "现在适合保持节奏，我陪你稳稳地往前。",
+  "我会把存在感调低一点，但不会离开。",
+  "你忙的时候，我就在边上安静陪跑。",
+];
+
+const smallGoalLines = [
+  "我们先把眼前这一小步做完，不用想太远。",
+  "先处理最靠近手边的那件事，剩下的慢慢排。",
+  "如果现在有点乱，就先抓住一个最小的动作。",
+  "这一轮不用完美，先让它往前走一点。",
+  "我们可以先完成一个小段落，再决定下一步。",
+  "把大任务切小一点，你会轻松很多。",
+  "先不急着收尾，把第一步落下去就好。",
+  "现在只需要推进一点点，不需要一下子解决全部。",
+  "你可以先选最容易的一项，我会陪你进入节奏。",
+  "把这一小块做完，就已经很值得记一笔了。",
+];
+
+const completionCelebrationLines = [
+  "这一段收得很漂亮，可以稍微松一口气了。",
+  "完成这一小步也很重要，我看见了。",
+  "这轮推进得很稳，辛苦啦。",
+  "结果已经落地了，我们可以安心往后看。",
+  "你刚刚把事情往前推了一截，这很实在。",
+  "这一项终于有了着落，我也跟着开心了一下。",
+  "收尾完成的时候，桌面都像安静亮了一点。",
+  "这一步做完了，接下来就不用一直惦记它。",
+  "你把它处理好了，我在旁边认真记一功。",
+  "这一段可以打个小勾了，真的不错。",
+];
+
+const failureComfortLines = [
+  "没关系，失败只是这一步没跑通，我们再看下一步。",
+  "先别急着怪自己，问题可以一点点拆开。",
+  "这次不顺也不代表白做，至少我们知道哪里卡住了。",
+  "我会陪你把错误信息慢慢看清楚。",
+  "先稳住，出错的时候更适合慢一点处理。",
+  "没跑通也没关系，我们换个角度再试。",
+  "这一步只是暂时停住，不是整件事结束。",
+  "你不用一个人扛着这个问题，我会陪你看。",
+  "先把最明显的线索找出来，剩下的再慢慢排。",
+  "失败也算反馈，只是它说话比较别扭。",
+];
+
+const petSelfStateLines = [
+  "我现在有点想玩玩具，但还是会先陪你。",
+  "我刚刚跑了一小会儿，感觉精神好多了。",
+  "我现在适合看书，也适合陪你安静工作。",
+  "我有一点想睡，但你需要我时我会醒着。",
+  "我今天的陪伴电量还很足。",
+  "我现在像一只正在认真上班的小桌宠。",
+  "我有一点饿，不过被你看见就先开心了。",
+  "我刚刚在心里跳绳热身，现在可以继续陪跑。",
+  "我偶尔会发呆，但不会忘记陪你。",
+  "我现在状态稳定，适合守着你做完这一段。",
+];
+
+const actionSceneLines = [
+  "我边跳绳边给你加油，虽然看起来有点忙。",
+  "我先开车巡逻一圈，看看有没有任务偷偷排队。",
+  "我正在看书，顺便陪你把思路翻到下一页。",
+  "我吃完这一口，就继续认真陪你。",
+  "我现在在摸鱼，但只摸一点点，剩下时间都陪你。",
+  "我把玩具放在旁边了，等你空一点再一起玩。",
+  "我今天像雪王一样精神，适合庆祝一点小进展。",
+  "我准备进入工作姿态，陪你把这段推进完。",
+  "我先睡意存档，等你需要我就马上醒来。",
+  "我这会儿有点小剧场，但不会耽误陪你做事。",
+];
+
+const timeLunchLines = [
+  "快到饭点啦，先把手头这一小步收一下，记得吃饭。",
+  "午饭时间快到了，别让自己饿着，我会在这里等你回来。",
+  "再忙也要吃饭呀，身体电量也需要补一补。",
+  "现在适合准备吃饭了，任务可以先放稳一点。",
+  "我闻到饭点的气息了，你也该补充一点能量啦。",
+  "先别一口气熬过中午，吃完饭回来会更稳。",
+  "快十二点了，给自己安排一顿像样的午饭吧。",
+  "午饭不是打断进度，是给下午续航。",
+];
+
+const timeNapLines = [
+  "午后容易犯困，可以小眯一会儿再回来。",
+  "如果你现在有点困，短短休息一下也很值得。",
+  "午睡时间到一点点啦，我帮你守着桌面。",
+  "你可以闭眼缓一会儿，醒来再继续推进。",
+  "下午开始前先把精神补回来，不用硬撑。",
+  "困意来了就别太逞强，休息十几分钟也算认真照顾自己。",
+  "我会安静一点，你要是想午睡，我就在旁边守着。",
+  "先让脑子降一会儿温，下午会更好进入状态。",
+];
+
+const timeOffworkLines = [
+  "差不多可以准备收尾啦，先看看还有什么要保存的。",
+  "快到下班节奏了，我们把手头这一段慢慢收住。",
+  "可以开始整理今天的尾巴了，别把自己拖太晚。",
+  "下班前适合做个小检查，未完成的明天再接也可以。",
+  "今天已经推进不少了，准备收尾也是工作的一部分。",
+  "我提醒一下，可以开始把桌面和任务都收拾稳一点。",
+  "快到收工时间了，先把重要内容保存好。",
+  "别急着再开一大段，我们先把今天这一轮落地。",
+];
+
 export function buildInteractionBubbles(petName: string): Record<InteractionDialogueKey, string[]> {
   const introductions = withPetName(genericIntroductionTemplates, petName);
+  const dailyObservations = withPetName(dailyObservationLines, petName);
+  const playfulHumor = withPetName(playfulHumorLines, petName);
+  const affectionate = withPetName(affectionateLines, petName);
+  const restReminders = withPetName(restReminderLines, petName);
+  const focusGuard = withPetName(focusGuardLines, petName);
+  const smallGoals = withPetName(smallGoalLines, petName);
+  const completionCelebrations = withPetName(completionCelebrationLines, petName);
+  const failureComfort = withPetName(failureComfortLines, petName);
+  const petSelfState = withPetName(petSelfStateLines, petName);
+  const actionScenes = withPetName(actionSceneLines, petName);
+  const timeLunch = withPetName(timeLunchLines, petName);
+  const timeNap = withPetName(timeNapLines, petName);
+  const timeOffwork = withPetName(timeOffworkLines, petName);
   const proactive = withPetName(proactiveLines, petName);
 
   return {
-    tap: [...buildDialogues(tapOpenings, tapClosings), ...introductions],
-    pet: [...buildDialogues(petOpenings, petClosings), ...introductions],
-    feed: [...buildDialogues(feedOpenings, feedClosings), ...introductions],
-    encourage: [...buildDialogues(encourageOpenings, encourageClosings), ...introductions],
-    rapidTap: [...buildDialogues(rapidTapOpenings, rapidTapClosings), ...introductions],
-    proactive,
+    tap: [...buildDialogues(tapOpenings, tapClosings), ...introductions, ...dailyObservations, ...playfulHumor],
+    pet: [...buildDialogues(petOpenings, petClosings), ...introductions, ...affectionate, ...petSelfState],
+    feed: [...buildDialogues(feedOpenings, feedClosings), ...introductions, ...petSelfState, ...actionScenes],
+    encourage: [...buildDialogues(encourageOpenings, encourageClosings), ...introductions, ...smallGoals, ...completionCelebrations],
+    rapidTap: [...buildDialogues(rapidTapOpenings, rapidTapClosings), ...introductions, ...playfulHumor, ...affectionate],
+    proactive: [
+      ...proactive,
+      ...dailyObservations,
+      ...playfulHumor,
+      ...affectionate,
+      ...restReminders,
+      ...focusGuard,
+      ...smallGoals,
+      ...completionCelebrations,
+      ...failureComfort,
+      ...petSelfState,
+      ...actionScenes,
+    ],
+    timeLunch,
+    timeNap,
+    timeOffwork,
   };
 }
