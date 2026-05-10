@@ -1571,10 +1571,10 @@ mod windows_pet_renderer {
             let size = windows_sys::Win32::Foundation::SIZE { cx: width, cy: height };
             let source_position = POINT { x: 0, y: 0 };
             let blend = BLENDFUNCTION {
-                BlendOp: AC_SRC_OVER,
+                BlendOp: AC_SRC_OVER as u8,
                 BlendFlags: 0,
                 SourceConstantAlpha: 255,
-                AlphaFormat: AC_SRC_ALPHA,
+                AlphaFormat: AC_SRC_ALPHA as u8,
             };
             let memory_dc = CreateCompatibleDC(std::ptr::null_mut());
             if memory_dc.is_null() {
