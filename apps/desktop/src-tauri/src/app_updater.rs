@@ -292,6 +292,15 @@ async fn install_windows_update(app: AppHandle) -> Result<AppUpdateStatus, Strin
 
     let progress_app = app.clone();
     let install_app = app.clone();
+    let latest_version_for_progress = latest_version.clone();
+    let latest_version_for_install = latest_version.clone();
+    let latest_version_for_error = latest_version.clone();
+    let release_notes_for_progress = release_notes.clone();
+    let release_notes_for_install = release_notes.clone();
+    let release_notes_for_error = release_notes.clone();
+    let pub_date_for_progress = pub_date.clone();
+    let pub_date_for_install = pub_date.clone();
+    let pub_date_for_error = pub_date.clone();
     update
         .download_and_install(
             move |downloaded, total| {
@@ -311,10 +320,10 @@ async fn install_windows_update(app: AppHandle) -> Result<AppUpdateStatus, Strin
                     platform: current_platform().into(),
                     channel: current_channel().into(),
                     current_version: progress_app.package_info().version.to_string(),
-                    latest_version: Some(latest_version.clone()),
+                    latest_version: Some(latest_version_for_progress.clone()),
                     last_checked_at: Some(Utc::now().to_rfc3339()),
-                    release_notes: release_notes.clone(),
-                    pub_date: pub_date.clone(),
+                    release_notes: release_notes_for_progress.clone(),
+                    pub_date: pub_date_for_progress.clone(),
                     message: Some("正在下载更新包。".into()),
                     download_percent: Some(percent),
                     feed_url: current_feed_url(),
@@ -328,10 +337,10 @@ async fn install_windows_update(app: AppHandle) -> Result<AppUpdateStatus, Strin
                     platform: current_platform().into(),
                     channel: current_channel().into(),
                     current_version: install_app.package_info().version.to_string(),
-                    latest_version: Some(latest_version.clone()),
+                    latest_version: Some(latest_version_for_install.clone()),
                     last_checked_at: Some(Utc::now().to_rfc3339()),
-                    release_notes: release_notes.clone(),
-                    pub_date: pub_date.clone(),
+                    release_notes: release_notes_for_install.clone(),
+                    pub_date: pub_date_for_install.clone(),
                     message: Some("更新包已下载，正在安装。".into()),
                     download_percent: Some(100),
                     feed_url: current_feed_url(),
@@ -347,10 +356,10 @@ async fn install_windows_update(app: AppHandle) -> Result<AppUpdateStatus, Strin
                 platform: current_platform().into(),
                 channel: current_channel().into(),
                 current_version: app.package_info().version.to_string(),
-                latest_version: Some(latest_version.clone()),
+                latest_version: Some(latest_version_for_error.clone()),
                 last_checked_at: Some(Utc::now().to_rfc3339()),
-                release_notes: release_notes.clone(),
-                pub_date: pub_date.clone(),
+                release_notes: release_notes_for_error.clone(),
+                pub_date: pub_date_for_error.clone(),
                 message: Some(err.to_string()),
                 download_percent: None,
                 feed_url: current_feed_url(),

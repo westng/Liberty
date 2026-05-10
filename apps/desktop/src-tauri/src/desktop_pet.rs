@@ -1322,7 +1322,6 @@ mod macos_pet_renderer {
 #[cfg(windows)]
 mod windows_pet_renderer {
     use super::*;
-    use image::GenericImageView;
     use std::sync::atomic::AtomicU64;
 
     pub fn prepare_window(window: &Window, interaction_signal: &Arc<AtomicU64>) -> LocalResult<()> {
@@ -1385,7 +1384,7 @@ mod windows_pet_renderer {
         let hwnd = window.hwnd().map_err(|err| err.to_string())?;
         unsafe {
             use windows_sys::Win32::UI::{
-                Controls::SetWindowSubclass,
+                Shell::SetWindowSubclass,
                 WindowsAndMessaging::{
                     GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
                     WS_EX_TOOLWINDOW,
@@ -1417,7 +1416,7 @@ mod windows_pet_renderer {
         ref_data: usize,
     ) -> isize {
         use windows_sys::Win32::UI::{
-            Controls::DefSubclassProc,
+            Shell::DefSubclassProc,
             WindowsAndMessaging::{HTCAPTION, WM_LBUTTONUP, WM_NCHITTEST, WM_NCLBUTTONUP},
         };
 
@@ -1557,11 +1556,10 @@ mod windows_pet_renderer {
                 Foundation::POINT,
                 Graphics::Gdi::{
                     CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject,
-                    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+                    AC_SRC_ALPHA, AC_SRC_OVER, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION,
+                    DIB_RGB_COLORS,
                 },
-                UI::WindowsAndMessaging::{
-                    UpdateLayeredWindow, BLENDFUNCTION, AC_SRC_ALPHA, AC_SRC_OVER, ULW_ALPHA,
-                },
+                UI::WindowsAndMessaging::{UpdateLayeredWindow, ULW_ALPHA},
             };
 
             let hwnd = window.hwnd().map_err(|err| err.to_string())?.0 as *mut std::ffi::c_void;
@@ -1578,8 +1576,8 @@ mod windows_pet_renderer {
                 SourceConstantAlpha: 255,
                 AlphaFormat: AC_SRC_ALPHA,
             };
-            let memory_dc = CreateCompatibleDC(0);
-            if memory_dc == 0 {
+            let memory_dc = CreateCompatibleDC(std::ptr::null_mut());
+            if memory_dc.is_null() {
                 return Err("创建桌宠绘制 DC 失败。".into());
             }
 
@@ -1605,10 +1603,10 @@ mod windows_pet_renderer {
                 &bitmap_info,
                 DIB_RGB_COLORS,
                 &mut bits,
-                0,
+                std::ptr::null_mut(),
                 0,
             );
-            if bitmap == 0 {
+            if bitmap.is_null() {
                 DeleteDC(memory_dc);
                 return Err("创建桌宠位图失败。".into());
             }
@@ -1620,7 +1618,7 @@ mod windows_pet_renderer {
             }
             let ok = UpdateLayeredWindow(
                 hwnd,
-                0,
+                std::ptr::null_mut(),
                 &screen_position,
                 &size,
                 memory_dc,
@@ -1650,8 +1648,10 @@ mod windows_pet_renderer {
     ) {
         use windows_sys::Win32::{
             Foundation::RECT,
-            Graphics::Gdi::{SetBkMode, SetTextColor, TRANSPARENT},
-            UI::WindowsAndMessaging::{DrawTextW, DT_CALCRECT, DT_CENTER, DT_EDITCONTROL, DT_WORDBREAK},
+            Graphics::Gdi::{
+                DrawTextW, SetBkMode, SetTextColor, DT_CALCRECT, DT_CENTER, DT_EDITCONTROL, DT_WORDBREAK,
+                TRANSPARENT,
+            },
         };
 
         let left = (36.0 * scale).round() as i32;
@@ -1669,7 +1669,7 @@ mod windows_pet_renderer {
         };
         let mut wide = text.encode_utf16().collect::<Vec<_>>();
         wide.push(0);
-        SetBkMode(memory_dc, TRANSPARENT);
+        SetBkMode(memory_dc, TRANSPARENT as i32);
         SetTextColor(memory_dc, if bubble_theme.is_dark() { 0x00f2f0ec } else { 0x002a2622 });
         let mut measure_rect = rect;
         DrawTextW(
