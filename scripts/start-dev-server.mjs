@@ -1,7 +1,12 @@
 import net from "node:net";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
 
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const desktopRoot = path.join(repoRoot, "apps", "desktop");
 const host = process.env.TAURI_DEV_HOST || "127.0.0.1";
 const port = 5173;
 
@@ -10,11 +15,12 @@ if (await isPortOpen(host, port)) {
   process.exit(0);
 }
 
-const child = spawn(npmCommand(), ["run", "dev"], {
+const child = spawn(resolveViteBin(), ["--host", host], {
   stdio: "inherit",
-  shell: false,
+  shell: process.platform === "win32",
   windowsHide: true,
   env: process.env,
+  cwd: desktopRoot,
 });
 
 child.on("exit", (code) => {
@@ -26,8 +32,20 @@ child.on("error", (error) => {
   process.exit(1);
 });
 
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
+function resolveViteBin() {
+  const binName = process.platform === "win32" ? "vite.cmd" : "vite";
+  const candidates = [
+    path.join(desktopRoot, "node_modules", ".bin", binName),
+    path.join(repoRoot, "node_modules", ".bin", binName),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return binName;
 }
 
 function isPortOpen(host, port) {

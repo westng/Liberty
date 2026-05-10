@@ -1,0 +1,40 @@
+[package]
+name = "liberty"
+version = "1.1.0"
+description = "Liberty desktop client"
+authors = ["west"]
+edition = "2021"
+
+[lib]
+name = "liberty_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+calamine = "0.24"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+docx-rs = "0.4"
+flate2 = "1.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rust_xlsxwriter = "0.79"
+rusqlite = { version = "0.31", features = ["bundled"] }
+semver = "1.0"
+sevenz-rust2 = "0.20"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sysinfo = "0.30"
+tar = "0.4"
+tauri = { version = "2.0.0", features = ["macos-private-api"] }
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-fs = "2.0.0"
+xmltree = "0.11"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-sparkle-updater = "0.2.4"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri-plugin-updater = "2.10.1"

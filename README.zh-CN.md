@@ -13,11 +13,11 @@
 </p>
 
 <p align="center">
-  <a href="src-tauri/tauri.conf.json"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/Vue-3-42B883?logo=vue.js&logoColor=white" alt="Vue 3"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5"></a>
-  <a href="src-tauri/Cargo.toml"><img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust stable"></a>
-  <a href="scripts/runtime_requirements.txt"><img src="https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white" alt="Python 3.9"></a>
+  <a href="apps/desktop/src-tauri/tauri.conf.json"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2"></a>
+  <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/Vue-3-42B883?logo=vue.js&logoColor=white" alt="Vue 3"></a>
+  <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5"></a>
+  <a href="apps/desktop/src-tauri/Cargo.toml"><img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust stable"></a>
+  <a href="python/funasr-runner/requirements.txt"><img src="https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white" alt="Python 3.9"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
 </p>
 
@@ -116,11 +116,14 @@ AI 总结与本地转写相互独立，由用户在需要时主动触发。
 | 本地存储 | SQLite |
 | AI 接口 | OpenAI 兼容接口 |
 
-### 主要职责划分
+### 仓库边界
 
-- `src/`：前端页面、状态管理、样式、多语言与前端服务封装
-- `src-tauri/src/`：本地数据库、任务执行、运行时安装、系统调用等桌面能力
-- `scripts/`：FunASR Runner、运行时预热、依赖校验与 Python 侧辅助脚本
+- `apps/desktop/`：Tauri 桌面应用，包含 Vue 界面与 Rust 原生命令
+- `apps/desktop/src/features/`：任务、AI 总结、设置、人员、模板、宠物等面向用户的业务模块
+- `apps/desktop/src/shared/`：可复用组件、类型、多语言、全局样式与前端服务
+- `apps/desktop/src-tauri/src/`：SQLite 持久化、任务执行、本地运行环境、更新处理和原生集成
+- `python/funasr-runner/`：Python 转写 Runner、运行时校验、模型预热与依赖清单
+- `scripts/`：Tauri 启动、运行时包准备、发布元数据等仓库自动化脚本
 
 ## 支持平台
 
@@ -146,32 +149,32 @@ pnpm install
 启动前端开发服务：
 
 ```bash
-pnpm dev
+pnpm desktop:dev:web
 ```
 
 启动桌面端开发：
 
 ```bash
-pnpm tauri dev
+pnpm desktop:tauri dev
 ```
 
 说明：
 
 - 前端页面与样式改动通常可以热更新
-- Rust 代码、Tauri 配置、内置脚本资源改动后，通常需要重新启动 `pnpm tauri dev`
+- Rust 代码、Tauri 配置、内置脚本资源改动后，通常需要重新启动 `pnpm desktop:tauri dev`
 
 ## 构建
 
 构建前端：
 
 ```bash
-pnpm build
+pnpm desktop:build:web
 ```
 
 构建桌面应用：
 
 ```bash
-pnpm tauri build
+pnpm desktop:tauri build
 ```
 
 ## 本地运行环境
@@ -200,26 +203,32 @@ pnpm tauri build
 
 ```text
 .
-├─ src/
-│  ├─ assets/                静态资源
-│  ├─ composables/           前端状态与业务逻辑
-│  ├─ services/              本地服务、AI、导出、多语言、外观
-│  ├─ views/                 页面与窗口
-│  └─ style.css              全局样式
-├─ src-tauri/
-│  ├─ resources/             运行时清单与内置资源
-│  ├─ src/
-│  │  ├─ local_db.rs         SQLite 与持久化数据
-│  │  ├─ local_jobs.rs       本地任务执行链路
-│  │  ├─ local_runtime.rs    本地运行环境安装与日志
-│  │  ├─ local_ai.rs         AI 模型与总结数据
-│  │  └─ local_settings.rs   系统设置
-│  └─ tauri.conf.json        Tauri 配置
+├─ apps/
+│  └─ desktop/
+│     ├─ src/
+│     │  ├─ app/                 应用壳与路由
+│     │  ├─ assets/              静态资源
+│     │  ├─ features/            业务模块与页面
+│     │  └─ shared/              组件、类型、多语言、样式、服务
+│     └─ src-tauri/
+│        ├─ resources/           运行时清单与内置资源
+│        ├─ src/                 Rust 原生模块与 Tauri 命令
+│        └─ tauri.conf.json      Tauri 配置
+├─ python/
+│  └─ funasr-runner/
+│     ├─ runner.py              本地转写 Runner
+│     ├─ runtime_warmup.py      默认模型预热
+│     ├─ runtime_validate.py    Python 运行时校验
+│     └─ requirements.txt       运行时 Python 依赖
 ├─ scripts/
-│  ├─ funasr_runner.py       本地转写 Runner
-│  ├─ runtime_warmup.py      默认模型预热
-│  ├─ runtime_validate.py    Python 运行时校验
-│  └─ runtime_requirements.txt
+│  ├─ run-tauri.mjs             桌面端启动封装
+│  ├─ start-dev-server.mjs      Vite 启动封装
+│  └─ prepare-runtime-bundle.mjs
+├─ packages/
+│  └─ shared-types/             预留给生成/共享契约的包边界
+├─ crates/                      预留给可复用 Rust crate 的 workspace 边界
+├─ Cargo.toml                   Rust workspace
+├─ pnpm-workspace.yaml          pnpm workspace
 └─ README.zh-CN.md
 ```
 
@@ -252,6 +261,7 @@ Liberty 使用 SQLite 进行本地持久化，当前主要保存：
 - 部分日志直接来自底层依赖，例如 FunASR、ModelScope 或 jieba
 - 如果媒体文件存在坏帧或头信息异常，`ffmpeg` 可能打印警告，但不一定影响最终处理成功
 - AI 总结依赖用户自行配置的在线模型接口
+- 桌面端更新发布与 CI 配置说明见 [docs/desktop-update-release.md](/Volumes/NQJL/每日博士/开发项目/Liberty/docs/desktop-update-release.md)
 
 ## 许可证
 

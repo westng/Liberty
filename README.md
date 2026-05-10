@@ -13,11 +13,11 @@
 </p>
 
 <p align="center">
-  <a href="src-tauri/tauri.conf.json"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/Vue-3-42B883?logo=vue.js&logoColor=white" alt="Vue 3"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5"></a>
-  <a href="src-tauri/Cargo.toml"><img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust stable"></a>
-  <a href="scripts/runtime_requirements.txt"><img src="https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white" alt="Python 3.9"></a>
+  <a href="apps/desktop/src-tauri/tauri.conf.json"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2"></a>
+  <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/Vue-3-42B883?logo=vue.js&logoColor=white" alt="Vue 3"></a>
+  <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5"></a>
+  <a href="apps/desktop/src-tauri/Cargo.toml"><img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust stable"></a>
+  <a href="python/funasr-runner/requirements.txt"><img src="https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white" alt="Python 3.9"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
 </p>
 
@@ -115,11 +115,14 @@ AI summarization is independent from the local transcription pipeline and is alw
 | Local storage | SQLite |
 | AI interface | OpenAI-compatible API |
 
-### Responsibility Split
+### Repository Boundaries
 
-- `src/`: frontend pages, state, styles, localization, and client-side services
-- `src-tauri/src/`: local database, task execution, runtime installation, and system integrations
-- `scripts/`: FunASR runner, runtime warmup, dependency validation, and Python-side helpers
+- `apps/desktop/`: the Tauri desktop application, including Vue UI and Rust native commands
+- `apps/desktop/src/features/`: user-facing domains such as jobs, AI summary, settings, members, templates, and pet
+- `apps/desktop/src/shared/`: reusable UI components, types, localization, styles, and client services
+- `apps/desktop/src-tauri/src/`: SQLite persistence, task execution, runtime installation, update handling, and native integrations
+- `python/funasr-runner/`: the Python transcription runner, runtime validation, warmup, and dependency manifest
+- `scripts/`: repository automation for Tauri startup, runtime bundle preparation, and release metadata
 
 ## Supported Platforms
 
@@ -145,32 +148,32 @@ pnpm install
 Start the frontend development server:
 
 ```bash
-pnpm dev
+pnpm desktop:dev:web
 ```
 
 Start the desktop application in development mode:
 
 ```bash
-pnpm tauri dev
+pnpm desktop:tauri dev
 ```
 
 Notes:
 
 - Frontend changes typically hot reload
-- Rust code, Tauri configuration, and bundled script/resource changes usually require restarting `pnpm tauri dev`
+- Rust code, Tauri configuration, and bundled script/resource changes usually require restarting `pnpm desktop:tauri dev`
 
 ## Build
 
 Build the frontend:
 
 ```bash
-pnpm build
+pnpm desktop:build:web
 ```
 
 Build the desktop application:
 
 ```bash
-pnpm tauri build
+pnpm desktop:tauri build
 ```
 
 ## Managed Local Runtime
@@ -199,26 +202,32 @@ Design goals:
 
 ```text
 .
-├─ src/
-│  ├─ assets/                Static assets
-│  ├─ composables/           Frontend state and business logic
-│  ├─ services/              Local services, AI, export, localization, appearance
-│  ├─ views/                 Pages and windows
-│  └─ style.css              Global styles
-├─ src-tauri/
-│  ├─ resources/             Runtime manifests and bundled resources
-│  ├─ src/
-│  │  ├─ local_db.rs         SQLite and persisted job data
-│  │  ├─ local_jobs.rs       Local job execution pipeline
-│  │  ├─ local_runtime.rs    Managed runtime installation and logs
-│  │  ├─ local_ai.rs         AI models and summary data
-│  │  └─ local_settings.rs   Application settings
-│  └─ tauri.conf.json        Tauri configuration
+├─ apps/
+│  └─ desktop/
+│     ├─ src/
+│     │  ├─ app/                 App shell and router
+│     │  ├─ assets/              Static assets
+│     │  ├─ features/            Feature modules and views
+│     │  └─ shared/              Components, types, i18n, styles, services
+│     └─ src-tauri/
+│        ├─ resources/           Runtime manifests and bundled resources
+│        ├─ src/                 Rust native modules and Tauri commands
+│        └─ tauri.conf.json      Tauri configuration
+├─ python/
+│  └─ funasr-runner/
+│     ├─ runner.py              Local transcription runner
+│     ├─ runtime_warmup.py      Default model warmup
+│     ├─ runtime_validate.py    Python runtime validation
+│     └─ requirements.txt       Runtime Python dependencies
 ├─ scripts/
-│  ├─ funasr_runner.py       Local transcription runner
-│  ├─ runtime_warmup.py      Default model warmup
-│  ├─ runtime_validate.py    Python runtime validation
-│  └─ runtime_requirements.txt
+│  ├─ run-tauri.mjs             Desktop startup wrapper
+│  ├─ start-dev-server.mjs      Vite startup wrapper
+│  └─ prepare-runtime-bundle.mjs
+├─ packages/
+│  └─ shared-types/             Reserved package boundary for generated/shared contracts
+├─ crates/                      Reserved Rust workspace boundary for extracted reusable crates
+├─ Cargo.toml                   Rust workspace
+├─ pnpm-workspace.yaml          pnpm workspace
 └─ README.md
 ```
 
@@ -251,6 +260,7 @@ This allows results to remain available across application restarts.
 - Some logs come directly from underlying dependencies such as FunASR, ModelScope, or jieba
 - Media files with damaged frames or malformed headers may still produce `ffmpeg` warnings without preventing successful transcription
 - AI summarization depends on user-provided online model configuration
+- Desktop update publishing and CI details are documented in [docs/desktop-update-release.md](/Volumes/NQJL/每日博士/开发项目/Liberty/docs/desktop-update-release.md)
 
 ## License
 

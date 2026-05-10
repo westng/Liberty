@@ -168,8 +168,8 @@ def fill_block(row: ET.Element, block: dict) -> None:
 
 
 def main() -> None:
-    template = Path("artifacts/会议纪要模板.docx")
-    output = Path("artifacts/标准录音16_会议纪要_已写入.docx")
+    template = Path("apps/desktop/src-tauri/resources/templates/meeting-minutes.docx")
+    output = Path("/tmp/liberty-meeting-minutes-filled.docx")
 
     with zipfile.ZipFile(template, "r") as zin:
         xml = zin.read("word/document.xml")

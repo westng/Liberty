@@ -1,0 +1,60 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Liberty",
+  "version": "1.1.0",
+  "identifier": "com.westng.liberty",
+  "build": {
+    "beforeDevCommand": "node ../../scripts/start-dev-server.mjs",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../../../python/funasr-runner/": "scripts",
+      "../../../runtime-bundles/": "runtime-bundles"
+    },
+    "macOS": {
+      "frameworks": [
+        "vendor/Sparkle.framework"
+      ]
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Liberty",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1100,
+        "minHeight": 760,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/westng/Liberty/releases/latest/download/latest.json"
+      ],
+      "pubkey": "__LIBERTY_TAURI_UPDATER_PUBLIC_KEY__",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

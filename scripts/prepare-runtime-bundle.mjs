@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import process from "node:process";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 if (process.env.LIBERTY_RUNTIME_BUNDLE_READY === "1") {
   console.log("[prepare-runtime-bundle] skip, bundle already prepared.");
@@ -9,12 +12,12 @@ if (process.env.LIBERTY_RUNTIME_BUNDLE_READY === "1") {
 }
 
 const platformId = resolvePlatformId();
-const outputDir = `runtime-bundles/${platformId}`;
+const outputDir = path.join(repoRoot, "runtime-bundles", platformId);
 const ifMissingOnly = process.argv.includes("--if-missing");
-const scriptPath = "scripts/prepare_runtime_bundle.py";
+const scriptPath = path.join(repoRoot, "scripts", "prepare_runtime_bundle.py");
 const expectedFiles = [
-  `${outputDir}/python-runtime.tar.gz`,
-  `${outputDir}/ffmpeg-runtime.tar.gz`,
+  path.join(outputDir, "python-runtime.tar.gz"),
+  path.join(outputDir, "ffmpeg-runtime.tar.gz"),
 ];
 
 if (ifMissingOnly && expectedFiles.every((filePath) => existsSync(filePath))) {
@@ -49,17 +52,17 @@ if (!launcher) {
 const result = spawnSync(
   launcher.command,
   [
-    ...launcher.args,
-    scriptPath,
-    "--platform-id",
-    platformId,
-    "--output-dir",
-    outputDir,
+      ...launcher.args,
+      scriptPath,
+      "--platform-id",
+      platformId,
+      "--output-dir",
+      outputDir,
   ],
   {
     env: {
       ...process.env,
-      PIP_CACHE_DIR: path.join(process.cwd(), ".pip-cache"),
+      PIP_CACHE_DIR: path.join(repoRoot, ".pip-cache"),
     },
     stdio: "inherit",
     windowsHide: true,

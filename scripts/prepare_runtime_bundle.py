@@ -19,8 +19,9 @@ WINDOWS_NO_WINDOW = 0x08000000
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIREMENTS_PATH = ROOT / "scripts" / "runtime_requirements.txt"
-VALIDATE_PATH = ROOT / "scripts" / "runtime_validate.py"
+RUNNER_ROOT = ROOT / "python" / "funasr-runner"
+REQUIREMENTS_PATH = RUNNER_ROOT / "requirements.txt"
+VALIDATE_PATH = RUNNER_ROOT / "runtime_validate.py"
 
 PYTHON_BUNDLE_NAME = "python-runtime.tar.gz"
 FFMPEG_BUNDLE_NAME = "ffmpeg-runtime.tar.gz"
