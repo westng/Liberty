@@ -158,24 +158,24 @@ jobs:
             rust_target: aarch64-apple-darwin
             artifact_name: liberty-macos-aarch64
             artifact_path: |
-              apps/desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
-              apps/desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz
+              target/**/release/bundle/dmg/*.dmg
+              target/**/release/bundle/macos/*.app.tar.gz
           - name: macOS Intel
             os: macos-15-intel
             platform_id: darwin-x64
             rust_target: x86_64-apple-darwin
             artifact_name: liberty-macos-x64
             artifact_path: |
-              apps/desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
-              apps/desktop/src-tauri/target/**/release/bundle/macos/*.app.tar.gz
+              target/**/release/bundle/dmg/*.dmg
+              target/**/release/bundle/macos/*.app.tar.gz
           - name: Windows x64
             os: windows-2022
             platform_id: windows-x64
             rust_target: x86_64-pc-windows-msvc
             artifact_name: liberty-windows-x64
             artifact_path: |
-              apps/desktop/src-tauri/target/**/release/bundle/msi/*.msi
-              apps/desktop/src-tauri/target/**/release/bundle/nsis/*.exe
+              target/**/release/bundle/msi/*.msi
+              target/**/release/bundle/nsis/*.exe
 
     steps:
       - name: Checkout
@@ -277,8 +277,8 @@ jobs:
         shell: bash
         run: |
           find runtime-bundles -maxdepth 3 -type f -print || true
-          find apps/desktop/src-tauri/target -maxdepth 6 -type d -name bundle -print || true
-          find apps/desktop/src-tauri/target -maxdepth 8 -type f \( -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) -print || true
+          find target -maxdepth 6 -type d -name bundle -print || true
+          find target -maxdepth 8 -type f \( -name "*.app" -o -name "*.app.tar.gz" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) -print || true
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v6
