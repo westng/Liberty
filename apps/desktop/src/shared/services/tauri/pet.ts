@@ -11,6 +11,23 @@ import type {
 type SavePetSettingsInput = Omit<PetSettings, "petId" | "updatedAt">;
 type SavePetProfileInput = Pick<PetProfile, "name">;
 
+export interface DesktopPetStatus {
+  visible: boolean;
+  instanceCount: number;
+}
+
+export function applyDesktopPetState(settings: PetSettings, source = "app") {
+  if (!settings.desktopEnabled) {
+    return invoke<boolean>("hide_desktop_pet", { source });
+  }
+
+  return invoke<boolean>("show_desktop_pet", { source });
+}
+
+export function openExtraDesktopPet() {
+  return invoke<DesktopPetStatus>("open_extra_desktop_pet");
+}
+
 export function createLocalPetService() {
   return {
     getProfile: () => invoke<PetProfile>("get_pet_profile"),
@@ -27,5 +44,6 @@ export function createLocalPetService() {
       invoke<PetProfile>("apply_pet_workflow_event", {
         input,
       }),
+    openExtraDesktopPet,
   };
 }

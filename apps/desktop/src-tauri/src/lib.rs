@@ -1,4 +1,5 @@
 mod app_updater;
+mod desktop_pet;
 mod local_ai;
 mod local_db;
 mod local_export;
@@ -17,6 +18,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             app_updater::manage_update_state(&app.handle());
+            desktop_pet::manage_desktop_pet_state(&app.handle());
+            desktop_pet::sync_desktop_pet_on_startup(&app.handle());
             app_updater::configure_app_menu(&app.handle())?;
             app_updater::start_background_update_check(app.handle().clone());
             Ok(())
@@ -56,9 +59,14 @@ pub fn run() {
             local_pet::apply_pet_workflow_event,
             local_pet::get_pet_profile,
             local_pet::get_pet_settings,
+            desktop_pet::get_desktop_pet_status,
+            desktop_pet::hide_desktop_pet,
             local_pet::list_pet_cosmetic_unlocks,
             local_pet::list_pet_event_ledger,
+            desktop_pet::open_extra_desktop_pet,
             local_pet::save_pet_profile,
+            desktop_pet::show_desktop_pet,
+            desktop_pet::start_desktop_pet_drag,
             local_runtime::get_runtime_install_log,
             local_runtime::get_runtime_status,
             local_runtime::install_runtime,

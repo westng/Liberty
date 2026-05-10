@@ -87,12 +87,6 @@ const router = createRouter({
       component: () => import("@/features/members/views/MemberEditorView.vue"),
       meta: { title: "人员编辑", standalone: true },
     },
-    {
-      path: "/pet-desktop",
-      name: "pet-desktop",
-      component: () => import("@/features/pet/views/PetDesktopView.vue"),
-      meta: { title: "桌面宠物", standalone: true },
-    },
   ],
 });
 

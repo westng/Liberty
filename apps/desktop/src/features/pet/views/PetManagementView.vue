@@ -11,7 +11,7 @@ import {
   getPetSpriteUrlForGroup,
   resolvePetVisualAction,
 } from "@/features/pet/services/petSprites";
-import { applyPetDesktopState, isPetDesktopWindowOpen } from "@/shared/services/ui/windows";
+import { applyDesktopPetState, openExtraDesktopPet } from "@/shared/services/tauri/pet";
 import type { PetInteractionAction } from "@/shared/types/meeting";
 
 const meetingStore = useMeetingStore();
@@ -21,7 +21,7 @@ let refreshTimer: number | null = null;
 let coverAnimationTimer: number | null = null;
 const petNameDraft = ref("");
 const petNameSaving = ref(false);
-const desktopPetVisible = ref(false);
+const extraPetOpening = ref(false);
 const petCoverFrameIndex = ref(0);
 const petVisualStateNow = ref(Date.now());
 const ANIMATION_FRAME_INTERVAL_MS = 1000;
@@ -170,7 +170,6 @@ const unlockedCosmeticsLabel = computed(() =>
 onMounted(async () => {
   await petStore.loadPetState();
   syncSettingsForm();
-  await syncDesktopPetVisibility();
   window.addEventListener("focus", handleWindowFocus);
   refreshTimer = window.setInterval(() => {
     petVisualStateNow.value = Date.now();
@@ -201,11 +200,6 @@ watch(petCoverAction, () => {
 async function handleWindowFocus() {
   await petStore.refresh();
   syncSettingsForm();
-  await syncDesktopPetVisibility();
-}
-
-async function syncDesktopPetVisibility() {
-  desktopPetVisible.value = await isPetDesktopWindowOpen();
 }
 
 function syncSettingsForm() {
@@ -244,14 +238,9 @@ async function saveSettings() {
   settingsForm.lastWindowY = savedSettings.lastWindowY;
 
   try {
-    desktopPetVisible.value = await applyPetDesktopState({
-      desktopEnabled: savedSettings.desktopEnabled,
-      alwaysOnTop: savedSettings.alwaysOnTop,
-      lastWindowX: savedSettings.lastWindowX,
-      lastWindowY: savedSettings.lastWindowY,
-    });
+    await applyDesktopPetState(savedSettings, "pet-settings");
   } catch (error) {
-    console.error("[pet-settings] settings saved but window sync failed", error);
+    console.error("[pet-settings] settings saved but native pet sync failed", error);
   }
 
   settingsForm.desktopEnabled = savedSettings.desktopEnabled;
@@ -263,6 +252,37 @@ async function saveSettings() {
       kind: "info",
     },
   );
+}
+
+async function openAnotherDesktopPet() {
+  extraPetOpening.value = true;
+  try {
+    const status = await openExtraDesktopPet();
+    if (!settingsForm.desktopEnabled) {
+      settingsForm.desktopEnabled = true;
+      await petStore.refresh();
+      syncSettingsForm();
+    }
+    await currentWindow.setFocus().catch(() => undefined);
+    await message(
+      locale.value === "en-US"
+        ? `Desktop pet opened. Active pets: ${status.instanceCount}.`
+        : `已多开一个桌面宠物，当前共 ${status.instanceCount} 个。`,
+      {
+        title: locale.value === "en-US" ? "Pet Center" : "宠物中心",
+        kind: "info",
+      },
+    );
+  } catch (error) {
+    const content = error instanceof Error ? error.message : String(error);
+    await currentWindow.setFocus().catch(() => undefined);
+    await message(content || (locale.value === "en-US" ? "Failed to open another desktop pet." : "多开桌面宠物失败。"), {
+      title: locale.value === "en-US" ? "Pet Center" : "宠物中心",
+      kind: "error",
+    });
+  } finally {
+    extraPetOpening.value = false;
+  }
 }
 
 async function triggerInteraction(action: PetInteractionAction) {
@@ -327,7 +347,7 @@ const locale = computed(() => meetingStore.settings.value.locale);
           <div class="pet-avatar-meta">
             <strong>{{ petStore.profile.value?.name ?? "Libby" }}</strong>
             <span>
-              {{ locale === "en-US" ? "Your desktop companion is active and staying nearby." : "它会留在桌面上，按照你的节奏陪着你。" }}
+              {{ locale === "en-US" ? "Your desktop companion stays nearby and follows your pace." : "它会留在桌面上，按照你的节奏陪着你。" }}
             </span>
           </div>
 
@@ -419,8 +439,8 @@ const locale = computed(() => meetingStore.settings.value.locale);
             <h3>{{ locale === "en-US" ? "Desktop Behavior" : "桌面行为" }}</h3>
             <p class="section-copy">
               {{ locale === "en-US"
-                ? "These settings control persistence, interruption level, and visibility."
-                : "这些设置决定宠物是否常驻、是否打扰以及在桌面的存在方式。" }}
+                ? "These settings control desktop visibility, interruption level, and companion behavior."
+                : "这些设置决定宠物是否常驻桌面、是否打扰以及陪伴方式。" }}
             </p>
           </div>
         </div>
@@ -447,6 +467,19 @@ const locale = computed(() => meetingStore.settings.value.locale);
             <input v-model.number="settingsForm.proactiveLevel" type="range" min="0" max="3" step="1" />
             <strong>{{ settingsForm.proactiveLevel }}</strong>
           </label>
+          <div class="desktop-pet-actions">
+            <button class="secondary-button desktop-pet-open-button" type="button" :disabled="extraPetOpening" @click="openAnotherDesktopPet">
+              <span aria-hidden="true">+</span>
+              {{ extraPetOpening ? (locale === "en-US" ? "Opening" : "正在打开") : (locale === "en-US" ? "Open Another Desktop Pet" : "多开一个桌面宠物") }}
+            </button>
+            <p>
+              {{
+                locale === "en-US"
+                  ? "The toolbar switch opens one primary pet and closes all desktop pets."
+                  : "顶部开关只开启一个主桌宠，关闭时会关闭全部桌宠。"
+              }}
+            </p>
+          </div>
           <div class="button-row">
             <button class="primary-button" type="button" @click="saveSettings">
               {{ locale === "en-US" ? "Save Pet Settings" : "保存宠物设置" }}
@@ -799,6 +832,40 @@ const locale = computed(() => meetingStore.settings.value.locale);
 .pet-settings-form input[type="checkbox"] {
   width: 18px;
   height: 18px;
+}
+
+.desktop-pet-actions {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--divider-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+}
+
+.desktop-pet-open-button {
+  min-height: 44px;
+  justify-content: center;
+  gap: 8px;
+}
+
+.desktop-pet-open-button span {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.desktop-pet-actions p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .pet-ledger-list {

@@ -6,7 +6,7 @@ import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { usePetStore } from "@/features/pet/stores/usePetStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
-import { applyPetDesktopState, isPetDesktopWindowOpen } from "@/shared/services/ui/windows";
+import { applyDesktopPetState } from "@/shared/services/tauri/pet";
 import { getProcessMetrics, openExternalUrl } from "@/shared/services/tauri/system";
 import type { ProcessMetrics } from "@/shared/types/meeting";
 
@@ -20,7 +20,7 @@ const knownJobStatuses = new Map<string, string>();
 let didHydrateJobStatuses = false;
 let metricsPollingId: number | null = null;
 let didRecordPetDailyOpen = false;
-const desktopPetVisible = ref(false);
+let lastAppliedDesktopPetEnabled: boolean | null = null;
 let updaterMenuUnlisten: (() => void) | null = null;
 const processMetrics = ref<ProcessMetrics>({
   cpuPercent: 0,
@@ -58,6 +58,7 @@ const currentModeLabel = computed(() => {
 
   return messages.value.shell.mockModeShort;
 });
+const desktopPetVisible = computed(() => Boolean(petStore.settings.value?.desktopEnabled));
 const toolbarStatus = computed(() => {
   if (store.localMode.value) {
     return messages.value.shell.localReady;
@@ -152,9 +153,8 @@ watch(
 
 onMounted(() => {
   void store.ensureSettingsLoaded();
-  void ensurePetDesktopWindow();
+  void initializePetState();
   void attachUpdaterMenuListener();
-  void syncDesktopPetVisibility();
   updateGraphicsMemoryEstimate();
   syncToolbarMetricsPolling();
   window.addEventListener("focus", syncToolbarMetricsPolling);
@@ -247,11 +247,7 @@ async function openProjectGithub() {
   await openExternalUrl("https://github.com/westng/Liberty");
 }
 
-async function ensurePetDesktopWindow() {
-  if (route.name === "pet-desktop") {
-    return;
-  }
-
+async function initializePetState() {
   try {
     await petStore.loadPetState();
     if (!didRecordPetDailyOpen) {
@@ -262,26 +258,23 @@ async function ensurePetDesktopWindow() {
       }).catch(() => undefined);
     }
     const settings = petStore.settings.value;
-
-    if (settings?.desktopEnabled) {
-      desktopPetVisible.value = await applyPetDesktopState({
-        desktopEnabled: settings.desktopEnabled,
-        alwaysOnTop: settings.alwaysOnTop,
-        lastWindowX: settings.lastWindowX,
-        lastWindowY: settings.lastWindowY,
+    if (settings) {
+      await syncDesktopPetState(settings, "startup").catch((error) => {
+        console.error("[pet-window] failed to sync native pet window", error);
       });
     }
   } catch {
-    // Keep the main app usable even if the pet window fails to open.
+    // Keep the main app usable even if the pet state fails to load.
   }
 }
 
-async function syncDesktopPetVisibility() {
-  try {
-    desktopPetVisible.value = await isPetDesktopWindowOpen();
-  } catch {
-    desktopPetVisible.value = false;
+async function syncDesktopPetState(settings: NonNullable<typeof petStore.settings.value>, source: string) {
+  if (lastAppliedDesktopPetEnabled === settings.desktopEnabled) {
+    return;
   }
+
+  lastAppliedDesktopPetEnabled = settings.desktopEnabled;
+  await applyDesktopPetState(settings, source);
 }
 
 async function toggleToolbarPetDesktop() {
@@ -291,20 +284,12 @@ async function toggleToolbarPetDesktop() {
     return;
   }
 
-  const isCurrentlyOpen = await isPetDesktopWindowOpen();
-  desktopPetVisible.value = isCurrentlyOpen;
-  const nextDesktopEnabled = !isCurrentlyOpen;
   const savedSettings = await petStore.saveSettings({
-    desktopEnabled: nextDesktopEnabled,
-    alwaysOnTop: current.alwaysOnTop,
-    muted: current.muted,
-    focusModeEnabled: current.focusModeEnabled,
-    proactiveLevel: current.proactiveLevel,
-    lastWindowX: current.lastWindowX,
-    lastWindowY: current.lastWindowY,
+    ...current,
+    desktopEnabled: !current.desktopEnabled,
   });
-
-  desktopPetVisible.value = await applyPetDesktopState(savedSettings);
+  lastAppliedDesktopPetEnabled = null;
+  await syncDesktopPetState(savedSettings, "toolbar");
 }
 
 async function notifyJobCompleted(jobTitle: string) {
