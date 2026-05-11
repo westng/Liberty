@@ -1322,7 +1322,22 @@ mod macos_pet_renderer {
 #[cfg(windows)]
 mod windows_pet_renderer {
     use super::*;
-    use std::sync::atomic::AtomicU64;
+    use std::sync::{
+        atomic::AtomicU64,
+        Mutex,
+    };
+    use windows_sys::Win32::Foundation::POINT;
+
+    struct PetWindowInputState {
+        interaction_signal: Arc<AtomicU64>,
+        drag_state: Mutex<PetWindowDragState>,
+    }
+
+    #[derive(Default)]
+    struct PetWindowDragState {
+        mouse_down_at: Option<POINT>,
+        drag_started: bool,
+    }
 
     pub fn prepare_window(window: &Window, interaction_signal: &Arc<AtomicU64>) -> LocalResult<()> {
         set_native_window_style(window, interaction_signal)
@@ -1382,6 +1397,10 @@ mod windows_pet_renderer {
 
     fn set_native_window_style(window: &Window, interaction_signal: &Arc<AtomicU64>) -> LocalResult<()> {
         let hwnd = window.hwnd().map_err(|err| err.to_string())?;
+        let input_state = Box::new(PetWindowInputState {
+            interaction_signal: interaction_signal.clone(),
+            drag_state: Mutex::new(PetWindowDragState::default()),
+        });
         unsafe {
             use windows_sys::Win32::UI::{
                 Shell::SetWindowSubclass,
@@ -1401,7 +1420,7 @@ mod windows_pet_renderer {
                 hwnd,
                 Some(pet_window_subclass_proc),
                 1,
-                Arc::as_ptr(interaction_signal) as usize,
+                Box::into_raw(input_state) as usize,
             );
         }
         Ok(())
@@ -1416,37 +1435,120 @@ mod windows_pet_renderer {
         ref_data: usize,
     ) -> isize {
         use windows_sys::Win32::UI::{
-            Shell::DefSubclassProc,
-            WindowsAndMessaging::{HTCLIENT, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST, WM_NCLBUTTONUP},
+            Shell::{DefSubclassProc, RemoveWindowSubclass},
+            WindowsAndMessaging::{
+                HTCLIENT, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST,
+            },
         };
 
         if msg == WM_NCHITTEST {
             return HTCLIENT as isize;
         }
-        if msg == WM_LBUTTONDOWN {
-            begin_window_drag(hwnd);
-        }
-        if matches!(msg, WM_LBUTTONUP | WM_NCLBUTTONUP) && ref_data != 0 {
-            let signal = &*(ref_data as *const AtomicU64);
-            signal.fetch_add(1, Ordering::Relaxed);
+
+        let input_state = (ref_data != 0).then(|| &*(ref_data as *const PetWindowInputState));
+        match msg {
+            WM_LBUTTONDOWN => {
+                if let Some(input_state) = input_state {
+                    record_mouse_down(input_state);
+                }
+            }
+            WM_MOUSEMOVE => {
+                if let Some(input_state) = input_state {
+                    if should_begin_drag(input_state) {
+                        begin_window_drag(hwnd);
+                    }
+                }
+            }
+            WM_LBUTTONUP => {
+                if let Some(input_state) = input_state {
+                    finish_mouse_interaction(input_state);
+                }
+            }
+            WM_DESTROY => {
+                if ref_data != 0 {
+                    RemoveWindowSubclass(hwnd, Some(pet_window_subclass_proc), _subclass_id);
+                    drop(Box::from_raw(ref_data as *mut PetWindowInputState));
+                }
+            }
+            _ => {}
         }
 
         DefSubclassProc(hwnd, msg, wparam, lparam)
     }
 
-    unsafe fn begin_window_drag(hwnd: *mut std::ffi::c_void) {
-        use windows_sys::Win32::{
-            Foundation::{POINT, POINTS},
-            UI::{
-                Input::KeyboardAndMouse::ReleaseCapture,
-                WindowsAndMessaging::{GetCursorPos, PostMessageW, HTCAPTION, WM_NCLBUTTONDOWN},
-            },
+    unsafe fn record_mouse_down(input_state: &PetWindowInputState) {
+        if let Ok(mut guard) = input_state.drag_state.lock() {
+            guard.mouse_down_at = cursor_position();
+            guard.drag_started = false;
+        }
+    }
+
+    unsafe fn should_begin_drag(input_state: &PetWindowInputState) -> bool {
+        let Some(current) = cursor_position() else {
+            return false;
         };
+
+        let Ok(mut guard) = input_state.drag_state.lock() else {
+            return false;
+        };
+
+        if guard.drag_started {
+            return false;
+        }
+
+        let Some(start) = guard.mouse_down_at else {
+            return false;
+        };
+
+        let delta_x = (current.x - start.x).abs();
+        let delta_y = (current.y - start.y).abs();
+        if delta_x < 4 && delta_y < 4 {
+            return false;
+        }
+
+        guard.drag_started = true;
+        true
+    }
+
+    fn finish_mouse_interaction(input_state: &PetWindowInputState) {
+        let should_interact = input_state
+            .drag_state
+            .lock()
+            .map(|mut guard| {
+                let should_interact = guard.mouse_down_at.is_some() && !guard.drag_started;
+                guard.mouse_down_at = None;
+                guard.drag_started = false;
+                should_interact
+            })
+            .unwrap_or(false);
+
+        if should_interact {
+            input_state.interaction_signal.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    unsafe fn cursor_position() -> Option<POINT> {
+        use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
         let mut cursor = POINT { x: 0, y: 0 };
         if GetCursorPos(&mut cursor) == 0 {
-            return;
+            return None;
         }
+        Some(cursor)
+    }
+
+    unsafe fn begin_window_drag(hwnd: *mut std::ffi::c_void) {
+        use windows_sys::Win32::{
+            Foundation::POINTS,
+            UI::{
+                Input::KeyboardAndMouse::ReleaseCapture,
+                WindowsAndMessaging::{PostMessageW, HTCAPTION, WM_NCLBUTTONDOWN},
+            },
+        };
+
+        let Some(cursor) = cursor_position() else {
+            return;
+        };
 
         let points = POINTS {
             x: cursor.x as i16,
