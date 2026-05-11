@@ -15,10 +15,10 @@ on:
         description: "版本号模式"
         required: true
         type: choice
-        default: auto
+        default: 自动
         options:
-          - auto
-          - manual
+          - 自动
+          - 手动
       version:
         description: "手动版本号，例如 1.1.3。自动模式留空。"
         required: false
@@ -75,7 +75,7 @@ jobs:
             exit 0
           fi
 
-          if [[ "${INPUT_VERSION_MODE:-auto}" == "manual" ]]; then
+          if [[ "${INPUT_VERSION_MODE:-自动}" == "手动" ]]; then
             version="${INPUT_VERSION#v}"
             if [[ -z "${version}" ]]; then
               echo "::error::手动版本号不能为空。"
