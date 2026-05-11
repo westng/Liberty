@@ -275,6 +275,8 @@ jobs:
           PRERELEASE: ${{ needs.prepare_release.outputs.prerelease }}
         run: |
           mapfile -t assets < <(find release-upload -maxdepth 1 -type f | sort)
+          printf "Publishing %s assets to %s\n" "${#assets[@]}" "${RELEASE_TAG}"
+          printf " - %s\n" "${assets[@]}"
 
           release_args=(
             --title "Liberty ${RELEASE_TAG}"
@@ -308,7 +310,13 @@ jobs:
               --method PATCH \
               "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
               --input release-update.json >/dev/null
-            gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
           else
-            gh release create "${RELEASE_TAG}" "${assets[@]}" "${release_args[@]}"
+            gh release create "${RELEASE_TAG}" "${release_args[@]}"
           fi
+
+          printf "%s\0" "${assets[@]}" | xargs -0 -n 1 -P 4 bash -c '
+            asset="$1"
+            echo "::group::Upload $(basename "$asset")"
+            gh release upload "$RELEASE_TAG" "$asset" --clobber
+            echo "::endgroup::"
+          ' _
