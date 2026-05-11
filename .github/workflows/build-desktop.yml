@@ -6,11 +6,6 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
-      create_release:
-        description: "是否发布到 GitHub Release"
-        required: false
-        type: boolean
-        default: false
       prerelease:
         description: "是否标记为预发布版本"
         required: false
@@ -205,7 +200,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && github.actor != 'github-actions[bot]') ||
-      (github.event_name == 'workflow_dispatch' && inputs.create_release)
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
 
