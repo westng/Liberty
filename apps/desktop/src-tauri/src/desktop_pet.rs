@@ -1417,11 +1417,14 @@ mod windows_pet_renderer {
     ) -> isize {
         use windows_sys::Win32::UI::{
             Shell::DefSubclassProc,
-            WindowsAndMessaging::{HTCAPTION, WM_LBUTTONUP, WM_NCHITTEST, WM_NCLBUTTONUP},
+            WindowsAndMessaging::{HTCLIENT, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST, WM_NCLBUTTONUP},
         };
 
         if msg == WM_NCHITTEST {
-            return HTCAPTION as isize;
+            return HTCLIENT as isize;
+        }
+        if msg == WM_LBUTTONDOWN {
+            begin_window_drag(hwnd);
         }
         if matches!(msg, WM_LBUTTONUP | WM_NCLBUTTONUP) && ref_data != 0 {
             let signal = &*(ref_data as *const AtomicU64);
@@ -1429,6 +1432,34 @@ mod windows_pet_renderer {
         }
 
         DefSubclassProc(hwnd, msg, wparam, lparam)
+    }
+
+    unsafe fn begin_window_drag(hwnd: *mut std::ffi::c_void) {
+        use windows_sys::Win32::{
+            Foundation::{POINT, POINTS},
+            UI::{
+                Input::KeyboardAndMouse::ReleaseCapture,
+                WindowsAndMessaging::{GetCursorPos, PostMessageW, HTCAPTION, WM_NCLBUTTONDOWN},
+            },
+        };
+
+        let mut cursor = POINT { x: 0, y: 0 };
+        if GetCursorPos(&mut cursor) == 0 {
+            return;
+        }
+
+        let points = POINTS {
+            x: cursor.x as i16,
+            y: cursor.y as i16,
+        };
+
+        ReleaseCapture();
+        PostMessageW(
+            hwnd,
+            WM_NCLBUTTONDOWN,
+            HTCAPTION as usize,
+            &points as *const POINTS as isize,
+        );
     }
 
     fn draw_bubble(buffer: &mut [u8], width: u32, scale: f64, bubble_theme: PetBubbleTheme) {
