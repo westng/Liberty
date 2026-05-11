@@ -1581,9 +1581,9 @@ mod windows_pet_renderer {
             (14.0 * scale).round().max(10.0) as u32,
         );
         let (fill, stroke) = if bubble_theme.is_dark() {
-            ((24, 26, 31, 236), (255, 255, 255, 34))
+            ((24, 26, 31, 255), (255, 255, 255, 52))
         } else {
-            ((255, 255, 255, 240), (36, 40, 48, 26))
+            ((255, 255, 255, 255), (36, 40, 48, 42))
         };
         fill_rounded_rect(
             buffer,
