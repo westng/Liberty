@@ -230,30 +230,6 @@ export interface SettingsState {
   localAsrBatchSizeSeconds: number;
 }
 
-export interface AppUpdateStatus {
-  status:
-    | "idle"
-    | "checking"
-    | "updateAvailable"
-    | "upToDate"
-    | "downloading"
-    | "installing"
-    | "restartRequired"
-    | "error"
-    | "unsupported";
-  platform: "macos" | "windows" | "unsupported";
-  channel: string;
-  currentVersion: string;
-  latestVersion?: string;
-  lastCheckedAt?: string;
-  releaseNotes?: string;
-  pubDate?: string;
-  message?: string;
-  downloadPercent?: number;
-  feedUrl: string;
-  canAutoInstall: boolean;
-}
-
 export interface ManagedRuntimeStatus {
   platformId: string;
   runtimeVersion: string;

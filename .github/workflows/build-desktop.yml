@@ -117,7 +117,6 @@ jobs:
             artifact_name: liberty-macos-aarch64
             artifact_path: |
               target/**/release/bundle/dmg/*.dmg
-              target/**/release/bundle/macos/*.app.tar.gz
           - name: macOS Intel
             os: macos-15-intel
             platform_id: darwin-x64
@@ -125,7 +124,6 @@ jobs:
             artifact_name: liberty-macos-x64
             artifact_path: |
               target/**/release/bundle/dmg/*.dmg
-              target/**/release/bundle/macos/*.app.tar.gz
           - name: Windows x64
             os: windows-2022
             platform_id: windows-x64
@@ -173,64 +171,6 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
 
-      - name: Prepare Updater Config
-        shell: bash
-        env:
-          LIBERTY_UPDATER_REPOSITORY: ${{ github.repository }}
-          LIBERTY_TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.LIBERTY_TAURI_UPDATER_PUBLIC_KEY }}
-          LIBERTY_SPARKLE_PUBLIC_KEY: ${{ secrets.LIBERTY_SPARKLE_PUBLIC_KEY }}
-        run: |
-          node ./scripts/prepare-updater-config.mjs
-
-      - name: Download Sparkle Framework
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset_url="$(python3 - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          request = urllib.request.Request(
-              "https://api.github.com/repos/sparkle-project/Sparkle/releases/latest",
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              },
-          )
-
-          with urllib.request.urlopen(request) as response:
-              release = json.load(response)
-
-          for asset in release.get("assets", []):
-              name = asset.get("name", "")
-              if name.endswith(".tar.xz"):
-                  print(asset["browser_download_url"])
-                  break
-          PY
-          )"
-
-          if [[ -z "${asset_url}" ]]; then
-            echo "::error::Unable to locate Sparkle release archive."
-            exit 1
-          fi
-
-          rm -rf sparkle-dist apps/desktop/src-tauri/vendor/Sparkle.framework
-          curl -L "${asset_url}" -o sparkle.tar.xz
-          mkdir -p sparkle-dist apps/desktop/src-tauri/vendor
-          tar -xf sparkle.tar.xz -C sparkle-dist
-          framework_path="$(find sparkle-dist -type d -name Sparkle.framework | head -n 1)"
-
-          if [[ -z "${framework_path}" ]]; then
-            echo "::error::Sparkle.framework was not found in the extracted archive."
-            exit 1
-          fi
-
-          cp -R "${framework_path}" apps/desktop/src-tauri/vendor/Sparkle.framework
-
       - name: Prepare Bundled Runtime
         shell: bash
         run: |
@@ -240,9 +180,6 @@ jobs:
 
       - name: Build Tauri Bundle
         shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm --dir apps/desktop tauri build --target ${{ matrix.rust_target }}
 
       - name: Inspect Build Outputs
@@ -251,7 +188,7 @@ jobs:
         run: |
           find runtime-bundles -maxdepth 3 -type f -print || true
           find target -maxdepth 6 -type d -name bundle -print || true
-          find target -maxdepth 8 -type f \( -name "*.app" -o -name "*.app.tar.gz" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) -print || true
+          find target -maxdepth 8 -type f \( -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) -print || true
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v6
@@ -260,110 +197,11 @@ jobs:
           path: ${{ matrix.artifact_path }}
           if-no-files-found: error
 
-  release_metadata:
-    name: Generate Release Metadata
-    needs:
-      - prepare_release
-      - build
-    runs-on: macos-latest
-    if: >-
-      ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && github.actor != 'github-actions[bot]') ||
-      (github.event_name == 'workflow_dispatch' && inputs.create_release)
-    permissions:
-      contents: read
-
-    steps:
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v6
-        with:
-          path: release-assets
-
-      - name: Prepare Sparkle Feed Folder
-        shell: bash
-        run: |
-          rm -rf sparkle-feed release-metadata
-          mkdir -p sparkle-feed release-metadata
-          find release-assets -type f -name "*.app.tar.gz" -exec cp {} sparkle-feed/ \;
-
-          if [[ "$(find sparkle-feed -maxdepth 1 -type f | wc -l | tr -d ' ')" == "0" ]]; then
-            echo "::error::No macOS .app.tar.gz artifacts found for appcast generation."
-            exit 1
-          fi
-
-      - name: Download Sparkle Tools
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset_url="$(python3 - <<'PY'
-          import json
-          import os
-          import urllib.request
-
-          request = urllib.request.Request(
-              "https://api.github.com/repos/sparkle-project/Sparkle/releases/latest",
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              },
-          )
-
-          with urllib.request.urlopen(request) as response:
-              release = json.load(response)
-
-          for asset in release.get("assets", []):
-              name = asset.get("name", "")
-              if name.endswith(".tar.xz"):
-                  print(asset["browser_download_url"])
-                  break
-          PY
-          )"
-
-          if [[ -z "${asset_url}" ]]; then
-            echo "::error::Unable to locate Sparkle release archive."
-            exit 1
-          fi
-
-          rm -rf sparkle-dist
-          curl -L "${asset_url}" -o sparkle.tar.xz
-          mkdir -p sparkle-dist
-          tar -xf sparkle.tar.xz -C sparkle-dist
-
-      - name: Generate appcast.xml
-        shell: bash
-        env:
-          LIBERTY_SPARKLE_PRIVATE_KEY: ${{ secrets.LIBERTY_SPARKLE_PRIVATE_KEY }}
-        run: |
-          if [[ -z "${LIBERTY_SPARKLE_PRIVATE_KEY}" ]]; then
-            echo "::error::LIBERTY_SPARKLE_PRIVATE_KEY secret is required."
-            exit 1
-          fi
-
-          printf '%s' "${LIBERTY_SPARKLE_PRIVATE_KEY}" > sparkle_ed25519.pem
-          generate_appcast_bin="$(find sparkle-dist -type f -name generate_appcast | head -n 1)"
-
-          if [[ -z "${generate_appcast_bin}" ]]; then
-            echo "::error::generate_appcast was not found in the Sparkle archive."
-            exit 1
-          fi
-
-          chmod +x "${generate_appcast_bin}"
-          "${generate_appcast_bin}" -f sparkle_ed25519.pem sparkle-feed
-          cp sparkle-feed/appcast.xml release-metadata/appcast.xml
-
-      - name: Upload Release Metadata
-        uses: actions/upload-artifact@v6
-        with:
-          name: release-metadata
-          path: release-metadata/appcast.xml
-
   release:
     name: Publish GitHub Release
     needs:
       - prepare_release
       - build
-      - release_metadata
     runs-on: ubuntu-latest
     if: >-
       ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) && github.actor != 'github-actions[bot]') ||
@@ -377,33 +215,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Enable Corepack PNPM
-        shell: bash
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.30.3 --activate
-          pnpm --version
-
-      - name: Install Dependencies
-        shell: bash
-        run: |
-          pnpm install --frozen-lockfile
-
       - name: Download Build Artifacts
         uses: actions/download-artifact@v6
         with:
           path: release-assets
-
-      - name: Download Release Metadata
-        uses: actions/download-artifact@v6
-        with:
-          name: release-metadata
-          path: release-metadata
 
       - name: Ensure Release Tag Exists
         shell: bash
@@ -430,7 +245,7 @@ jobs:
             cp "${file}" "release-upload/${artifact_name}-${file_name}"
           done < <(
             find release-assets -type f \
-              \( -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" -o -name "*.exe" \) \
+              \( -name "*.dmg" -o -name "*.msi" -o -name "*.exe" \) \
               -print0
           )
 
@@ -442,26 +257,6 @@ jobs:
 
           find release-upload -maxdepth 1 -type f -print | sort
           echo "count=${asset_count}" >> "$GITHUB_OUTPUT"
-
-      - name: Sign Windows Updater Assets
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          if [[ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]]; then
-            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is required."
-            exit 1
-          fi
-
-          while IFS= read -r -d '' file; do
-            signature="$(./node_modules/.bin/tauri signer sign "${file}" | tail -n 1 | tr -d '\r\n')"
-            if [[ -z "${signature}" ]]; then
-              echo "::error::Failed to generate signature for ${file}"
-              exit 1
-            fi
-            printf '%s\n' "${signature}" > "${file}.sig"
-          done < <(find release-upload -maxdepth 1 -type f \( -name "*.exe" -o -name "*.msi" \) -print0)
 
       - name: Generate Release Notes
         shell: bash
@@ -476,19 +271,6 @@ jobs:
             -f tag_name="${RELEASE_TAG}" \
             -f target_commitish="${TARGET_COMMIT}" \
             --jq ".body" > release-notes.md
-
-      - name: Generate latest.json
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
-          RELEASE_NOTES_PATH: release-notes.md
-        run: |
-          node ./scripts/generate-latest-json.mjs release-upload
-
-      - name: Attach appcast.xml
-        shell: bash
-        run: |
-          cp release-metadata/appcast.xml release-upload/appcast.xml
 
       - name: Publish Release
         shell: bash

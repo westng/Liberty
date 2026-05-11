@@ -5,7 +5,6 @@ import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { resolveTheme } from "@/shared/services/ui/appearance";
 import { getMessages } from "@/shared/i18n";
 import type {
-  AppUpdateStatus,
   LiquidGlassStyle,
   LocaleCode,
   ManagedRuntimeStatus,
@@ -111,49 +110,6 @@ const runtimeStatusDescription = computed(() => {
 });
 const runtimeBusy = computed(() => runtimeStatus.value.status === "installing");
 const runtimeInstalledAtLabel = computed(() => formatRuntimeDate(runtimeStatus.value.installedAt));
-const updateStatus = computed(() => store.updateStatus.value);
-const updateBusy = computed(() =>
-  ["checking", "downloading", "installing"].includes(updateStatus.value.status),
-);
-const updateStatusLabel = computed(() => labelForUpdateStatus(updateStatus.value));
-const updateStatusDescription = computed(() => {
-  if (updateStatus.value.message?.trim()) {
-    return updateStatus.value.message.trim();
-  }
-
-  switch (updateStatus.value.status) {
-    case "updateAvailable":
-      return messages.value.updateDescriptionAvailable;
-    case "upToDate":
-      return messages.value.updateDescriptionCurrent;
-    case "downloading":
-      return messages.value.updateDescriptionDownloading;
-    case "installing":
-      return messages.value.updateDescriptionInstalling;
-    case "restartRequired":
-      return messages.value.updateDescriptionRestart;
-    case "error":
-      return messages.value.updateDescriptionFailed;
-    case "unsupported":
-      return messages.value.updateDescriptionUnsupported;
-    default:
-      return messages.value.updateDescriptionIdle;
-  }
-});
-const updatePrimaryActionLabel = computed(() => {
-  switch (updateStatus.value.status) {
-    case "updateAvailable":
-      return updateStatus.value.canAutoInstall
-        ? messages.value.updateInstallAction
-        : messages.value.updateCheckAction;
-    case "restartRequired":
-      return messages.value.updateRestartAction;
-    default:
-      return messages.value.updateCheckAction;
-  }
-});
-const updateLatestVersionLabel = computed(() => updateStatus.value.latestVersion || commonMessages.value.dash);
-const updateLastCheckedAtLabel = computed(() => formatRuntimeDate(updateStatus.value.lastCheckedAt));
 const runtimeInstallProgress = computed(() => {
   const log = runtimeInstallLog.value;
   const normalized = log.trim();
@@ -300,26 +256,6 @@ async function installManagedRuntime() {
   }
 }
 
-async function runUpdatePrimaryAction() {
-  saveError.value = "";
-
-  try {
-    if (updateStatus.value.status === "updateAvailable" && updateStatus.value.canAutoInstall) {
-      await store.installUpdate();
-      return;
-    }
-
-    if (updateStatus.value.status === "restartRequired") {
-      await store.restartAfterUpdate();
-      return;
-    }
-
-    await store.checkForUpdates(true);
-  } catch (error) {
-    saveError.value = error instanceof Error ? error.message : String(error);
-  }
-}
-
 function labelForRuntimeStatus(status: ManagedRuntimeStatus) {
   switch (status.status) {
     case "installing":
@@ -332,29 +268,6 @@ function labelForRuntimeStatus(status: ManagedRuntimeStatus) {
       return messages.value.runtimeStatusRepair;
     default:
       return messages.value.runtimeStatusMissing;
-  }
-}
-
-function labelForUpdateStatus(status: AppUpdateStatus) {
-  switch (status.status) {
-    case "checking":
-      return messages.value.updateStatusChecking;
-    case "updateAvailable":
-      return messages.value.updateStatusAvailable;
-    case "upToDate":
-      return messages.value.updateStatusCurrent;
-    case "downloading":
-      return messages.value.updateStatusDownloading;
-    case "installing":
-      return messages.value.updateStatusInstalling;
-    case "restartRequired":
-      return messages.value.updateStatusRestart;
-    case "error":
-      return messages.value.updateStatusFailed;
-    case "unsupported":
-      return messages.value.updateStatusUnsupported;
-    default:
-      return messages.value.updateStatusIdle;
   }
 }
 
@@ -371,7 +284,6 @@ function formatRuntimeDate(value?: string) {
 
 onMounted(() => {
   void refreshRuntimePanel();
-  void store.refreshUpdateStatus();
 });
 </script>
 
@@ -542,67 +454,6 @@ onMounted(() => {
           <div class="runtime-log">
             <span class="runtime-log-title">{{ messages.runtimeInstallLog }}</span>
             <pre>{{ runtimeInstallLogReversed || messages.runtimeInstallLogEmpty }}</pre>
-          </div>
-        </div>
-      </article>
-    </div>
-
-    <div class="settings-group">
-      <h3 class="settings-group-title">{{ messages.updateCenter }}</h3>
-      <article class="surface settings-block runtime-card">
-        <div class="runtime-card-head">
-          <div class="runtime-card-title-wrap">
-            <span class="runtime-card-title">{{ messages.updateChannel }}</span>
-            <p class="runtime-card-hint">{{ messages.updateChannelHint }}</p>
-          </div>
-          <div class="runtime-card-status">
-            <span class="runtime-status-label">{{ messages.updateStatus }}</span>
-            <span class="runtime-status-badge" :class="`runtime-status-${updateStatus.status}`">
-              {{ updateStatusLabel }}
-            </span>
-          </div>
-        </div>
-
-        <div class="runtime-panel">
-          <div class="runtime-hero">
-            <p class="runtime-status-text">{{ updateStatusDescription }}</p>
-            <button class="text-button runtime-primary-action" type="button" :disabled="updateBusy"
-              @click="runUpdatePrimaryAction">
-              {{ updatePrimaryActionLabel }}
-            </button>
-          </div>
-
-          <div v-if="typeof updateStatus.downloadPercent === 'number'" class="runtime-progress-card">
-            <div class="runtime-progress-head">
-              <span>{{ messages.updateDownloadProgress }}</span>
-              <strong>{{ updateStatus.downloadPercent }}%</strong>
-            </div>
-            <div class="runtime-progress-track">
-              <span class="runtime-progress-bar" :style="{ width: `${updateStatus.downloadPercent}%` }"></span>
-            </div>
-            <div class="runtime-progress-copy">
-              {{ updateStatusDescription }}
-            </div>
-          </div>
-
-          <div class="runtime-meta-grid">
-            <div class="runtime-meta-item">
-              <span>{{ messages.updateCurrentVersion }}</span>
-              <strong>{{ updateStatus.currentVersion || commonMessages.dash }}</strong>
-            </div>
-            <div class="runtime-meta-item">
-              <span>{{ messages.updateLatestVersion }}</span>
-              <strong>{{ updateLatestVersionLabel }}</strong>
-            </div>
-            <div class="runtime-meta-item">
-              <span>{{ messages.updateLastCheckedAt }}</span>
-              <strong>{{ updateLastCheckedAtLabel }}</strong>
-            </div>
-          </div>
-
-          <div v-if="updateStatus.releaseNotes" class="runtime-log">
-            <span class="runtime-log-title">{{ messages.updateReleaseNotes }}</span>
-            <pre>{{ updateStatus.releaseNotes }}</pre>
           </div>
         </div>
       </article>

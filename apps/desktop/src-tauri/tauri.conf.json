@@ -11,17 +11,11 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
     "targets": "all",
     "resources": {
       "resources/pet/": "pet",
       "../../../python/funasr-runner/": "scripts",
       "../../../runtime-bundles/": "runtime-bundles"
-    },
-    "macOS": {
-      "frameworks": [
-        "vendor/Sparkle.framework"
-      ]
     },
     "icon": [
       "icons/32x32.png",
@@ -46,17 +40,6 @@
     ],
     "security": {
       "csp": null
-    }
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://github.com/westng/Liberty/releases/latest/download/latest.json"
-      ],
-      "pubkey": "__LIBERTY_TAURI_UPDATER_PUBLIC_KEY__",
-      "windows": {
-        "installMode": "passive"
-      }
     }
   }
 }

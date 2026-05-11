@@ -1,4 +1,3 @@
-import { listen } from "@tauri-apps/api/event";
 import { computed, reactive, toRefs } from "vue";
 import { applyAppearance } from "@/shared/services/ui/appearance";
 import { createEmptyMeetingSummary, summaryResultToMeetingSummary } from "@/shared/services/ai/storage";
@@ -7,10 +6,8 @@ import { createLocalMeetingService } from "@/shared/services/tauri/meeting";
 import { createLocalPetService } from "@/shared/services/tauri/pet";
 import { createLocalRuntimeService } from "@/shared/services/tauri/runtime";
 import { createLocalSettingsService } from "@/shared/services/tauri/settings";
-import { createLocalUpdaterService } from "@/shared/services/tauri/updater";
 import { createMeetingApi } from "@/shared/services/remote/meetingApi";
 import type {
-  AppUpdateStatus,
   AiSummaryRun,
   ManagedRuntimeStatus,
   MeetingJob,
@@ -35,15 +32,6 @@ const defaultSettings: SettingsState = {
   localAsrBatchSizeSeconds: 300,
 };
 
-const defaultUpdateStatus: AppUpdateStatus = {
-  status: "idle",
-  platform: "unsupported",
-  channel: "GitHub Releases",
-  currentVersion: "",
-  feedUrl: "",
-  canAutoInstall: false,
-};
-
 const state = reactive({
   jobs: [] as MeetingJob[],
   settings: { ...defaultSettings } as SettingsState,
@@ -55,7 +43,6 @@ const state = reactive({
     updatedAt: "",
   } as ManagedRuntimeStatus,
   runtimeInstallLog: "",
-  updateStatus: { ...defaultUpdateStatus } as AppUpdateStatus,
   settingsLoaded: false,
 });
 
@@ -63,13 +50,11 @@ const localAiService = createLocalAiService();
 const localPetService = createLocalPetService();
 const localRuntimeService = createLocalRuntimeService();
 const localSettingsService = createLocalSettingsService();
-const localUpdaterService = createLocalUpdaterService();
 let localPollingId: number | null = null;
 let settingsLoadPromise: Promise<void> | null = null;
 let runtimePollingId: number | null = null;
 let runtimeInstallPromise: Promise<ManagedRuntimeStatus> | null = null;
 let runtimeAutoInstallAttempted = false;
-let updateListenerAttached = false;
 const hydratedJobIds = new Set<string>();
 
 function normalizeSettings(settings?: Partial<SettingsState> | null): SettingsState {
@@ -105,21 +90,6 @@ function normalizeSettings(settings?: Partial<SettingsState> | null): SettingsSt
       1200,
       Math.max(30, Number(merged.localAsrBatchSizeSeconds) || defaultSettings.localAsrBatchSizeSeconds),
     ),
-  };
-}
-
-function normalizeUpdateStatus(status?: Partial<AppUpdateStatus> | null): AppUpdateStatus {
-  return {
-    ...defaultUpdateStatus,
-    ...(status ?? {}),
-    channel: status?.channel?.trim() || defaultUpdateStatus.channel,
-    currentVersion: status?.currentVersion?.trim() || defaultUpdateStatus.currentVersion,
-    feedUrl: status?.feedUrl?.trim() || defaultUpdateStatus.feedUrl,
-    canAutoInstall: Boolean(status?.canAutoInstall),
-    platform:
-      status?.platform === "macos" || status?.platform === "windows"
-        ? status.platform
-        : "unsupported",
   };
 }
 
@@ -252,7 +222,6 @@ async function ensureSettingsLoaded(force = false) {
     }
 
     await refreshRuntimeStatus();
-    await refreshUpdateStatus();
     state.settingsLoaded = true;
     applyAppearance(state.settings);
     syncLocalPolling();
@@ -267,17 +236,6 @@ async function ensureSettingsLoaded(force = false) {
   });
 
   return settingsLoadPromise;
-}
-
-async function ensureUpdateListener() {
-  if (updateListenerAttached || typeof window === "undefined") {
-    return;
-  }
-
-  updateListenerAttached = true;
-  await listen<AppUpdateStatus>("liberty://update-status", (event) => {
-    state.updateStatus = normalizeUpdateStatus(event.payload);
-  });
 }
 
 function replaceJob(job: MeetingJob) {
@@ -313,16 +271,6 @@ async function refreshRuntimeInstallLog() {
   }
 
   return state.runtimeInstallLog;
-}
-
-async function refreshUpdateStatus() {
-  try {
-    state.updateStatus = normalizeUpdateStatus(await localUpdaterService.getStatus());
-  } catch {
-    state.updateStatus = normalizeUpdateStatus(state.updateStatus);
-  }
-
-  return state.updateStatus;
 }
 
 function maybeStartRuntimeAutoInstall() {
@@ -367,12 +315,10 @@ function sleep(ms: number) {
 }
 
 void ensureSettingsLoaded();
-void ensureUpdateListener();
 
 export function useMeetingStore() {
   syncLocalPolling();
   void ensureSettingsLoaded();
-  void ensureUpdateListener();
 
   const api = computed(() =>
     state.settings.backendUrl
@@ -594,24 +540,6 @@ export function useMeetingStore() {
     return beginManagedRuntimeInstall();
   }
 
-  async function checkForUpdates(interactive = true) {
-    await ensureSettingsLoaded();
-    state.updateStatus = normalizeUpdateStatus(
-      await localUpdaterService.checkForUpdates(interactive),
-    );
-    return state.updateStatus;
-  }
-
-  async function installUpdate() {
-    await ensureSettingsLoaded();
-    state.updateStatus = normalizeUpdateStatus(await localUpdaterService.installUpdate());
-    return state.updateStatus;
-  }
-
-  async function restartAfterUpdate() {
-    await localUpdaterService.restartAfterUpdate();
-  }
-
   async function ensureManagedRuntimeReadyForLocalWork() {
     if (api.value || hasManualPythonOverride(state.settings)) {
       return;
@@ -705,17 +633,13 @@ export function useMeetingStore() {
     ensureSettingsLoaded,
     refreshRuntimeStatus,
     refreshRuntimeInstallLog,
-    refreshUpdateStatus,
     refreshJobs,
     refreshJob,
     refreshJobRuns,
-    checkForUpdates,
     createJob,
     deleteJob,
     installManagedRuntime,
-    installUpdate,
     renameSpeaker,
-    restartAfterUpdate,
     retryJob,
     saveSettings,
     saveSummaryRun,

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { listen } from "@tauri-apps/api/event";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
@@ -21,7 +20,6 @@ let didHydrateJobStatuses = false;
 let metricsPollingId: number | null = null;
 let didRecordPetDailyOpen = false;
 let lastAppliedDesktopPetEnabled: boolean | null = null;
-let updaterMenuUnlisten: (() => void) | null = null;
 const processMetrics = ref<ProcessMetrics>({
   cpuPercent: 0,
   memoryMb: 0,
@@ -154,7 +152,6 @@ watch(
 onMounted(() => {
   void store.ensureSettingsLoaded();
   void initializePetState();
-  void attachUpdaterMenuListener();
   updateGraphicsMemoryEstimate();
   syncToolbarMetricsPolling();
   window.addEventListener("focus", syncToolbarMetricsPolling);
@@ -173,8 +170,6 @@ onBeforeUnmount(() => {
     window.clearInterval(metricsPollingId);
     metricsPollingId = null;
   }
-  updaterMenuUnlisten?.();
-  updaterMenuUnlisten = null;
 });
 
 function isActive(itemTo: string) {
@@ -319,17 +314,6 @@ async function notifyJobCompleted(jobTitle: string) {
   } catch {
     // Pet updates are best-effort only.
   }
-}
-
-async function attachUpdaterMenuListener() {
-  if (updaterMenuUnlisten) {
-    return;
-  }
-
-  updaterMenuUnlisten = await listen("liberty://menu-check-updates", async () => {
-    await router.push("/settings");
-    await store.checkForUpdates(true);
-  });
 }
 
 async function refreshToolbarMetrics() {

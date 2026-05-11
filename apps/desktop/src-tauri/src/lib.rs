@@ -1,4 +1,3 @@
-mod app_updater;
 mod desktop_pet;
 mod local_ai;
 mod local_db;
@@ -17,19 +16,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            app_updater::manage_update_state(&app.handle());
             desktop_pet::manage_desktop_pet_state(&app.handle());
             desktop_pet::sync_desktop_pet_on_startup(&app.handle());
-            app_updater::configure_app_menu(&app.handle())?;
-            app_updater::start_background_update_check(app.handle().clone());
             Ok(())
         })
-        .on_menu_event(app_updater::handle_menu_event)
         .invoke_handler(tauri::generate_handler![
-            app_updater::check_for_updates,
-            app_updater::get_update_status,
-            app_updater::install_update,
-            app_updater::restart_after_update,
             local_ai::delete_ai_model,
             local_ai::delete_ai_summary_run,
             local_ai::delete_ai_template,
@@ -76,12 +67,6 @@ pub fn run() {
             system::get_process_metrics,
             system::open_external_url
         ]);
-
-    #[cfg(target_os = "macos")]
-    let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
-
-    #[cfg(target_os = "windows")]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     builder
         .run(tauri::generate_context!())

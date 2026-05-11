@@ -127,44 +127,6 @@ type MessageTree = {
     localAsrDeviceCpu: string;
     localAsrDeviceMps: string;
     localAsrDeviceCuda: string;
-    updateCenter: string;
-    updateChannel: string;
-    updateChannelHint: string;
-    updateStatus: string;
-    updateStatusIdle: string;
-    updateStatusChecking: string;
-    updateStatusAvailable: string;
-    updateStatusCurrent: string;
-    updateStatusDownloading: string;
-    updateStatusInstalling: string;
-    updateStatusRestart: string;
-    updateStatusFailed: string;
-    updateStatusUnsupported: string;
-    updateDescriptionIdle: string;
-    updateDescriptionAvailable: string;
-    updateDescriptionCurrent: string;
-    updateDescriptionDownloading: string;
-    updateDescriptionInstalling: string;
-    updateDescriptionRestart: string;
-    updateDescriptionFailed: string;
-    updateDescriptionUnsupported: string;
-    updateCheckAction: string;
-    updateInstallAction: string;
-    updateRestartAction: string;
-    updateDownloadProgress: string;
-    updateCurrentVersion: string;
-    updateLatestVersion: string;
-    updateLastCheckedAt: string;
-    updatePlatform: string;
-    updatePlatformMacos: string;
-    updatePlatformWindows: string;
-    updatePlatformUnsupported: string;
-    updateTechnology: string;
-    updateTechnologySparkle: string;
-    updateTechnologyTauri: string;
-    updateTechnologyGeneric: string;
-    updateFeed: string;
-    updateReleaseNotes: string;
     processingDefaults: string;
     defaultHotwords: string;
     defaultHotwordsHint: string;
@@ -643,44 +605,6 @@ const messages: Record<LocaleCode, MessageTree> = {
       localAsrDeviceCpu: "CPU",
       localAsrDeviceMps: "Apple Silicon",
       localAsrDeviceCuda: "CUDA",
-      updateCenter: "检查更新",
-      updateChannel: "应用内更新",
-      updateChannelHint: "启动后会自动执行后台检查，也可以在这里手动检查更新。",
-      updateStatus: "更新状态",
-      updateStatusIdle: "尚未检查",
-      updateStatusChecking: "检查中",
-      updateStatusAvailable: "发现更新",
-      updateStatusCurrent: "已是最新",
-      updateStatusDownloading: "下载中",
-      updateStatusInstalling: "安装中",
-      updateStatusRestart: "等待重启",
-      updateStatusFailed: "检查失败",
-      updateStatusUnsupported: "当前平台不支持",
-      updateDescriptionIdle: "还没有执行过更新检查，可以手动触发一次。",
-      updateDescriptionAvailable: "发现新版本。macOS 会交给 Sparkle 处理，Windows 可以直接下载并安装。",
-      updateDescriptionCurrent: "当前版本已经是最新，无需额外操作。",
-      updateDescriptionDownloading: "正在拉取更新包，请等待当前下载完成。",
-      updateDescriptionInstalling: "更新包已经下载完成，正在执行安装。",
-      updateDescriptionRestart: "更新已安装完成，重启应用后将切换到新版本。",
-      updateDescriptionFailed: "更新检查或安装失败，请查看下方状态信息后重试。",
-      updateDescriptionUnsupported: "当前平台暂不支持这条应用内更新链路。",
-      updateCheckAction: "检查更新",
-      updateInstallAction: "下载并安装",
-      updateRestartAction: "立即重启",
-      updateDownloadProgress: "下载进度",
-      updateCurrentVersion: "当前版本",
-      updateLatestVersion: "最新版本",
-      updateLastCheckedAt: "最后检查时间",
-      updatePlatform: "目标平台",
-      updatePlatformMacos: "macOS 桌面端",
-      updatePlatformWindows: "Windows 桌面端",
-      updatePlatformUnsupported: "未接入",
-      updateTechnology: "技术栈",
-      updateTechnologySparkle: "Sparkle + GitHub Releases",
-      updateTechnologyTauri: "Tauri Updater + GitHub Releases",
-      updateTechnologyGeneric: "GitHub Releases",
-      updateFeed: "更新源",
-      updateReleaseNotes: "版本说明",
       processingDefaults: "处理默认值",
       defaultHotwords: "默认热词",
       defaultHotwordsHint: "建议只保留项目名、专有名词和行业术语，降低普通词带来的噪声。",
@@ -1177,46 +1101,6 @@ const messages: Record<LocaleCode, MessageTree> = {
       localAsrDeviceCpu: "CPU",
       localAsrDeviceMps: "Apple Silicon",
       localAsrDeviceCuda: "CUDA",
-      updateCenter: "Check for Updates",
-      updateChannel: "In-App Updates",
-      updateChannelHint:
-        "A background check runs after startup, and you can also check for updates here manually.",
-      updateStatus: "Update Status",
-      updateStatusIdle: "Not Checked Yet",
-      updateStatusChecking: "Checking",
-      updateStatusAvailable: "Update Available",
-      updateStatusCurrent: "Up to Date",
-      updateStatusDownloading: "Downloading",
-      updateStatusInstalling: "Installing",
-      updateStatusRestart: "Restart Required",
-      updateStatusFailed: "Check Failed",
-      updateStatusUnsupported: "Unsupported",
-      updateDescriptionIdle: "No update check has run yet. Start one manually when needed.",
-      updateDescriptionAvailable:
-        "A newer build is available. Sparkle takes over on macOS, while Windows can download and install directly.",
-      updateDescriptionCurrent: "This build is already current.",
-      updateDescriptionDownloading: "The update package is downloading now.",
-      updateDescriptionInstalling: "The downloaded package is being installed.",
-      updateDescriptionRestart: "The update is installed. Restart the app to switch to the new build.",
-      updateDescriptionFailed: "The update check or install failed. Review the current status and try again.",
-      updateDescriptionUnsupported: "This platform does not use the in-app update flow yet.",
-      updateCheckAction: "Check Now",
-      updateInstallAction: "Download and Install",
-      updateRestartAction: "Restart Now",
-      updateDownloadProgress: "Download Progress",
-      updateCurrentVersion: "Current Version",
-      updateLatestVersion: "Latest Version",
-      updateLastCheckedAt: "Last Checked",
-      updatePlatform: "Platform",
-      updatePlatformMacos: "macOS Desktop",
-      updatePlatformWindows: "Windows Desktop",
-      updatePlatformUnsupported: "Not Connected",
-      updateTechnology: "Technology",
-      updateTechnologySparkle: "Sparkle + GitHub Releases",
-      updateTechnologyTauri: "Tauri Updater + GitHub Releases",
-      updateTechnologyGeneric: "GitHub Releases",
-      updateFeed: "Update Feed",
-      updateReleaseNotes: "Release Notes",
       processingDefaults: "Processing Defaults",
       defaultHotwords: "Default Hotwords",
       defaultHotwordsHint: "Keep project names, proper nouns, and domain terms only to reduce noise.",
