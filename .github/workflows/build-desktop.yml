@@ -296,30 +296,11 @@ jobs:
           fi
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq ".id")"
-            python3 - <<'PY'
-          import json
-          import os
-
-          with open("release-notes.md", encoding="utf-8") as release_notes:
-              body = release_notes.read()
-
-          payload = {
-              "name": f"Liberty {os.environ['RELEASE_TAG']}",
-              "body": body,
-              "prerelease": os.environ.get("PRERELEASE") == "true",
-          }
-
-          with open("release-update.json", "w", encoding="utf-8") as release_update:
-              json.dump(payload, release_update)
-          PY
-            gh api \
-              --method PATCH \
-              "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
-              --input release-update.json >/dev/null
-          else
-            gh release create "${RELEASE_TAG}" "${release_args[@]}"
+            echo "Deleting existing release ${RELEASE_TAG} before republishing."
+            gh release delete "${RELEASE_TAG}" --yes
           fi
+
+          gh release create "${RELEASE_TAG}" "${release_args[@]}"
 
           printf "%s\0" "${assets[@]}" | xargs -0 -n 1 -P 4 bash -c '
             asset="$1"
