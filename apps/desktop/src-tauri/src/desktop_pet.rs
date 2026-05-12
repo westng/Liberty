@@ -1411,13 +1411,20 @@ mod windows_pet_renderer {
             };
             let hwnd = hwnd.0 as *mut std::ffi::c_void;
             let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            let layered_style = WS_EX_LAYERED as _;
-            let tool_window_style = WS_EX_TOOLWINDOW as _;
-            let no_activate_style = WS_EX_NOACTIVATE as _;
+            #[cfg(target_pointer_width = "64")]
+            let next_style = style
+                | WS_EX_LAYERED as isize
+                | WS_EX_TOOLWINDOW as isize
+                | WS_EX_NOACTIVATE as isize;
+            #[cfg(target_pointer_width = "32")]
+            let next_style = style
+                | WS_EX_LAYERED as i32
+                | WS_EX_TOOLWINDOW as i32
+                | WS_EX_NOACTIVATE as i32;
             SetWindowLongPtrW(
                 hwnd,
                 GWL_EXSTYLE,
-                style | layered_style | tool_window_style | no_activate_style,
+                next_style,
             );
             SetWindowSubclass(
                 hwnd,
