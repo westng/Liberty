@@ -88,6 +88,10 @@ function resolvePlatformId() {
     return "windows-x64";
   }
 
+  if (process.platform === "win32" && process.arch === "ia32") {
+    return "windows-x86";
+  }
+
   console.error(
     `[prepare-runtime-bundle] unsupported build host: ${process.platform}/${process.arch}`,
   );

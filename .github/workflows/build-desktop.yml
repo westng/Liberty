@@ -189,6 +189,14 @@ jobs:
             artifact_path: |
               target/**/release/bundle/msi/*.msi
               target/**/release/bundle/nsis/*.exe
+          - name: Windows x86
+            os: windows-2022
+            platform_id: windows-x86
+            rust_target: i686-pc-windows-msvc
+            artifact_name: liberty-windows-x86
+            artifact_path: |
+              target/**/release/bundle/msi/*.msi
+              target/**/release/bundle/nsis/*.exe
 
     steps:
       - name: Checkout

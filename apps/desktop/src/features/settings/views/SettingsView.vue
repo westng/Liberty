@@ -84,7 +84,9 @@ const runtimeInstallLogReversed = computed(() => {
   return lines.reverse().join("\n");
 });
 const runtimeActionLabel = computed(() =>
-  runtimeStatus.value.status === "ready"
+  runtimeStatus.value.status === "unsupported"
+    ? messages.value.runtimeStatusUnsupported
+    : runtimeStatus.value.status === "ready"
     ? messages.value.runtimeReinstallAction
     : runtimeStatus.value.status === "installing"
       ? messages.value.runtimeStatusInstalling
@@ -103,12 +105,13 @@ const runtimeStatusDescription = computed(() => {
       return messages.value.runtimeDescriptionInstalling;
     case "failed":
     case "repair_required":
+    case "unsupported":
       return messages.value.runtimeDescriptionFailed;
     default:
       return messages.value.runtimeDescriptionMissing;
   }
 });
-const runtimeBusy = computed(() => runtimeStatus.value.status === "installing");
+const runtimeBusy = computed(() => runtimeStatus.value.status === "installing" || runtimeStatus.value.status === "unsupported");
 const runtimeInstalledAtLabel = computed(() => formatRuntimeDate(runtimeStatus.value.installedAt));
 const runtimeInstallProgress = computed(() => {
   const log = runtimeInstallLog.value;
@@ -266,6 +269,8 @@ function labelForRuntimeStatus(status: ManagedRuntimeStatus) {
       return messages.value.runtimeStatusFailed;
     case "repair_required":
       return messages.value.runtimeStatusRepair;
+    case "unsupported":
+      return messages.value.runtimeStatusUnsupported;
     default:
       return messages.value.runtimeStatusMissing;
   }

@@ -35,7 +35,9 @@ struct RuntimeManifest {
 #[serde(rename_all = "camelCase")]
 struct PlatformRuntime {
     platform_id: String,
-    python_bundle: BundledAsset,
+    unsupported_reason: Option<String>,
+    python_bundle: Option<BundledAsset>,
+    #[serde(default)]
     python_executable_candidates: Vec<String>,
     ffmpeg_bundle: Option<BundledAsset>,
     #[serde(default)]
@@ -68,6 +70,9 @@ pub fn get_runtime_status(app: AppHandle) -> LocalResult<ManagedRuntimeState> {
 pub fn install_runtime(app: AppHandle) -> LocalResult<ManagedRuntimeState> {
     let manifest = load_manifest()?;
     let platform_id = current_platform_id()?.to_string();
+    if let Some(state) = unsupported_runtime_state(&app, &manifest)? {
+        return Ok(state);
+    }
 
     let mut state = local_db::get_runtime_state(
         &app,
@@ -156,6 +161,10 @@ pub fn resolve_python_runtime(
 fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
     let manifest = load_manifest()?;
     let platform_id = current_platform_id()?;
+    if let Some(state) = unsupported_runtime_state(app, &manifest)? {
+        return Ok(state);
+    }
+
     let mut state = local_db::get_runtime_state(
         app,
         platform_id,
@@ -252,16 +261,20 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     )?;
     append_install_log_line(&log_path, "[runtime] locating bundled runtime resources")?;
 
+    let python_bundle = platform
+        .python_bundle
+        .as_ref()
+        .ok_or_else(|| format!("当前平台缺少内置 Python 运行时配置：{platform_id}"))?;
     let python_bundle_resource =
-        resolve_bundled_runtime_resource_path(app, &platform_id, &platform.python_bundle.file_name)?;
-    let python_bundle_path = downloads_root.join(&platform.python_bundle.file_name);
+        resolve_bundled_runtime_resource_path(app, &platform_id, &python_bundle.file_name)?;
+    let python_bundle_path = downloads_root.join(&python_bundle.file_name);
     stage_bundled_asset(
         &python_bundle_resource,
         &python_bundle_path,
         &log_path,
         "staging bundled Python runtime",
     )?;
-    verify_bundled_asset_sha256(&python_bundle_path, &platform.python_bundle.sha256, &log_path)?;
+    verify_bundled_asset_sha256(&python_bundle_path, &python_bundle.sha256, &log_path)?;
     extract_archive(
         &python_bundle_path,
         &runtime_root,
@@ -919,9 +932,41 @@ fn current_platform_id() -> LocalResult<&'static str> {
         Ok("darwin-x64")
     } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
         Ok("windows-x64")
+    } else if cfg!(all(target_os = "windows", target_arch = "x86")) {
+        Ok("windows-x86")
     } else {
         Err("当前平台暂不支持托管本地运行环境。".into())
     }
+}
+
+fn unsupported_runtime_state(
+    app: &AppHandle,
+    manifest: &RuntimeManifest,
+) -> LocalResult<Option<ManagedRuntimeState>> {
+    let platform = current_platform_manifest(manifest)?;
+    let Some(reason) = platform.unsupported_reason.as_ref() else {
+        return Ok(None);
+    };
+
+    let now = unix_timestamp_millis().to_string();
+    let mut state = local_db::get_runtime_state(
+        app,
+        &platform.platform_id,
+        &manifest.runtime_version,
+        &manifest.python_version,
+    )?;
+    state.runtime_version = manifest.runtime_version.clone();
+    state.python_version = manifest.python_version.clone();
+    state.status = "unsupported".into();
+    state.python_executable_path = None;
+    state.models_root = None;
+    state.install_root = None;
+    state.last_error = Some(reason.clone());
+    state.installed_at = None;
+    state.updated_at = now;
+    state.last_log_path = None;
+    local_db::save_runtime_state(app, &state)?;
+    Ok(Some(state))
 }
 
 fn runtime_platform_root(app: &AppHandle, platform_id: &str) -> LocalResult<PathBuf> {

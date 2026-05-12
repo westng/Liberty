@@ -117,6 +117,10 @@ function shouldAutoInstallManagedRuntime(
     return false;
   }
 
+  if (runtimeStatus.status === "unsupported") {
+    return false;
+  }
+
   return runtimeStatus.status === "missing" || runtimeStatus.status === "repair_required";
 }
 
@@ -553,6 +557,10 @@ export function useMeetingStore() {
     }
 
     while (!isManagedRuntimeReady(state.runtimeStatus)) {
+      if (state.runtimeStatus.status === "unsupported") {
+        throw new Error(state.runtimeStatus.lastError || "当前平台不支持内置本地运行环境。");
+      }
+
       if (state.runtimeStatus.status === "failed") {
         throw new Error(state.runtimeStatus.lastError || "本地运行环境自动安装失败。");
       }

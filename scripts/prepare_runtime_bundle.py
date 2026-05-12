@@ -47,6 +47,9 @@ PLATFORM_CONFIGS = {
         "ffmpeg_mode": "zip-bin-dir",
         "ffmpeg_executable": "ffmpeg.exe",
     },
+    "windows-x86": {
+        "unsupported_reason": "32-bit Windows builds do not include the managed local ASR runtime because PyTorch does not publish win32 wheels.",
+    },
 }
 
 
@@ -294,6 +297,13 @@ def main() -> None:
     if output_dir.exists():
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    unsupported_reason = config.get("unsupported_reason")
+    if unsupported_reason:
+        log(f"managed runtime unavailable for {platform_id}: {unsupported_reason}")
+        (output_dir / "unsupported-runtime.txt").write_text(unsupported_reason + "\n", encoding="utf-8")
+        log(f"runtime bundle placeholder ready at {output_dir}")
+        return
 
     with tempfile.TemporaryDirectory(prefix=f"liberty-runtime-{platform_id}-") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)

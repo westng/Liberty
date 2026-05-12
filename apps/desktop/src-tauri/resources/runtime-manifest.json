@@ -49,6 +49,10 @@
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg.exe"
       ]
+    },
+    {
+      "platformId": "windows-x86",
+      "unsupportedReason": "32 位 Windows 暂不支持内置本地 FunASR 运行环境。请配置在线后端，或在系统设置中指定自备 Python 环境。"
     }
   ]
 }

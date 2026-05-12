@@ -92,6 +92,7 @@ type MessageTree = {
     runtimeStatusReady: string;
     runtimeStatusFailed: string;
     runtimeStatusRepair: string;
+    runtimeStatusUnsupported: string;
     runtimeVersion: string;
     runtimePythonVersion: string;
     runtimeInstalledAt: string;
@@ -570,6 +571,7 @@ const messages: Record<LocaleCode, MessageTree> = {
       runtimeStatusReady: "已就绪",
       runtimeStatusFailed: "安装失败",
       runtimeStatusRepair: "需要修复",
+      runtimeStatusUnsupported: "暂不支持",
       runtimeVersion: "环境版本",
       runtimePythonVersion: "Python 版本",
       runtimeInstalledAt: "最后下载时间",
@@ -1065,6 +1067,7 @@ const messages: Record<LocaleCode, MessageTree> = {
       runtimeStatusReady: "Ready",
       runtimeStatusFailed: "Failed",
       runtimeStatusRepair: "Repair Required",
+      runtimeStatusUnsupported: "Unsupported",
       runtimeVersion: "Runtime Version",
       runtimePythonVersion: "Python Version",
       runtimeInstalledAt: "Last Downloaded",

@@ -18,7 +18,8 @@ export type ManagedRuntimeInstallStatus =
   | "installing"
   | "ready"
   | "failed"
-  | "repair_required";
+  | "repair_required"
+  | "unsupported";
 export type PetMood = "idle" | "cheerful" | "excited" | "proud" | "needy" | "sleepy" | "bored";
 export type PetStage = "baby" | "growing" | "mature";
 export type PetInteractionAction = "tap" | "pet" | "feed" | "encourage";
