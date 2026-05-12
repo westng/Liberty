@@ -1411,10 +1411,13 @@ mod windows_pet_renderer {
             };
             let hwnd = hwnd.0 as *mut std::ffi::c_void;
             let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let layered_style = WS_EX_LAYERED as _;
+            let tool_window_style = WS_EX_TOOLWINDOW as _;
+            let no_activate_style = WS_EX_NOACTIVATE as _;
             SetWindowLongPtrW(
                 hwnd,
                 GWL_EXSTYLE,
-                style | WS_EX_LAYERED as isize | WS_EX_TOOLWINDOW as isize | WS_EX_NOACTIVATE as isize,
+                style | layered_style | tool_window_style | no_activate_style,
             );
             SetWindowSubclass(
                 hwnd,
@@ -1714,7 +1717,7 @@ mod windows_pet_renderer {
                 return Err("创建桌宠绘制 DC 失败。".into());
             }
 
-            let mut bitmap_info = BITMAPINFO {
+            let bitmap_info = BITMAPINFO {
                 bmiHeader: BITMAPINFOHEADER {
                     biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
                     biWidth: width,
