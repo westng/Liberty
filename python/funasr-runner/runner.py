@@ -150,8 +150,9 @@ def resolve_ffmpeg_binary() -> Optional[str]:
 
 
 def prepare_input_media(job_dir: Path, input_path: Path) -> Path:
+    force_convert = os.getenv("LIBERTY_FORCE_AUDIO_CONVERT", "").strip().lower() == "true"
     suffix = input_path.suffix.lower()
-    if suffix == ".wav":
+    if suffix == ".wav" and not force_convert:
         return input_path
 
     ffmpeg_binary = resolve_ffmpeg_binary()
@@ -243,6 +244,128 @@ def extract_segments(result: dict, with_speaker: bool) -> tuple[list[dict], list
     return transcript_segments, speaker_segments
 
 
+def resolve_sherpa_model_root() -> Path:
+    configured = str(os.getenv("SHERPA_ONNX_MODEL_DIR", "") or "").strip()
+    if configured and Path(configured).is_dir():
+        return Path(configured)
+
+    for env_name in ("MODELSCOPE_CACHE", "HF_HOME", "TORCH_HOME"):
+        value = str(os.getenv(env_name, "") or "").strip()
+        if not value:
+            continue
+        root = Path(value)
+        models_root = root.parent if root.name in {"modelscope", "huggingface", "torch"} else root
+        candidate = models_root / "sherpa-onnx"
+        if candidate.is_dir():
+            return candidate
+
+    raise RuntimeError("未找到 Sherpa-ONNX 模型目录，请重新安装内置本地运行环境。")
+
+
+def find_required_file(root: Path, names: tuple[str, ...]) -> Path:
+    for name in names:
+        direct = root / name
+        if direct.is_file():
+            return direct
+    for name in names:
+        matches = sorted(root.rglob(name))
+        if matches:
+            return matches[0]
+    raise RuntimeError(f"模型目录中缺少必要文件：{', '.join(names)}")
+
+
+def build_sherpa_recognizer(model_root: Path, lang: str):
+    import sherpa_onnx
+
+    model_path = find_required_file(
+        model_root,
+        ("model.int8.onnx", "model.onnx", "encoder.int8.onnx", "encoder.onnx"),
+    )
+    tokens_path = find_required_file(model_root, ("tokens.txt",))
+    num_threads = parse_positive_int(os.getenv("OMP_NUM_THREADS"), 1)
+
+    recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
+        paraformer=str(model_path),
+        tokens=str(tokens_path),
+        num_threads=max(1, num_threads),
+        sample_rate=16000,
+        feature_dim=80,
+        decoding_method="greedy_search",
+        debug=False,
+        provider="cpu",
+    )
+    log(
+        "Sherpa-ONNX runtime:"
+        f" model={model_path.name}"
+        f", lang={lang}"
+        f", threads={num_threads}"
+    )
+    return recognizer
+
+
+def read_wav_mono_16k(path: Path):
+    import wave
+    import numpy as np
+
+    with wave.open(str(path), "rb") as wav_file:
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+        sample_rate = wav_file.getframerate()
+        frames = wav_file.readframes(wav_file.getnframes())
+
+    if channels != 1 or sample_width != 2 or sample_rate != 16000:
+        raise RuntimeError("Sherpa-ONNX 输入必须是 16kHz 单声道 16-bit wav。")
+
+    samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    return samples, sample_rate
+
+
+def run_sherpa_onnx(args, job_dir: Path, input_path: Path, wants_speaker: bool):
+    write_progress(job_dir, "transcribing", "正在准备音频文件。", progress_percent=8)
+    os.environ["LIBERTY_FORCE_AUDIO_CONVERT"] = "true"
+    prepared_input = prepare_input_media(job_dir, input_path)
+
+    write_progress(job_dir, "transcribing", "正在加载本地 Sherpa-ONNX 模型。", progress_percent=18)
+    model_root = resolve_sherpa_model_root()
+    recognizer = build_sherpa_recognizer(model_root, args.lang)
+
+    write_progress(job_dir, "transcribing", "正在进行本地转写。", progress_percent=32)
+    samples, sample_rate = read_wav_mono_16k(prepared_input)
+    stream = recognizer.create_stream()
+    stream.accept_waveform(sample_rate, samples)
+    recognizer.decode_stream(stream)
+    text = str(stream.result.text or "").strip()
+    if not text:
+        raise RuntimeError("Sherpa-ONNX 未返回可用逐字稿内容。")
+
+    duration_ms = int(len(samples) / sample_rate * 1000) if sample_rate > 0 else 0
+    transcript_segments = [
+        {
+            "id": "segment-1",
+            "startMs": 0,
+            "endMs": duration_ms,
+            "text": text,
+        }
+    ]
+    speaker_segments = (
+        [{**transcript_segments[0], "speaker": "Speaker 1"}] if wants_speaker else []
+    )
+
+    if wants_speaker:
+        write_progress(job_dir, "speaker_processing", "32 位离线模式暂不做真实说话人分离，已生成默认说话人。", progress_percent=94)
+
+    write_json(
+        job_dir / "result.json",
+        {
+            "durationMinutes": max(1, int((duration_ms + 59999) / 60000)) if duration_ms > 0 else 0,
+            "transcriptSegments": transcript_segments,
+            "speakerSegments": speaker_segments,
+            "failureReason": None,
+        },
+    )
+    write_progress(job_dir, "completed", "本地处理已完成。", progress_percent=100)
+
+
 def main():
     args = parse_args()
     job_dir = Path(args.job_dir)
@@ -252,6 +375,11 @@ def main():
     if not input_path.exists():
         write_progress(job_dir, "failed", "输入文件不存在。", "输入文件不存在。", 0)
         raise FileNotFoundError(f"Input file not found: {input_path}")
+
+    backend = os.getenv("LIBERTY_ASR_BACKEND", "funasr").strip().lower() or "funasr"
+    if backend == "sherpa-onnx":
+        run_sherpa_onnx(args, job_dir, input_path, wants_speaker)
+        return
 
     write_progress(job_dir, "transcribing", "正在准备音频文件。", progress_percent=8)
     prepared_input = prepare_input_media(job_dir, input_path)

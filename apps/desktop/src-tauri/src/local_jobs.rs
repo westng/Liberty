@@ -169,8 +169,9 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
     append_process_log_line(
         &dir,
         &format!(
-            "[runner] source={}, device={}, threads={}, batch_size_s={}, speaker={}, ffmpeg={}",
+            "[runner] source={}, backend={}, device={}, threads={}, batch_size_s={}, speaker={}, ffmpeg={}",
             resolved_runtime.source_label,
+            resolved_runtime.asr_backend,
             normalize_local_asr_device(&settings),
             runtime_threads,
             settings.local_asr_batch_size_seconds,
@@ -191,6 +192,7 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
         .env("MKL_NUM_THREADS", runtime_threads.to_string())
         .env("NUMEXPR_NUM_THREADS", runtime_threads.to_string())
         .env("KMP_DUPLICATE_LIB_OK", "TRUE")
+        .env("LIBERTY_ASR_BACKEND", &resolved_runtime.asr_backend)
         .env("FUNASR_DEVICE", normalize_local_asr_device(&settings))
         .env(
             "FUNASR_BATCH_SIZE_S",

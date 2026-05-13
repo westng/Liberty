@@ -35,6 +35,7 @@ struct RuntimeManifest {
 #[serde(rename_all = "camelCase")]
 struct PlatformRuntime {
     platform_id: String,
+    asr_backend: Option<String>,
     unsupported_reason: Option<String>,
     python_bundle: Option<BundledAsset>,
     #[serde(default)]
@@ -59,6 +60,7 @@ pub struct ResolvedPythonRuntime {
     pub source_label: String,
     pub models_root: Option<String>,
     pub ffmpeg_path: Option<String>,
+    pub asr_backend: String,
 }
 
 #[tauri::command]
@@ -137,6 +139,7 @@ pub fn resolve_python_runtime(
                 source_label: "managed Liberty runtime".into(),
                 models_root: runtime_state.models_root.clone(),
                 ffmpeg_path,
+                asr_backend: current_runtime_backend(app).unwrap_or_else(|_| "funasr".into()),
             });
         }
     }
@@ -149,6 +152,7 @@ pub fn resolve_python_runtime(
                 source_label: "manual Python path".into(),
                 models_root: None,
                 ffmpeg_path: None,
+                asr_backend: "funasr".into(),
             });
         }
 
@@ -293,6 +297,10 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     run_command_with_log(
         Command::new(&python_executable)
             .env("PYTHONUTF8", "1")
+            .env(
+                "LIBERTY_ASR_BACKEND",
+                platform.asr_backend.as_deref().unwrap_or("funasr"),
+            )
             .arg(&validate_path),
         &log_path,
         "Validating bundled Python runtime",
@@ -335,7 +343,7 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
             &models_bundle_resource,
             &models_bundle_path,
             &log_path,
-            "staging bundled FunASR models",
+            "staging bundled ASR models",
         )?;
         verify_bundled_asset_sha256(&models_bundle_path, &models_bundle.sha256, &log_path)?;
         extract_archive(
@@ -346,14 +354,21 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
         )?;
         append_install_log_line(&log_path, "[runtime] validating bundled models root")?;
     } else if had_models {
-        append_install_log_line(&log_path, "[runtime] reusing existing FunASR models")?;
+        append_install_log_line(&log_path, "[runtime] reusing existing ASR models")?;
     } else {
+        let backend = platform.asr_backend.as_deref().unwrap_or("funasr");
         let warmup_path = resolve_script_resource_path(app, "runtime_warmup.py")?;
-        warmup_default_models(&python_executable, &warmup_path, &models_root, &log_path)?;
+        warmup_default_models(
+            &python_executable,
+            &warmup_path,
+            &models_root,
+            backend,
+            &log_path,
+        )?;
     }
 
     if !models_root.is_dir() {
-        return Err("未找到托管运行环境中的 FunASR 模型目录。".into());
+        return Err("未找到托管运行环境中的本地 ASR 模型目录。".into());
     }
 
     let now = unix_timestamp_millis().to_string();
@@ -378,6 +393,12 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     local_db::save_runtime_state(app, &state)?;
     append_install_log_line(&log_path, "[runtime] install completed.")?;
     Ok(())
+}
+
+fn current_runtime_backend(_app: &AppHandle) -> LocalResult<String> {
+    let manifest = load_manifest()?;
+    let platform = current_platform_manifest(&manifest)?;
+    Ok(platform.asr_backend.unwrap_or_else(|| "funasr".into()))
 }
 
 fn mark_install_failed(app: &AppHandle, error: &str) -> LocalResult<()> {
@@ -473,11 +494,13 @@ fn warmup_default_models(
     python_executable: &Path,
     warmup_path: &Path,
     models_root: &Path,
+    asr_backend: &str,
     log_path: &Path,
 ) -> LocalResult<()> {
     run_command_with_log(
         Command::new(python_executable)
             .env("PYTHONUTF8", "1")
+            .env("LIBERTY_ASR_BACKEND", asr_backend)
             .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
             .env("HF_HOME", models_root.join("huggingface"))
             .env("TORCH_HOME", models_root.join("torch"))
@@ -485,7 +508,7 @@ fn warmup_default_models(
             .arg("--models-root")
             .arg(models_root),
         log_path,
-        "Downloading default FunASR models",
+        "Downloading default ASR models",
     )
 }
 
@@ -745,6 +768,7 @@ fn extract_tar_gz(
     let archive_file = File::open(archive_path).map_err(|err| err.to_string())?;
     let decoder = GzDecoder::new(archive_file);
     let mut archive = tar::Archive::new(decoder);
+    archive.set_preserve_mtime(false);
     archive.unpack(destination).map_err(|err| err.to_string())
 }
 

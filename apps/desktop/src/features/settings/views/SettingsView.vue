@@ -149,7 +149,8 @@ const runtimeInstallProgress = computed(() => {
     ["Validating bundled Python runtime", 66, messages.value.runtimeInstallBootstrapPip],
     ["[runtime] staging bundled FFmpeg runtime", 76, messages.value.runtimeInstallUpgradePip],
     ["Validating ffmpeg runtime", 84, messages.value.runtimeInstallPytorch],
-    ["Downloading default FunASR models", 94, messages.value.runtimeInstallModels],
+    ["Downloading default ASR models", 94, messages.value.runtimeInstallModels],
+    ["Downloading default Sherpa-ONNX model", 94, messages.value.runtimeInstallModels],
   ] as const;
 
   for (const [pattern, stagePercent, stageLabel] of stageWeights) {

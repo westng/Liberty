@@ -48,7 +48,12 @@ PLATFORM_CONFIGS = {
         "ffmpeg_executable": "ffmpeg.exe",
     },
     "windows-x86": {
-        "unsupported_reason": "32-bit Windows builds do not include the managed local ASR runtime because PyTorch does not publish win32 wheels.",
+        "python_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-i686-pc-windows-msvc-install_only.tar.gz",
+        "python_candidates": ["python/python.exe", "python/python3.exe"],
+        "ffmpeg_url": "https://github.com/sudo-nautilus/FFmpeg-Builds-Win32/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip",
+        "ffmpeg_mode": "zip-bin-dir",
+        "ffmpeg_executable": "ffmpeg.exe",
+        "asr_backend": "sherpa-onnx",
     },
 }
 
@@ -73,6 +78,13 @@ def run(cmd: list[str], env: dict[str, str] | None = None) -> None:
     if os.name == "nt":
         kwargs["creationflags"] = WINDOWS_NO_WINDOW
     subprocess.run(cmd, **kwargs)
+
+
+def can_execute_binary(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if os.name != "nt" and suffix in {".exe", ".bat", ".cmd"}:
+        return False
+    return os.name == "nt" or os.access(path, os.X_OK)
 
 
 def download_with_curl(url: str, destination: Path) -> None:
@@ -158,6 +170,15 @@ def resolve_python_executable(root: Path, candidates: list[str]) -> Path:
 
 
 def install_python_runtime(python_executable: Path, platform_id: str) -> None:
+    config = PLATFORM_CONFIGS[platform_id]
+    backend = config.get("asr_backend", "funasr")
+    if not can_execute_binary(python_executable):
+        log(
+            f"skipping dependency installation because {python_executable.name} "
+            "cannot run on this build host"
+        )
+        return
+
     env = {
         "PYTHONUTF8": "1",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
@@ -180,47 +201,43 @@ def install_python_runtime(python_executable: Path, platform_id: str) -> None:
         ],
         env=env,
     )
-    run(
-        [
-            str(python_executable),
-            "-m",
-            "pip",
-            "install",
-            "--prefer-binary",
-            "--retries",
-            "2",
-            "--timeout",
-            "120",
-            "-r",
-            str(REQUIREMENTS_PATH),
-        ],
-        env=env,
-    )
+    if backend == "sherpa-onnx":
+        run(
+            [
+                str(python_executable),
+                "-m",
+                "pip",
+                "install",
+                "--only-binary=:all:",
+                "--prefer-binary",
+                "--retries",
+                "2",
+                "--timeout",
+                "120",
+                "numpy<2",
+                "sherpa-onnx==1.13.1",
+            ],
+            env=env,
+        )
+    else:
+        run(
+            [
+                str(python_executable),
+                "-m",
+                "pip",
+                "install",
+                "--prefer-binary",
+                "--retries",
+                "2",
+                "--timeout",
+                "120",
+                "-r",
+                str(REQUIREMENTS_PATH),
+            ],
+            env=env,
+        )
 
-    torch_cmd = [
-        str(python_executable),
-        "-m",
-        "pip",
-        "install",
-        "--force-reinstall",
-        "--no-cache-dir",
-        "--prefer-binary",
-        "--retries",
-        "2",
-        "--timeout",
-        "120",
-        "-c",
-        str(REQUIREMENTS_PATH),
-        "numpy<2",
-        "torch==2.2.2",
-        "torchvision==0.17.2",
-        "torchaudio==2.2.2",
-    ]
-    if platform_id == "windows-x64":
-        torch_cmd.extend(["--index-url", "https://download.pytorch.org/whl/cpu"])
-    run(torch_cmd, env=env)
-    run(
-        [
+        torch_cmd = [
             str(python_executable),
             "-m",
             "pip",
@@ -232,14 +249,50 @@ def install_python_runtime(python_executable: Path, platform_id: str) -> None:
             "2",
             "--timeout",
             "120",
+            "-c",
+            str(REQUIREMENTS_PATH),
             "numpy<2",
-        ],
-        env=env,
+            "torch==2.2.2",
+            "torchvision==0.17.2",
+            "torchaudio==2.2.2",
+        ]
+        if platform_id == "windows-x64":
+            torch_cmd.extend(["--index-url", "https://download.pytorch.org/whl/cpu"])
+        run(torch_cmd, env=env)
+        run(
+            [
+                str(python_executable),
+                "-m",
+                "pip",
+                "install",
+                "--force-reinstall",
+                "--no-cache-dir",
+                "--prefer-binary",
+                "--retries",
+                "2",
+                "--timeout",
+                "120",
+                "numpy<2",
+            ],
+            env=env,
+        )
+
+
+def validate_python_runtime(python_executable: Path, platform_id: str) -> None:
+    if not can_execute_binary(python_executable):
+        log(
+            f"skipping runtime validation because {python_executable.name} "
+            "cannot run on this build host"
+        )
+        return
+
+    run(
+        [str(python_executable), str(VALIDATE_PATH)],
+        env={
+            "PYTHONUTF8": "1",
+            "LIBERTY_ASR_BACKEND": PLATFORM_CONFIGS[platform_id].get("asr_backend", "funasr"),
+        },
     )
-
-
-def validate_python_runtime(python_executable: Path) -> None:
-    run([str(python_executable), str(VALIDATE_PATH)], env={"PYTHONUTF8": "1"})
 
 
 def prepare_ffmpeg(config: dict[str, str], downloads_dir: Path, runtime_root: Path) -> None:
@@ -318,7 +371,7 @@ def main() -> None:
 
         python_executable = resolve_python_executable(runtime_root, config["python_candidates"])
         install_python_runtime(python_executable, platform_id)
-        validate_python_runtime(python_executable)
+        validate_python_runtime(python_executable, platform_id)
         prepare_ffmpeg(config, downloads_dir, runtime_root)
 
         create_tar_gz(runtime_root / "python", output_dir / PYTHON_BUNDLE_NAME)

@@ -2,9 +2,24 @@
 from __future__ import annotations
 
 import sys
+import os
 
 
 def main():
+    backend = os.getenv("LIBERTY_ASR_BACKEND", "funasr").strip().lower() or "funasr"
+    if backend == "sherpa-onnx":
+        import numpy
+        import sherpa_onnx
+
+        numpy_major = int(numpy.__version__.split(".", 1)[0])
+        if numpy_major < 1:
+            raise RuntimeError(f"NumPy 版本不可用，当前为 {numpy.__version__}。")
+
+        print(f"numpy={numpy.__version__}")
+        print(f"sherpa_onnx={getattr(sherpa_onnx, '__version__', 'unknown')}")
+        print("sherpa-onnx runtime validation passed.")
+        return
+
     import numpy
     import torch
     import torchaudio
