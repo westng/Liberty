@@ -68,7 +68,10 @@
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg.exe"
-      ]
+      ],
+      "modelsBundle": {
+        "fileName": "models-runtime.tar.gz"
+      }
     }
   ]
 }

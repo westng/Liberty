@@ -20,6 +20,10 @@ const expectedFiles = [
   path.join(outputDir, "ffmpeg-runtime.tar.gz"),
 ];
 
+if (platformId === "windows-x86") {
+  expectedFiles.push(path.join(outputDir, "models-runtime.tar.gz"));
+}
+
 if (ifMissingOnly && expectedFiles.every((filePath) => existsSync(filePath))) {
   console.log(`[prepare-runtime-bundle] skip, ${platformId} bundle already exists.`);
   process.exit(0);

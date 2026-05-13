@@ -25,6 +25,7 @@ VALIDATE_PATH = RUNNER_ROOT / "runtime_validate.py"
 
 PYTHON_BUNDLE_NAME = "python-runtime.tar.gz"
 FFMPEG_BUNDLE_NAME = "ffmpeg-runtime.tar.gz"
+MODELS_BUNDLE_NAME = "models-runtime.tar.gz"
 PLATFORM_CONFIGS = {
     "darwin-aarch64": {
         "python_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251031/cpython-3.9.25+20251031-aarch64-apple-darwin-install_only.tar.gz",
@@ -54,6 +55,8 @@ PLATFORM_CONFIGS = {
         "ffmpeg_mode": "zip-bin-dir",
         "ffmpeg_executable": "ffmpeg.exe",
         "asr_backend": "sherpa-onnx",
+        "model_url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-paraformer-zh-small-2024-03-09.tar.bz2",
+        "model_mode": "sherpa-onnx-tar-bz2",
     },
 }
 
@@ -330,6 +333,40 @@ def prepare_ffmpeg(config: dict[str, str], downloads_dir: Path, runtime_root: Pa
     raise RuntimeError(f"Unsupported ffmpeg extraction mode: {config['ffmpeg_mode']}")
 
 
+def prepare_models(config: dict[str, str], downloads_dir: Path, runtime_root: Path) -> None:
+    model_url = config.get("model_url")
+    if not model_url:
+        return
+
+    model_archive = downloads_dir / Path(model_url).name
+    models_dir = runtime_root / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    download(model_url, model_archive)
+
+    if config.get("model_mode") == "sherpa-onnx-tar-bz2":
+        extract_root = downloads_dir / "models-extract"
+        extract_root.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(model_archive, "r:bz2") as archive:
+            archive.extractall(extract_root)
+
+        model_root = None
+        for candidate in extract_root.rglob("*"):
+            if candidate.is_dir() and (candidate / "tokens.txt").is_file():
+                model_root = candidate
+                break
+
+        if model_root is None:
+            raise FileNotFoundError("Unable to locate Sherpa-ONNX model tokens.txt")
+
+        target_root = models_dir / "sherpa-onnx"
+        if target_root.exists():
+            shutil.rmtree(target_root)
+        shutil.copytree(model_root, target_root)
+        return
+
+    raise RuntimeError(f"Unsupported model extraction mode: {config.get('model_mode')}")
+
+
 def create_tar_gz(source_dir: Path, archive_path: Path) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
     if archive_path.exists():
@@ -373,9 +410,12 @@ def main() -> None:
         install_python_runtime(python_executable, platform_id)
         validate_python_runtime(python_executable, platform_id)
         prepare_ffmpeg(config, downloads_dir, runtime_root)
+        prepare_models(config, downloads_dir, runtime_root)
 
         create_tar_gz(runtime_root / "python", output_dir / PYTHON_BUNDLE_NAME)
         create_tar_gz(runtime_root / "ffmpeg", output_dir / FFMPEG_BUNDLE_NAME)
+        if (runtime_root / "models").is_dir():
+            create_tar_gz(runtime_root / "models", output_dir / MODELS_BUNDLE_NAME)
 
     log(f"runtime bundle ready at {output_dir}")
 
