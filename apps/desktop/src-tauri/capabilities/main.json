@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-capability",
+  "description": "Main Liberty window capability for workspace orchestration, dialogs, exports, and child-window creation.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-theme",
+    "core:window:allow-start-dragging",
+    "dialog:default",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$APPDATA/**",
+        "$LOCALDATA/**",
+        "$RESOURCE/**",
+        "$TEMP/**"
+      ]
+    }
+  ]
+}

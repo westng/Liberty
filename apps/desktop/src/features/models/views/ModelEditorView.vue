@@ -62,7 +62,7 @@ function validateDraft() {
     return messages.value.validationBaseUrl;
   }
 
-  if (!draft.value.apiKey.trim()) {
+  if (!selectedId.value && !draft.value.apiKey.trim()) {
     return messages.value.validationApiKey;
   }
 

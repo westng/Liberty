@@ -1,253 +1,45 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted } from "vue";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
-import { resolveTheme } from "@/shared/services/ui/appearance";
+import { accentColors, useSettingsForm } from "@/features/settings/application/useSettingsForm";
+import { useRuntimePanel } from "@/features/settings/application/useRuntimePanel";
+import { useDiagnosticsPanel } from "@/shared/services/system/diagnostics";
 import { getMessages } from "@/shared/i18n";
-import type {
-  LiquidGlassStyle,
-  LocaleCode,
-  ManagedRuntimeStatus,
-  LocalAsrDevice,
-  SettingsState,
-  ThemeMode,
-} from "@/shared/types/meeting";
-
-const accentColors = [
-  "#8f96a3",
-  "#2f6dff",
-  "#a65dd9",
-  "#f062a8",
-  "#ff6a57",
-  "#ffb020",
-  "#f5dd00",
-  "#33c96f",
-] as const;
+import type { LiquidGlassStyle, LocaleCode, ThemeMode } from "@/shared/types/meeting";
 
 const store = useMeetingStore();
-const saveError = ref("");
-
-const form = reactive({
-  backendUrl: "",
-  apiToken: "",
-  defaultHotwords: "",
-  summaryTemplate: "",
-  concurrency: 2,
-  localAsrDevice: "auto" as LocalAsrDevice,
-  localAsrThreads: 0,
-  localAsrBatchSizeSeconds: 300,
-});
-
 const messages = computed(() => getMessages(store.settings.value.locale).settings);
 const shellMessages = computed(() => getMessages(store.settings.value.locale).shell);
 const commonMessages = computed(() => getMessages(store.settings.value.locale).common);
-const glassPreviewThemeClass = computed(() =>
-  resolveTheme(store.settings.value.themeMode) === "light"
-    ? "preview-glass-light"
-    : "preview-glass-dark",
-);
-
-watch(
-  () => store.settings.value,
-  (settings) => {
-    form.backendUrl = settings.backendUrl;
-    form.apiToken = settings.apiToken;
-    form.defaultHotwords = settings.defaultHotwords;
-    form.summaryTemplate = settings.summaryTemplate;
-    form.concurrency = settings.concurrency;
-    form.localAsrDevice = settings.localAsrDevice;
-    form.localAsrThreads = settings.localAsrThreads;
-    form.localAsrBatchSizeSeconds = settings.localAsrBatchSizeSeconds;
-  },
-  { immediate: true, deep: true },
-);
-
-const runtimeModeLabel = computed(() => {
-  if (store.localMode.value) {
-    return shellMessages.value.localMode;
-  }
-
-  if (store.settings.value.backendUrl) {
-    return shellMessages.value.remoteMode;
-  }
-
-  return shellMessages.value.mockModeShort;
-});
-const runtimeStatus = computed(() => store.runtimeStatus.value);
-const runtimeInstallLog = computed(() => store.runtimeInstallLog.value);
-const runtimeInstallLogReversed = computed(() => {
-  const lines = runtimeInstallLog.value
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter(Boolean);
-
-  return lines.reverse().join("\n");
-});
-const runtimeActionLabel = computed(() =>
-  runtimeStatus.value.status === "unsupported"
-    ? messages.value.runtimeStatusUnsupported
-    : runtimeStatus.value.status === "ready"
-    ? messages.value.runtimeReinstallAction
-    : runtimeStatus.value.status === "installing"
-      ? messages.value.runtimeStatusInstalling
-      : messages.value.runtimeInstallAction,
-);
-const runtimeStatusLabel = computed(() => labelForRuntimeStatus(runtimeStatus.value));
-const runtimeStatusDescription = computed(() => {
-  if (runtimeStatus.value.lastError?.trim()) {
-    return runtimeStatus.value.lastError.trim();
-  }
-
-  switch (runtimeStatus.value.status) {
-    case "ready":
-      return messages.value.runtimeDescriptionReady;
-    case "installing":
-      return messages.value.runtimeDescriptionInstalling;
-    case "failed":
-    case "repair_required":
-    case "unsupported":
-      return messages.value.runtimeDescriptionFailed;
-    default:
-      return messages.value.runtimeDescriptionMissing;
-  }
-});
-const runtimeBusy = computed(() => runtimeStatus.value.status === "installing" || runtimeStatus.value.status === "unsupported");
-const runtimeInstalledAtLabel = computed(() => formatRuntimeDate(runtimeStatus.value.installedAt));
-const runtimeInstallProgress = computed(() => {
-  const log = runtimeInstallLog.value;
-  const normalized = log.trim();
-
-  if (runtimeStatus.value.status === "ready" || normalized.includes("[runtime] install completed.")) {
-    return {
-      percent: 100,
-      label: messages.value.runtimeInstallCompleted,
-    };
-  }
-
-  let percent = runtimeStatus.value.status === "installing" ? 4 : 0;
-  let label = messages.value.runtimeInstallPreparing;
-
-  const stageProgressMatches = Array.from(
-    log.matchAll(/\[runtime\] staging progress .*?\(([\d.]+)%\)/g),
-  );
-  const lastStageProgress = stageProgressMatches.at(-1)?.[1];
-
-  if (lastStageProgress) {
-    percent = Math.max(percent, Math.min(52, Math.round(Number(lastStageProgress) * 0.52)));
-    label = messages.value.runtimeInstallDownload;
-  } else if (normalized.includes("[runtime] staging bundled ")) {
-    percent = Math.max(percent, 16);
-    label = messages.value.runtimeInstallDownload;
-  }
-
-  const stageWeights = [
-    ["[runtime] locating bundled runtime resources", 8, messages.value.runtimeInstallPreparing],
-    ["[runtime] staging bundled Python runtime", 22, messages.value.runtimeInstallDownload],
-    ["[runtime] verifying bundled asset checksum", 32, messages.value.runtimeInstallVerify],
-    ["[runtime] extracting python runtime archive", 44, messages.value.runtimeInstallExtract],
-    ["[runtime] resolved python=", 54, messages.value.runtimeInstallResolvePython],
-    ["Validating bundled Python runtime", 66, messages.value.runtimeInstallBootstrapPip],
-    ["[runtime] staging bundled FFmpeg runtime", 76, messages.value.runtimeInstallUpgradePip],
-    ["Validating ffmpeg runtime", 84, messages.value.runtimeInstallPytorch],
-    ["Downloading default ASR models", 94, messages.value.runtimeInstallModels],
-    ["Downloading default Sherpa-ONNX model", 94, messages.value.runtimeInstallModels],
-  ] as const;
-
-  for (const [pattern, stagePercent, stageLabel] of stageWeights) {
-    if (normalized.includes(pattern)) {
-      percent = Math.max(percent, stagePercent);
-      label = stageLabel;
-    }
-  }
-
-  return {
-    percent: Math.max(0, Math.min(99, percent)),
-    label,
-  };
-});
-
-function createNextSettings(patch: Partial<SettingsState> = {}): SettingsState {
-  return {
-    ...store.settings.value,
-    backendUrl: form.backendUrl,
-    apiToken: form.apiToken,
-    defaultHotwords: form.defaultHotwords,
-    summaryTemplate: form.summaryTemplate,
-    concurrency: form.concurrency,
-    localAsrDevice: form.localAsrDevice,
-    localAsrThreads: form.localAsrThreads,
-    localAsrBatchSizeSeconds: form.localAsrBatchSizeSeconds,
-    ...patch,
-  };
-}
-
-async function saveAppearance(patch: Partial<SettingsState>) {
-  saveError.value = "";
-
-  try {
-    await store.saveSettings(createNextSettings(patch));
-  } catch (error) {
-    saveError.value = error instanceof Error ? error.message : String(error);
-  }
-}
-
-async function setThemeMode(mode: ThemeMode) {
-  if (store.settings.value.themeMode === mode) {
-    return;
-  }
-
-  await saveAppearance({ themeMode: mode });
-}
-
-async function setGlassStyle(style: LiquidGlassStyle) {
-  if (store.settings.value.liquidGlassStyle === style) {
-    return;
-  }
-
-  await saveAppearance({ liquidGlassStyle: style });
-}
-
-async function setLocale(locale: LocaleCode) {
-  if (store.settings.value.locale === locale) {
-    return;
-  }
-
-  await saveAppearance({ locale });
-}
-
-async function setAccentColor(color: string) {
-  if (store.settings.value.accentColor.toLowerCase() === color) {
-    return;
-  }
-
-  await saveAppearance({ accentColor: color });
-}
-
-async function save() {
-  saveError.value = "";
-
-  try {
-    await store.saveSettings(
-      createNextSettings({
-        backendUrl: form.backendUrl.trim(),
-        apiToken: form.apiToken.trim(),
-        defaultHotwords: form.defaultHotwords.trim(),
-        summaryTemplate: form.summaryTemplate.trim(),
-        concurrency: Number(form.concurrency) || 1,
-        localAsrDevice: form.localAsrDevice,
-        localAsrThreads: Math.max(0, Number(form.localAsrThreads) || 0),
-        localAsrBatchSizeSeconds: Math.max(30, Number(form.localAsrBatchSizeSeconds) || 300),
-      }),
-    );
-  } catch (error) {
-    saveError.value = error instanceof Error ? error.message : String(error);
-  }
-}
-
-async function refreshRuntimePanel() {
-  await store.refreshRuntimeStatus();
-  await store.refreshRuntimeInstallLog();
-}
+const {
+  form,
+  saveError,
+  glassPreviewThemeClass,
+  setThemeMode,
+  setGlassStyle,
+  setLocale,
+  setAccentColor,
+  save,
+} = useSettingsForm(store);
+const {
+  runtimeModeLabel,
+  runtimeStatus,
+  runtimeInstallLogReversed,
+  runtimeActionLabel,
+  runtimeStatusLabel,
+  runtimeStatusDescription,
+  runtimeBusy,
+  runtimeInstalledAtLabel,
+  runtimeInstallProgress,
+  refreshRuntimePanel,
+} = useRuntimePanel(store, messages, shellMessages, commonMessages);
+const {
+  diagnosticsError,
+  diagnosticsRows,
+  supportedPlatformText,
+  refreshDiagnostics,
+} = useDiagnosticsPanel();
 
 async function installManagedRuntime() {
   saveError.value = "";
@@ -260,36 +52,9 @@ async function installManagedRuntime() {
   }
 }
 
-function labelForRuntimeStatus(status: ManagedRuntimeStatus) {
-  switch (status.status) {
-    case "installing":
-      return messages.value.runtimeStatusInstalling;
-    case "ready":
-      return messages.value.runtimeStatusReady;
-    case "failed":
-      return messages.value.runtimeStatusFailed;
-    case "repair_required":
-      return messages.value.runtimeStatusRepair;
-    case "unsupported":
-      return messages.value.runtimeStatusUnsupported;
-    default:
-      return messages.value.runtimeStatusMissing;
-  }
-}
-
-function formatRuntimeDate(value?: string) {
-  const normalized = value?.trim();
-  if (!normalized) {
-    return commonMessages.value.dash;
-  }
-
-  const fromMillis = Number(normalized);
-  const date = Number.isFinite(fromMillis) && fromMillis > 0 ? new Date(fromMillis) : new Date(normalized);
-  return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString(store.settings.value.locale);
-}
-
 onMounted(() => {
   void refreshRuntimePanel();
+  void refreshDiagnostics();
 });
 </script>
 
@@ -398,6 +163,35 @@ onMounted(() => {
             </div>
           </div>
         </div>
+      </article>
+    </div>
+
+    <div class="settings-group">
+      <h3 class="settings-group-title">工程诊断</h3>
+      <article class="surface settings-block runtime-card">
+        <div class="runtime-card-head">
+          <div class="runtime-card-title-wrap">
+            <span class="runtime-card-title">企业级基线</span>
+            <p class="runtime-card-hint">用于验收平台矩阵、数据库版本、运行时状态和安全基线。</p>
+          </div>
+          <button class="text-button runtime-primary-action" type="button" @click="refreshDiagnostics">
+            刷新
+          </button>
+        </div>
+
+        <div class="runtime-meta-grid diagnostics-grid">
+          <div v-for="[label, value] in diagnosticsRows" :key="label" class="runtime-meta-item">
+            <span>{{ label }}</span>
+            <strong>{{ value }}</strong>
+          </div>
+        </div>
+
+        <div v-if="supportedPlatformText" class="runtime-log">
+          <span class="runtime-log-title">发布平台矩阵</span>
+          <pre>{{ supportedPlatformText }}</pre>
+        </div>
+
+        <p v-if="diagnosticsError" class="settings-error">{{ diagnosticsError }}</p>
       </article>
     </div>
 

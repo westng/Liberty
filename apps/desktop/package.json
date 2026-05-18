@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "dev:web": "vite",
+    "typecheck": "vue-tsc --noEmit",
+    "check": "pnpm run typecheck && pnpm run build:web",
     "prepare:runtime-bundle:if-missing": "node ../../scripts/prepare-runtime-bundle.mjs --if-missing",
     "dev": "pnpm run prepare:runtime-bundle:if-missing && pnpm run dev:web",
     "build:web": "vue-tsc --noEmit && vite build",

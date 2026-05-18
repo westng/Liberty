@@ -1,4 +1,14 @@
 import { computed, reactive, toRefs } from "vue";
+import {
+  defaultSettings,
+  hasManualPythonOverride,
+  isManagedRuntimeReady,
+  normalizeSettings,
+  shouldAutoInstallManagedRuntime,
+  shouldUseLocalDataSource,
+} from "@/features/meeting/application/settingsPolicy";
+import { hasActiveLocalJobs, mergeJobSnapshot } from "@/features/meeting/application/jobSnapshots";
+import { createPollingScheduler } from "@/features/meeting/application/polling";
 import { applyAppearance } from "@/shared/services/ui/appearance";
 import { createEmptyMeetingSummary, summaryResultToMeetingSummary } from "@/shared/services/ai/storage";
 import { createLocalAiService } from "@/shared/services/tauri/ai";
@@ -14,23 +24,6 @@ import type {
   NewMeetingJobInput,
   SettingsState,
 } from "@/shared/types/meeting";
-
-const defaultSettings: SettingsState = {
-  themeMode: "auto",
-  liquidGlassStyle: "transparent",
-  accentColor: "#2f6dff",
-  locale: "zh-CN",
-  backendUrl: "",
-  apiToken: "",
-  defaultHotwords: "SeACo-Paraformer, FunASR, 会议纪要",
-  summaryTemplate: "表格版会议纪要",
-  concurrency: 2,
-  pythonPath: "",
-  runnerScriptPath: "",
-  localAsrDevice: "auto",
-  localAsrThreads: 0,
-  localAsrBatchSizeSeconds: 300,
-};
 
 const state = reactive({
   jobs: [] as MeetingJob[],
@@ -50,79 +43,12 @@ const localAiService = createLocalAiService();
 const localPetService = createLocalPetService();
 const localRuntimeService = createLocalRuntimeService();
 const localSettingsService = createLocalSettingsService();
-let localPollingId: number | null = null;
 let settingsLoadPromise: Promise<void> | null = null;
-let runtimePollingId: number | null = null;
 let runtimeInstallPromise: Promise<ManagedRuntimeStatus> | null = null;
 let runtimeAutoInstallAttempted = false;
 const hydratedJobIds = new Set<string>();
-
-function normalizeSettings(settings?: Partial<SettingsState> | null): SettingsState {
-  const merged = {
-    ...defaultSettings,
-    ...(settings ?? {}),
-  };
-
-  return {
-    ...merged,
-    themeMode: merged.themeMode === "light" || merged.themeMode === "dark" ? merged.themeMode : "auto",
-    liquidGlassStyle: merged.liquidGlassStyle === "tinted" ? "tinted" : "transparent",
-    locale: merged.locale === "en-US" ? "en-US" : "zh-CN",
-    accentColor: /^#[0-9a-fA-F]{6}$/.test(merged.accentColor.trim())
-      ? merged.accentColor.trim().toLowerCase()
-      : defaultSettings.accentColor,
-    backendUrl: merged.backendUrl.trim(),
-    apiToken: merged.apiToken.trim(),
-    defaultHotwords: merged.defaultHotwords.trim() || defaultSettings.defaultHotwords,
-    summaryTemplate:
-      merged.summaryTemplate.trim() === "默认会议纪要模板"
-        ? defaultSettings.summaryTemplate
-        : merged.summaryTemplate.trim() || defaultSettings.summaryTemplate,
-    concurrency: Math.min(8, Math.max(1, Number(merged.concurrency) || defaultSettings.concurrency)),
-    pythonPath: merged.pythonPath.trim(),
-    runnerScriptPath: merged.runnerScriptPath.trim(),
-    localAsrDevice:
-      merged.localAsrDevice === "cpu" || merged.localAsrDevice === "mps" || merged.localAsrDevice === "cuda"
-        ? merged.localAsrDevice
-        : "auto",
-    localAsrThreads: Math.min(32, Math.max(0, Number(merged.localAsrThreads) || 0)),
-    localAsrBatchSizeSeconds: Math.min(
-      1200,
-      Math.max(30, Number(merged.localAsrBatchSizeSeconds) || defaultSettings.localAsrBatchSizeSeconds),
-    ),
-  };
-}
-
-function hasManualPythonOverride(settings: SettingsState) {
-  return Boolean(settings.pythonPath.trim());
-}
-
-function shouldUseLocalDataSource(settings: SettingsState) {
-  return !settings.backendUrl.trim();
-}
-
-function isManagedRuntimeReady(runtimeStatus: ManagedRuntimeStatus) {
-  return runtimeStatus.status === "ready" && Boolean(runtimeStatus.pythonExecutablePath?.trim());
-}
-
-function shouldAutoInstallManagedRuntime(
-  settings: SettingsState,
-  runtimeStatus: ManagedRuntimeStatus,
-) {
-  if (settings.backendUrl.trim()) {
-    return false;
-  }
-
-  if (hasManualPythonOverride(settings)) {
-    return false;
-  }
-
-  if (runtimeStatus.status === "unsupported") {
-    return false;
-  }
-
-  return runtimeStatus.status === "missing" || runtimeStatus.status === "repair_required";
-}
+const localJobPolling = createPollingScheduler();
+const runtimeInstallPolling = createPollingScheduler();
 
 async function refreshLocalJobs() {
   try {
@@ -132,80 +58,26 @@ async function refreshLocalJobs() {
   }
 }
 
-function mergeJobSnapshot(existing: MeetingJob | undefined, incoming: MeetingJob) {
-  if (!existing || !hydratedJobIds.has(incoming.id)) {
-    return incoming;
-  }
-
-  return {
-    ...existing,
-    ...incoming,
-    transcriptSegments: existing.transcriptSegments,
-    speakerSegments: existing.speakerSegments,
-    summaryRuns: existing.summaryRuns,
-    processLog: existing.processLog,
-    summary: existing.summary,
-    activeSummaryRunId: existing.activeSummaryRunId,
-  } satisfies MeetingJob;
-}
-
 function applyJobListSnapshot(incomingJobs: MeetingJob[]) {
   const existingById = new Map(state.jobs.map((job) => [job.id, job]));
-  state.jobs = incomingJobs.map((job) => mergeJobSnapshot(existingById.get(job.id), job));
+  state.jobs = incomingJobs.map((job) => mergeJobSnapshot(existingById.get(job.id), job, hydratedJobIds));
   syncLocalPolling();
 }
 
 function syncLocalPolling() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
   const shouldPoll = shouldUseLocalDataSource(state.settings);
-  const hasActiveLocalJobs = state.jobs.some((job) =>
-    ["queued", "transcribing", "speaker_processing", "summarizing"].includes(job.overallStatus),
-  );
-  const pollingIntervalMs = hasActiveLocalJobs ? 1500 : 15000;
-
-  if (shouldPoll && localPollingId === null) {
-    localPollingId = window.setInterval(() => {
-      void refreshLocalJobs();
-    }, pollingIntervalMs);
-    return;
-  }
-
-  if (!shouldPoll && localPollingId !== null) {
-    window.clearInterval(localPollingId);
-    localPollingId = null;
-    return;
-  }
-
-  if (shouldPoll && localPollingId !== null) {
-    window.clearInterval(localPollingId);
-    localPollingId = window.setInterval(() => {
-      void refreshLocalJobs();
-    }, pollingIntervalMs);
-  }
+  const pollingIntervalMs = hasActiveLocalJobs(state.jobs) ? 1500 : 15000;
+  localJobPolling.sync(shouldPoll, pollingIntervalMs, () => {
+    void refreshLocalJobs();
+  });
 }
 
 function syncRuntimePolling() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
   const shouldPoll = state.runtimeStatus.status === "installing";
-
-  if (shouldPoll && runtimePollingId === null) {
-    runtimePollingId = window.setInterval(() => {
-      void refreshRuntimeStatus();
-      void refreshRuntimeInstallLog();
-    }, 1500);
-    return;
-  }
-
-  if (!shouldPoll && runtimePollingId !== null) {
-    window.clearInterval(runtimePollingId);
-    runtimePollingId = null;
-  }
+  runtimeInstallPolling.sync(shouldPoll, 1500, () => {
+    void refreshRuntimeStatus();
+    void refreshRuntimeInstallLog();
+  });
 }
 
 async function ensureSettingsLoaded(force = false) {

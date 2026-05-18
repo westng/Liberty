@@ -1,0 +1,81 @@
+@media (max-width: 1180px) {
+
+  .workspace-grid,
+  .workspace-grid-home,
+  .detail-grid,
+  .workbench-grid,
+  .management-grid,
+  .setting-row,
+  .preview-grid-2,
+  .preview-grid-3,
+  .field-grid.two-col,
+  .field-grid.three-col,
+  .metric-strip,
+  .metric-strip-tight {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell {
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    height: calc(100vh - 62px);
+    max-height: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .summary-window-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .jobs-table {
+    min-width: 0;
+  }
+
+  .jobs-table-head {
+    display: none;
+  }
+
+  .jobs-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .jobs-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .window-titlebar {
+    padding-left: 72px;
+  }
+
+  .window-titlebar-metrics {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .content-toolbar,
+  .section-heading,
+  .job-title-line,
+  .job-meta-line,
+  .timeline-head,
+  .notes-head,
+  .button-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-actions {
+    margin-left: 0;
+  }
+
+  .align-end {
+    justify-content: flex-start;
+  }
+}

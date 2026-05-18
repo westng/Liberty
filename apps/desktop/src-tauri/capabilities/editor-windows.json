@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "editor-windows-capability",
+  "description": "Editor windows can update their native titles and follow the app theme without file-system or child-window privileges.",
+  "windows": ["model-editor", "template-editor", "member-editor"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-theme",
+    "core:window:allow-set-title"
+  ]
+}

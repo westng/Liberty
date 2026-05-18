@@ -69,6 +69,7 @@ export interface AiModelConfig {
   name: string;
   baseUrl: string;
   apiKey: string;
+  apiKeyRef?: string;
   model: string;
   enabled: boolean;
   isDefault: boolean;
@@ -248,4 +249,29 @@ export interface ManagedRuntimeStatus {
 export interface ProcessMetrics {
   cpuPercent: number;
   memoryMb: number;
+}
+
+export type PlatformValidationLevel = "primary" | "extended";
+
+export interface SupportedPlatform {
+  id: string;
+  label: string;
+  rustTarget: string;
+  validationLevel: PlatformValidationLevel;
+}
+
+export interface SecurityBaselineStatus {
+  cspEnabled: boolean;
+  scopedCapabilities: boolean;
+  credentialStoreRequired: boolean;
+}
+
+export interface DiagnosticsReport {
+  appVersion: string;
+  currentPlatform?: SupportedPlatform;
+  supportedPlatforms: SupportedPlatform[];
+  databasePath?: string;
+  schemaVersion: number;
+  runtimeStatus: string;
+  securityBaseline: SecurityBaselineStatus;
 }

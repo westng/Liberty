@@ -1,9 +1,0 @@
-     Running BeforeDevCommand (`node ../../scripts/start-dev-server.mjs`)
-        Warn Waiting for your frontend dev server to start on http://127.0.0.1:5173/...
-Re-optimizing dependencies because lockfile has changed
-
-  VITE v5.4.21  ready in 3286 ms
-
-  ➜  Local:   http://127.0.0.1:5173/
-     Running DevCommand (`cargo  run --no-default-features --color always --`)
-        Info Watching /Volumes/NQJL/每日博士/开发项目/Liberty/apps/desktop/src-tauri for changes...

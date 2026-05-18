@@ -1,5 +1,7 @@
 .DS_Store
 ._*
+.tmp/
+.dev/
 node_modules/
 .pnpm-store/
 .pip-cache/

@@ -130,15 +130,13 @@ fn main() -> Result<(), DocxError> {
         .default_size(21)
         .page_margin(PageMargin::new().top(720).bottom(720).left(720).right(720))
         .add_paragraph(
-            Paragraph::new()
-                .align(AlignmentType::Center)
-                .add_run(
-                    Run::new()
-                        .add_text("标准录音 16会议纪要")
-                        .fonts(body_font.clone())
-                        .size(36)
-                        .bold(),
-                ),
+            Paragraph::new().align(AlignmentType::Center).add_run(
+                Run::new()
+                    .add_text("标准录音 16会议纪要")
+                    .fonts(body_font.clone())
+                    .size(36)
+                    .bold(),
+            ),
         )
         .add_paragraph(Paragraph::new().add_run(Run::new().add_text("")))
         .add_table(table)
@@ -170,26 +168,22 @@ fn speech_row(block: &SpeechBlock, font: &RunFonts) -> TableRow {
     let left = TableCell::new()
         .vertical_align(VAlignType::Center)
         .add_paragraph(
-            Paragraph::new()
-                .align(AlignmentType::Center)
-                .add_run(
-                    Run::new()
-                        .add_text(block.department)
-                        .fonts(font.clone())
-                        .size(24)
-                        .bold(),
-                ),
+            Paragraph::new().align(AlignmentType::Center).add_run(
+                Run::new()
+                    .add_text(block.department)
+                    .fonts(font.clone())
+                    .size(24)
+                    .bold(),
+            ),
         )
         .add_paragraph(
-            Paragraph::new()
-                .align(AlignmentType::Center)
-                .add_run(
-                    Run::new()
-                        .add_text(block.name)
-                        .fonts(font.clone())
-                        .size(24)
-                        .bold(),
-                ),
+            Paragraph::new().align(AlignmentType::Center).add_run(
+                Run::new()
+                    .add_text(block.name)
+                    .fonts(font.clone())
+                    .size(24)
+                    .bold(),
+            ),
         );
 
     let mut right = TableCell::new().vertical_align(VAlignType::Center);

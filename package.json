@@ -5,10 +5,21 @@
   "packageManager": "pnpm@10.30.3",
   "type": "module",
   "scripts": {
+    "check": "pnpm desktop:check && pnpm rust:check",
     "desktop:dev": "pnpm --dir apps/desktop dev",
     "desktop:dev:web": "pnpm --dir apps/desktop dev:web",
+    "desktop:typecheck": "pnpm --dir apps/desktop typecheck",
+    "desktop:check": "pnpm --dir apps/desktop check",
     "desktop:build:web": "pnpm --dir apps/desktop build:web",
     "desktop:build": "pnpm --dir apps/desktop build",
-    "desktop:tauri": "pnpm --dir apps/desktop tauri"
+    "desktop:tauri": "pnpm --dir apps/desktop tauri",
+    "release:check-platforms": "node scripts/check-platform-matrix.mjs",
+    "release:check-security": "node scripts/check-security-baseline.mjs",
+    "release:check-versions": "node scripts/check-version-consistency.mjs",
+    "release:check": "pnpm release:check-versions && pnpm release:check-platforms && pnpm release:check-security",
+    "rust:fmt:check": "cargo fmt --all -- --check",
+    "rust:test": "cargo test --workspace",
+    "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rust:check": "pnpm release:check && pnpm rust:fmt:check && pnpm rust:test && pnpm rust:clippy"
   }
 }

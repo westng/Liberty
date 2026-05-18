@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { usePetStore } from "@/features/pet/stores/usePetStore";
@@ -25,6 +26,7 @@ const processMetrics = ref<ProcessMetrics>({
   memoryMb: 0,
 });
 const graphicsMemoryMb = ref(0);
+const isWindowsTitlebar = ref(false);
 
 const messages = computed(() => getMessages(store.settings.value.locale));
 const navItems = computed(() => [
@@ -151,6 +153,7 @@ watch(
 
 onMounted(() => {
   void store.ensureSettingsLoaded();
+  void initializeWindowTitlebar();
   void initializePetState();
   updateGraphicsMemoryEstimate();
   syncToolbarMetricsPolling();
@@ -240,6 +243,27 @@ async function goForward() {
 
 async function openProjectGithub() {
   await openExternalUrl("https://github.com/westng/Liberty");
+}
+
+async function initializeWindowTitlebar() {
+  if (!navigator.userAgent.includes("Windows")) {
+    return;
+  }
+
+  isWindowsTitlebar.value = true;
+  await getCurrentWindow().setDecorations(false);
+}
+
+async function minimizeWindow() {
+  await getCurrentWindow().minimize();
+}
+
+async function toggleMaximizeWindow() {
+  await getCurrentWindow().toggleMaximize();
+}
+
+async function closeWindow() {
+  await getCurrentWindow().close();
 }
 
 async function initializePetState() {
@@ -358,6 +382,38 @@ function updateGraphicsMemoryEstimate() {
   <RouterView v-if="isStandaloneRoute" />
 
   <div v-else class="app-shell">
+    <div class="window-titlebar" :class="{ 'windows-titlebar': isWindowsTitlebar }" data-tauri-drag-region>
+      <div class="window-titlebar-metrics" data-tauri-drag-region>
+        <div v-for="metric in toolbarMetrics" :key="metric.key" class="toolbar-metric titlebar-metric">
+          <span class="toolbar-metric-icon" aria-hidden="true">
+            <svg v-if="metric.key === 'cpu'" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M9 2h6v2h2.5A2.5 2.5 0 0 1 20 6.5V9h2v6h-2v2.5A2.5 2.5 0 0 1 17.5 20H15v2H9v-2H6.5A2.5 2.5 0 0 1 4 17.5V15H2V9h2V6.5A2.5 2.5 0 0 1 6.5 4H9V2Zm-2.5 4a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11ZM8 8h8v8H8V8Zm2 2v4h4v-4h-4Z" />
+            </svg>
+            <svg v-else-if="metric.key === 'memory'" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Zm3-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h1v-2h2v2h4v-2h2v2h1a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1v2h-2V6h-4v2H8V6H7Zm1 4h8v4H8v-4Z" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24">
+              <path fill="currentColor" d="M3 5h18a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v7h16V7H4Z" />
+            </svg>
+          </span>
+          <span class="toolbar-metric-label">{{ metric.label }}</span>
+          <strong class="toolbar-metric-value">{{ metric.value }}</strong>
+        </div>
+      </div>
+      <div class="window-titlebar-spacer" data-tauri-drag-region></div>
+      <div v-if="isWindowsTitlebar" class="window-controls">
+        <button class="window-control" type="button" aria-label="Minimize" @click="minimizeWindow">
+          −
+        </button>
+        <button class="window-control" type="button" aria-label="Maximize" @click="toggleMaximizeWindow">
+          □
+        </button>
+        <button class="window-control window-control-close" type="button" aria-label="Close" @click="closeWindow">
+          ×
+        </button>
+      </div>
+    </div>
+
     <aside class="sidebar">
       <div class="nav-wrap">
         <header class="nav-header">
@@ -423,23 +479,6 @@ function updateGraphicsMemoryEstimate() {
             </div>
 
             <div class="toolbar-actions">
-              <div class="toolbar-metrics">
-                <div v-for="metric in toolbarMetrics" :key="metric.key" class="toolbar-metric">
-                  <span class="toolbar-metric-icon" aria-hidden="true">
-                    <svg v-if="metric.key === 'cpu'" viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M9 2h6v2h2.5A2.5 2.5 0 0 1 20 6.5V9h2v6h-2v2.5A2.5 2.5 0 0 1 17.5 20H15v2H9v-2H6.5A2.5 2.5 0 0 1 4 17.5V15H2V9h2V6.5A2.5 2.5 0 0 1 6.5 4H9V2Zm-2.5 4a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11ZM8 8h8v8H8V8Zm2 2v4h4v-4h-4Z" />
-                    </svg>
-                    <svg v-else-if="metric.key === 'memory'" viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Zm3-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h1v-2h2v2h4v-2h2v2h1a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1v2h-2V6h-4v2H8V6H7Zm1 4h8v4H8v-4Z" />
-                    </svg>
-                    <svg v-else viewBox="0 0 24 24">
-                      <path fill="currentColor" d="M3 5h18a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v7h16V7H4Z" />
-                    </svg>
-                  </span>
-                  <span class="toolbar-metric-label">{{ metric.label }}</span>
-                  <strong class="toolbar-metric-value">{{ metric.value }}</strong>
-                </div>
-              </div>
               <button
                 class="toolbar-pet-toggle"
                 type="button"

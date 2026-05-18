@@ -21,7 +21,10 @@ pub fn delete_meeting_member(app: AppHandle, id: String) -> LocalResult<()> {
 }
 
 #[tauri::command]
-pub fn import_meeting_members_excel(app: AppHandle, file_path: String) -> LocalResult<MeetingMemberImportResult> {
+pub fn import_meeting_members_excel(
+    app: AppHandle,
+    file_path: String,
+) -> LocalResult<MeetingMemberImportResult> {
     if file_path.trim().is_empty() {
         return Err("导入文件路径不能为空。".into());
     }
@@ -100,7 +103,9 @@ fn parse_members_excel(path: &Path) -> LocalResult<Vec<MeetingMember>> {
             "姓名" | "name" | "Name" => name_col = Some(index),
             "部门" | "department" | "Department" => department_col = Some(index),
             "排序" | "sortOrder" | "Sort Order" => sort_order_col = Some(index),
-            "是否设置会议记录人" | "会议记录人" | "isRecorder" | "Recorder" => recorder_col = Some(index),
+            "是否设置会议记录人" | "会议记录人" | "isRecorder" | "Recorder" => {
+                recorder_col = Some(index)
+            }
             _ => {}
         }
     }
@@ -108,7 +113,8 @@ fn parse_members_excel(path: &Path) -> LocalResult<Vec<MeetingMember>> {
     let name_col = name_col.ok_or_else(|| "Excel 缺少“姓名”列。".to_string())?;
     let department_col = department_col.ok_or_else(|| "Excel 缺少“部门”列。".to_string())?;
     let sort_order_col = sort_order_col.ok_or_else(|| "Excel 缺少“排序”列。".to_string())?;
-    let recorder_col = recorder_col.ok_or_else(|| "Excel 缺少“是否设置会议记录人”列。".to_string())?;
+    let recorder_col =
+        recorder_col.ok_or_else(|| "Excel 缺少“是否设置会议记录人”列。".to_string())?;
 
     let mut rows = Vec::new();
     let mut seen_names = HashSet::new();
@@ -124,7 +130,11 @@ fn parse_members_excel(path: &Path) -> LocalResult<Vec<MeetingMember>> {
         let sort_order_text = cell_to_string(row.get(sort_order_col).unwrap_or(&Data::Empty));
         let recorder_text = cell_to_string(row.get(recorder_col).unwrap_or(&Data::Empty));
 
-        if name.is_empty() && department.is_empty() && sort_order_text.trim().is_empty() && recorder_text.trim().is_empty() {
+        if name.is_empty()
+            && department.is_empty()
+            && sort_order_text.trim().is_empty()
+            && recorder_text.trim().is_empty()
+        {
             continue;
         }
 

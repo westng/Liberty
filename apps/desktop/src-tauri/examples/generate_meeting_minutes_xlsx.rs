@@ -1,6 +1,4 @@
-use rust_xlsxwriter::{
-    Color, Format, FormatAlign, FormatBorder, Workbook, Worksheet, XlsxError,
-};
+use rust_xlsxwriter::{Color, Format, FormatAlign, FormatBorder, Workbook, Worksheet, XlsxError};
 
 #[derive(Clone)]
 struct SpeechBlock {
@@ -61,7 +59,14 @@ fn main() -> Result<(), XlsxError> {
     worksheet.set_row_height(0, 32)?;
 
     let mut row = 2u32;
-    write_kv(worksheet, &mut row, "会议名称", "标准录音 16", &label, &value)?;
+    write_kv(
+        worksheet,
+        &mut row,
+        "会议名称",
+        "标准录音 16",
+        &label,
+        &value,
+    )?;
     write_kv(worksheet, &mut row, "会议时间", "待补充", &label, &value)?;
     write_kv(worksheet, &mut row, "会议地点", "待补充", &label, &value)?;
     write_kv(worksheet, &mut row, "记录人", "待补充", &label, &value)?;

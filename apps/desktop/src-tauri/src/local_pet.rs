@@ -78,7 +78,10 @@ pub fn save_pet_settings(app: AppHandle, input: SavePetSettingsInput) -> LocalRe
 }
 
 #[tauri::command]
-pub fn list_pet_event_ledger(app: AppHandle, limit: Option<usize>) -> LocalResult<Vec<PetEventLedgerEntry>> {
+pub fn list_pet_event_ledger(
+    app: AppHandle,
+    limit: Option<usize>,
+) -> LocalResult<Vec<PetEventLedgerEntry>> {
     local_db::list_pet_event_ledger(&app, limit.unwrap_or(20).clamp(1, 100))
 }
 
@@ -88,7 +91,10 @@ pub fn list_pet_cosmetic_unlocks(app: AppHandle) -> LocalResult<Vec<PetCosmeticU
 }
 
 #[tauri::command]
-pub fn apply_pet_interaction(app: AppHandle, input: PetInteractionInput) -> LocalResult<PetProfile> {
+pub fn apply_pet_interaction(
+    app: AppHandle,
+    input: PetInteractionInput,
+) -> LocalResult<PetProfile> {
     let normalized = input.action.trim().to_lowercase();
     let (event_value, mood) = match normalized.as_str() {
         "pet" => (2, "cheerful"),
@@ -108,7 +114,10 @@ pub fn apply_pet_interaction(app: AppHandle, input: PetInteractionInput) -> Loca
 }
 
 #[tauri::command]
-pub fn apply_pet_workflow_event(app: AppHandle, input: PetWorkflowEventInput) -> LocalResult<PetProfile> {
+pub fn apply_pet_workflow_event(
+    app: AppHandle,
+    input: PetWorkflowEventInput,
+) -> LocalResult<PetProfile> {
     let normalized = input.event_type.trim().to_lowercase();
     let metadata = if input.metadata.trim().is_empty() {
         None

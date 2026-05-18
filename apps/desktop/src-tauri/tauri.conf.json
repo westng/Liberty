@@ -35,11 +35,17 @@
         "height": 960,
         "minWidth": 1100,
         "minHeight": 760,
-        "resizable": true
+        "resizable": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 28
+        }
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost https: http://127.0.0.1:* ws://127.0.0.1:*"
     }
   }
 }

@@ -1,4 +1,8 @@
+mod application;
+mod commands;
 mod desktop_pet;
+mod domain;
+mod infrastructure;
 mod local_ai;
 mod local_db;
 mod local_export;
@@ -16,11 +20,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            desktop_pet::manage_desktop_pet_state(&app.handle());
-            desktop_pet::sync_desktop_pet_on_startup(&app.handle());
+            desktop_pet::manage_desktop_pet_state(app.handle());
+            desktop_pet::sync_desktop_pet_on_startup(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::diagnostics::get_diagnostics,
             local_ai::delete_ai_model,
             local_ai::delete_ai_summary_run,
             local_ai::delete_ai_template,

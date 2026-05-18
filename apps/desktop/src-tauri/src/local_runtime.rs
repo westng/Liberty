@@ -1,58 +1,32 @@
-use crate::local_db::{self, LocalResult, ManagedRuntimeState};
-use crate::process_utils::configure_background_process;
-use chrono::Utc;
-use flate2::read::GzDecoder;
-use sevenz_rust2::decompress_file;
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
-    sync::mpsc,
-    sync::atomic::{AtomicBool, Ordering},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
-};
-use tauri::{AppHandle, Manager};
-use zip::ZipArchive;
+mod archive;
+mod logging;
+mod manifest;
+mod paths;
+mod process;
 
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use crate::local_db::{self, LocalResult, ManagedRuntimeState};
+use std::{
+    fs,
+    path::Path,
+    process::Command,
+    sync::atomic::{AtomicBool, Ordering},
+};
+use tauri::AppHandle;
+
+use archive::{
+    extract_archive, reset_runtime_workspace, stage_bundled_asset, verify_bundled_asset_sha256,
+};
+use logging::{
+    append_install_log_line, runtime_log_path, runtime_platform_root, unix_timestamp_millis,
+};
+use manifest::{current_platform_id, current_platform_manifest, load_manifest, RuntimeManifest};
+use paths::{
+    ensure_unix_executable, resolve_bundled_runtime_resource_path, resolve_ffmpeg_executable,
+    resolve_managed_ffmpeg_path, resolve_python_executable, resolve_script_resource_path,
+};
+use process::{run_command_with_log, validate_ffmpeg_runtime, warmup_default_models};
 
 static RUNTIME_INSTALLING: AtomicBool = AtomicBool::new(false);
-const RUNTIME_MANIFEST_JSON: &str = include_str!("../resources/runtime-manifest.json");
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RuntimeManifest {
-    runtime_version: String,
-    python_version: String,
-    platforms: Vec<PlatformRuntime>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct PlatformRuntime {
-    platform_id: String,
-    asr_backend: Option<String>,
-    unsupported_reason: Option<String>,
-    python_bundle: Option<BundledAsset>,
-    #[serde(default)]
-    python_executable_candidates: Vec<String>,
-    ffmpeg_bundle: Option<BundledAsset>,
-    #[serde(default)]
-    ffmpeg_executable_candidates: Vec<String>,
-    models_bundle: Option<BundledAsset>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct BundledAsset {
-    file_name: String,
-    #[serde(default)]
-    sha256: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct ResolvedPythonRuntime {
@@ -187,36 +161,10 @@ fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
         changed = true;
     }
 
-    if state.status == "ready" {
-        let platform = current_platform_manifest(&manifest)?;
-        let python_missing = state
-            .python_executable_path
-            .as_deref()
-            .map(Path::new)
-            .map(|path| !path.is_file())
-            .unwrap_or(true);
-        let models_missing = state
-            .models_root
-            .as_deref()
-            .map(Path::new)
-            .map(|path| !path.is_dir())
-            .unwrap_or(true);
-        let ffmpeg_missing = if platform.ffmpeg_bundle.is_some() {
-            state
-                .install_root
-                .as_deref()
-                .and_then(|value| resolve_managed_ffmpeg_path(Path::new(value)).ok())
-                .flatten()
-                .is_none()
-        } else {
-            false
-        };
-
-        if python_missing || models_missing || ffmpeg_missing {
-            state.status = "repair_required".into();
-            state.last_error = Some("本地运行环境不完整，请重新安装。".into());
-            changed = true;
-        }
+    if state.status == "ready" && runtime_artifacts_missing(&state, &manifest)? {
+        state.status = "repair_required".into();
+        state.last_error = Some("本地运行环境不完整，请重新安装。".into());
+        changed = true;
     }
 
     if state.status == "installing" && !RUNTIME_INSTALLING.load(Ordering::SeqCst) {
@@ -235,6 +183,41 @@ fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
     Ok(state)
 }
 
+pub fn detect_runtime_state_for_diagnostics(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
+    detect_runtime_state(app)
+}
+
+fn runtime_artifacts_missing(
+    state: &ManagedRuntimeState,
+    manifest: &RuntimeManifest,
+) -> LocalResult<bool> {
+    let platform = current_platform_manifest(manifest)?;
+    let python_missing = state
+        .python_executable_path
+        .as_deref()
+        .map(Path::new)
+        .map(|path| !path.is_file())
+        .unwrap_or(true);
+    let models_missing = state
+        .models_root
+        .as_deref()
+        .map(Path::new)
+        .map(|path| !path.is_dir())
+        .unwrap_or(true);
+    let ffmpeg_missing = if platform.ffmpeg_bundle.is_some() {
+        state
+            .install_root
+            .as_deref()
+            .and_then(|value| resolve_managed_ffmpeg_path(Path::new(value)).ok())
+            .flatten()
+            .is_none()
+    } else {
+        false
+    };
+
+    Ok(python_missing || models_missing || ffmpeg_missing)
+}
+
 fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     let manifest = load_manifest()?;
     let platform = current_platform_manifest(&manifest)?;
@@ -246,7 +229,6 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
     let models_root = runtime_root.join("models");
     let log_path = runtime_log_path(app, &platform_id)?;
     let manifest_path = runtime_root.join("manifest.json");
-
     let had_models = models_root.is_dir();
 
     reset_runtime_workspace(
@@ -256,40 +238,106 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
         &ffmpeg_root,
         &manifest_path,
     )?;
-    append_install_log_line(
+    append_runtime_header(&log_path, &platform_id, &manifest)?;
+
+    let python_executable = install_python_runtime(
+        app,
+        &platform,
+        &platform_id,
+        &runtime_root,
+        &downloads_root,
         &log_path,
+    )?;
+    install_ffmpeg_runtime(
+        app,
+        &platform,
+        &platform_id,
+        &runtime_root,
+        &downloads_root,
+        &log_path,
+    )?;
+    install_or_reuse_models(ModelInstallContext {
+        app,
+        platform: &platform,
+        platform_id: &platform_id,
+        runtime_root: &runtime_root,
+        downloads_root: &downloads_root,
+        models_root: &models_root,
+        python_executable: &python_executable,
+        had_models,
+        log_path: &log_path,
+    })?;
+
+    if !models_root.is_dir() {
+        return Err("未找到托管运行环境中的本地 ASR 模型目录。".into());
+    }
+
+    let state = build_ready_runtime_state(
+        platform_id,
+        manifest,
+        &python_executable,
+        &models_root,
+        &runtime_root,
+        &log_path,
+    );
+    fs::write(
+        manifest_path,
+        serde_json::to_vec_pretty(&state).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?;
+    local_db::save_runtime_state(app, &state)?;
+    append_install_log_line(&log_path, "[runtime] install completed.")?;
+    Ok(())
+}
+
+fn append_runtime_header(
+    log_path: &Path,
+    platform_id: &str,
+    manifest: &RuntimeManifest,
+) -> LocalResult<()> {
+    append_install_log_line(
+        log_path,
         &format!(
             "[runtime] platform={} runtime_version={} python_version={}",
             platform_id, manifest.runtime_version, manifest.python_version
         ),
     )?;
-    append_install_log_line(&log_path, "[runtime] locating bundled runtime resources")?;
+    append_install_log_line(log_path, "[runtime] locating bundled runtime resources")
+}
 
+fn install_python_runtime(
+    app: &AppHandle,
+    platform: &manifest::PlatformRuntime,
+    platform_id: &str,
+    runtime_root: &Path,
+    downloads_root: &Path,
+    log_path: &Path,
+) -> LocalResult<std::path::PathBuf> {
     let python_bundle = platform
         .python_bundle
         .as_ref()
         .ok_or_else(|| format!("当前平台缺少内置 Python 运行时配置：{platform_id}"))?;
     let python_bundle_resource =
-        resolve_bundled_runtime_resource_path(app, &platform_id, &python_bundle.file_name)?;
+        resolve_bundled_runtime_resource_path(app, platform_id, &python_bundle.file_name)?;
     let python_bundle_path = downloads_root.join(&python_bundle.file_name);
     stage_bundled_asset(
         &python_bundle_resource,
         &python_bundle_path,
-        &log_path,
+        log_path,
         "staging bundled Python runtime",
     )?;
-    verify_bundled_asset_sha256(&python_bundle_path, &python_bundle.sha256, &log_path)?;
+    verify_bundled_asset_sha256(&python_bundle_path, &python_bundle.sha256, log_path)?;
     extract_archive(
         &python_bundle_path,
-        &runtime_root,
-        &log_path,
+        runtime_root,
+        log_path,
         "extracting python runtime archive",
     )?;
 
-    let python_executable = resolve_python_executable(&runtime_root, &platform)?;
+    let python_executable = resolve_python_executable(runtime_root, platform)?;
     ensure_unix_executable(&python_executable)?;
     append_install_log_line(
-        &log_path,
+        log_path,
         &format!("[runtime] resolved python={}", python_executable.display()),
     )?;
 
@@ -302,77 +350,116 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
                 platform.asr_backend.as_deref().unwrap_or("funasr"),
             )
             .arg(&validate_path),
-        &log_path,
+        log_path,
         "Validating bundled Python runtime",
     )?;
 
-    if let Some(ffmpeg_bundle) = &platform.ffmpeg_bundle {
-        let ffmpeg_bundle_resource =
-            resolve_bundled_runtime_resource_path(app, &platform_id, &ffmpeg_bundle.file_name)?;
-        let ffmpeg_bundle_path = downloads_root.join(&ffmpeg_bundle.file_name);
-        stage_bundled_asset(
-            &ffmpeg_bundle_resource,
-            &ffmpeg_bundle_path,
-            &log_path,
-            "staging bundled FFmpeg runtime",
-        )?;
-        verify_bundled_asset_sha256(&ffmpeg_bundle_path, &ffmpeg_bundle.sha256, &log_path)?;
-        extract_archive(
-            &ffmpeg_bundle_path,
-            &runtime_root,
-            &log_path,
-            "extracting ffmpeg archive",
-        )?;
-        if let Some(ffmpeg_executable) = resolve_ffmpeg_executable(&runtime_root, &platform) {
-            ensure_unix_executable(&ffmpeg_executable)?;
-            append_install_log_line(
-                &log_path,
-                &format!("[runtime] resolved ffmpeg={}", ffmpeg_executable.display()),
-            )?;
-            validate_ffmpeg_runtime(&ffmpeg_executable, &log_path)?;
-        } else {
-            return Err("未找到托管运行环境中的 ffmpeg 可执行文件。".into());
-        }
-    }
+    Ok(python_executable)
+}
 
-    if let Some(models_bundle) = &platform.models_bundle {
-        let models_bundle_resource =
-            resolve_bundled_runtime_resource_path(app, &platform_id, &models_bundle.file_name)?;
-        let models_bundle_path = downloads_root.join(&models_bundle.file_name);
+fn install_ffmpeg_runtime(
+    app: &AppHandle,
+    platform: &manifest::PlatformRuntime,
+    platform_id: &str,
+    runtime_root: &Path,
+    downloads_root: &Path,
+    log_path: &Path,
+) -> LocalResult<()> {
+    let Some(ffmpeg_bundle) = &platform.ffmpeg_bundle else {
+        return Ok(());
+    };
+
+    let ffmpeg_bundle_resource =
+        resolve_bundled_runtime_resource_path(app, platform_id, &ffmpeg_bundle.file_name)?;
+    let ffmpeg_bundle_path = downloads_root.join(&ffmpeg_bundle.file_name);
+    stage_bundled_asset(
+        &ffmpeg_bundle_resource,
+        &ffmpeg_bundle_path,
+        log_path,
+        "staging bundled FFmpeg runtime",
+    )?;
+    verify_bundled_asset_sha256(&ffmpeg_bundle_path, &ffmpeg_bundle.sha256, log_path)?;
+    extract_archive(
+        &ffmpeg_bundle_path,
+        runtime_root,
+        log_path,
+        "extracting ffmpeg archive",
+    )?;
+
+    let ffmpeg_executable = resolve_ffmpeg_executable(runtime_root, platform)
+        .ok_or_else(|| "未找到托管运行环境中的 ffmpeg 可执行文件。".to_string())?;
+    ensure_unix_executable(&ffmpeg_executable)?;
+    append_install_log_line(
+        log_path,
+        &format!("[runtime] resolved ffmpeg={}", ffmpeg_executable.display()),
+    )?;
+    validate_ffmpeg_runtime(&ffmpeg_executable, log_path)
+}
+
+struct ModelInstallContext<'a> {
+    app: &'a AppHandle,
+    platform: &'a manifest::PlatformRuntime,
+    platform_id: &'a str,
+    runtime_root: &'a Path,
+    downloads_root: &'a Path,
+    models_root: &'a Path,
+    python_executable: &'a Path,
+    had_models: bool,
+    log_path: &'a Path,
+}
+
+fn install_or_reuse_models(context: ModelInstallContext<'_>) -> LocalResult<()> {
+    if let Some(models_bundle) = &context.platform.models_bundle {
+        let models_bundle_resource = resolve_bundled_runtime_resource_path(
+            context.app,
+            context.platform_id,
+            &models_bundle.file_name,
+        )?;
+        let models_bundle_path = context.downloads_root.join(&models_bundle.file_name);
         stage_bundled_asset(
             &models_bundle_resource,
             &models_bundle_path,
-            &log_path,
+            context.log_path,
             "staging bundled ASR models",
         )?;
-        verify_bundled_asset_sha256(&models_bundle_path, &models_bundle.sha256, &log_path)?;
+        verify_bundled_asset_sha256(&models_bundle_path, &models_bundle.sha256, context.log_path)?;
         extract_archive(
             &models_bundle_path,
-            &runtime_root,
-            &log_path,
+            context.runtime_root,
+            context.log_path,
             "extracting models archive",
         )?;
-        append_install_log_line(&log_path, "[runtime] validating bundled models root")?;
-    } else if had_models {
-        append_install_log_line(&log_path, "[runtime] reusing existing ASR models")?;
-    } else {
-        let backend = platform.asr_backend.as_deref().unwrap_or("funasr");
-        let warmup_path = resolve_script_resource_path(app, "runtime_warmup.py")?;
-        warmup_default_models(
-            &python_executable,
-            &warmup_path,
-            &models_root,
-            backend,
-            &log_path,
-        )?;
+        return append_install_log_line(
+            context.log_path,
+            "[runtime] validating bundled models root",
+        );
     }
 
-    if !models_root.is_dir() {
-        return Err("未找到托管运行环境中的本地 ASR 模型目录。".into());
+    if context.had_models {
+        return append_install_log_line(context.log_path, "[runtime] reusing existing ASR models");
     }
 
+    let backend = context.platform.asr_backend.as_deref().unwrap_or("funasr");
+    let warmup_path = resolve_script_resource_path(context.app, "runtime_warmup.py")?;
+    warmup_default_models(
+        context.python_executable,
+        &warmup_path,
+        context.models_root,
+        backend,
+        context.log_path,
+    )
+}
+
+fn build_ready_runtime_state(
+    platform_id: String,
+    manifest: RuntimeManifest,
+    python_executable: &Path,
+    models_root: &Path,
+    runtime_root: &Path,
+    log_path: &Path,
+) -> ManagedRuntimeState {
     let now = unix_timestamp_millis().to_string();
-    let state = ManagedRuntimeState {
+    ManagedRuntimeState {
         platform_id,
         runtime_version: manifest.runtime_version,
         python_version: manifest.python_version,
@@ -384,15 +471,7 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
         installed_at: Some(now.clone()),
         updated_at: now,
         last_log_path: Some(log_path.to_string_lossy().into_owned()),
-    };
-    fs::write(
-        manifest_path,
-        serde_json::to_vec_pretty(&state).map_err(|err| err.to_string())?,
-    )
-    .map_err(|err| err.to_string())?;
-    local_db::save_runtime_state(app, &state)?;
-    append_install_log_line(&log_path, "[runtime] install completed.")?;
-    Ok(())
+    }
 }
 
 fn current_runtime_backend(_app: &AppHandle) -> LocalResult<String> {
@@ -418,549 +497,6 @@ fn mark_install_failed(app: &AppHandle, error: &str) -> LocalResult<()> {
     state.updated_at = unix_timestamp_millis().to_string();
     state.last_log_path = Some(log_path.to_string_lossy().into_owned());
     local_db::save_runtime_state(app, &state)
-}
-
-fn run_command_with_log(
-    command: &mut Command,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    command
-        .env("PYTHONUNBUFFERED", "1")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    configure_background_process(command);
-
-    let mut child = command.spawn().map_err(|err| err.to_string())?;
-    let status = stream_command_output(log_path, &mut child)?;
-
-    if status.success() {
-        return Ok(());
-    }
-
-    Err(format!(
-        "{description} 失败，退出码 {}。",
-        status.code().unwrap_or(-1)
-    ))
-}
-
-fn stream_command_output(
-    log_path: &Path,
-    child: &mut std::process::Child,
-) -> LocalResult<ExitStatus> {
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "运行时安装进程未返回 stdout 管道。".to_string())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "运行时安装进程未返回 stderr 管道。".to_string())?;
-    let (tx, rx) = mpsc::channel::<Vec<u8>>();
-
-    spawn_install_log_reader(stdout, tx.clone());
-    spawn_install_log_reader(stderr, tx.clone());
-    drop(tx);
-
-    while let Ok(chunk) = rx.recv() {
-        append_install_log(log_path, &chunk)?;
-    }
-
-    child.wait().map_err(|err| err.to_string())
-}
-
-fn spawn_install_log_reader<R>(mut stream: R, tx: mpsc::Sender<Vec<u8>>)
-where
-    R: Read + Send + 'static,
-{
-    std::thread::spawn(move || {
-        let mut buffer = [0u8; 4096];
-        loop {
-            match stream.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(read) => {
-                    if tx.send(buffer[..read].to_vec()).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    });
-}
-
-fn warmup_default_models(
-    python_executable: &Path,
-    warmup_path: &Path,
-    models_root: &Path,
-    asr_backend: &str,
-    log_path: &Path,
-) -> LocalResult<()> {
-    run_command_with_log(
-        Command::new(python_executable)
-            .env("PYTHONUTF8", "1")
-            .env("LIBERTY_ASR_BACKEND", asr_backend)
-            .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
-            .env("HF_HOME", models_root.join("huggingface"))
-            .env("TORCH_HOME", models_root.join("torch"))
-            .arg(warmup_path)
-            .arg("--models-root")
-            .arg(models_root),
-        log_path,
-        "Downloading default ASR models",
-    )
-}
-
-fn reset_runtime_workspace(
-    runtime_root: &Path,
-    downloads_root: &Path,
-    python_root: &Path,
-    ffmpeg_root: &Path,
-    manifest_path: &Path,
-) -> LocalResult<()> {
-    fs::create_dir_all(runtime_root).map_err(|err| err.to_string())?;
-
-    for path in [downloads_root, python_root, ffmpeg_root] {
-        if path.exists() {
-            fs::remove_dir_all(path).map_err(|err| err.to_string())?;
-        }
-    }
-
-    if manifest_path.exists() {
-        fs::remove_file(manifest_path).map_err(|err| err.to_string())?;
-    }
-
-    fs::create_dir_all(downloads_root).map_err(|err| err.to_string())?;
-    fs::write(runtime_root.join("install.log"), []).map_err(|err| err.to_string())
-}
-
-fn stage_bundled_asset(
-    source_path: &Path,
-    target_path: &Path,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    let total_bytes = source_path
-        .metadata()
-        .map_err(|err| err.to_string())?
-        .len();
-    append_install_log_line(
-        log_path,
-        &format!(
-            "[runtime] bundled asset size {} MB from {}",
-            bytes_to_mb(total_bytes),
-            source_path.display()
-        ),
-    )?;
-
-    let temp_path = target_path.with_extension("copying");
-    let _ = fs::remove_file(&temp_path);
-    let _ = fs::remove_file(target_path);
-
-    let mut source = File::open(source_path).map_err(|err| err.to_string())?;
-    let mut target = File::create(&temp_path).map_err(|err| err.to_string())?;
-    let mut buffer = vec![0u8; 1024 * 1024];
-    let mut copied_bytes: u64 = 0;
-    let mut last_logged_bytes: u64 = 0;
-    let mut last_log_at = Instant::now();
-
-    loop {
-        let read = source.read(&mut buffer).map_err(|err| err.to_string())?;
-        if read == 0 {
-            break;
-        }
-
-        target
-            .write_all(&buffer[..read])
-            .map_err(|err| err.to_string())?;
-        copied_bytes += read as u64;
-
-        let should_log = copied_bytes.saturating_sub(last_logged_bytes) >= 64 * 1024 * 1024
-            || last_log_at.elapsed() >= Duration::from_secs(5);
-        if should_log && total_bytes > 0 {
-            append_install_log_line(
-                log_path,
-                &format!(
-                    "[runtime] staging progress {} / {} MB ({:.1}%)",
-                    bytes_to_mb(copied_bytes),
-                    bytes_to_mb(total_bytes),
-                    copied_bytes as f64 / total_bytes as f64 * 100.0
-                ),
-            )?;
-            last_logged_bytes = copied_bytes;
-            last_log_at = Instant::now();
-        }
-    }
-
-    target.flush().map_err(|err| err.to_string())?;
-    target.sync_all().map_err(|err| err.to_string())?;
-    fs::rename(&temp_path, target_path).map_err(|err| err.to_string())
-}
-
-fn bytes_to_mb(value: u64) -> String {
-    format!("{:.1}", value as f64 / 1024.0 / 1024.0)
-}
-
-fn verify_bundled_asset_sha256(path: &Path, expected: &str, log_path: &Path) -> LocalResult<()> {
-    if expected.trim().is_empty() {
-        return Ok(());
-    }
-
-    append_install_log_line(log_path, "[runtime] verifying bundled asset checksum")?;
-    let mut file = File::open(path).map_err(|err| err.to_string())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-
-    loop {
-        let read = file.read(&mut buffer).map_err(|err| err.to_string())?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-
-    let digest = format!("{:x}", hasher.finalize());
-    if digest.eq_ignore_ascii_case(expected) {
-        return Ok(());
-    }
-
-    Err(format!("运行时资源校验失败，期望 {expected}，实际 {digest}。"))
-}
-
-fn extract_archive(
-    archive_path: &Path,
-    destination: &Path,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    let file_name = archive_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_default();
-
-    if file_name.ends_with(".tar.gz") {
-        return extract_tar_gz(archive_path, destination, log_path, description);
-    }
-
-    if file_name.ends_with(".zip") {
-        return extract_zip(archive_path, destination, log_path, description);
-    }
-
-    if file_name.ends_with(".7z") {
-        return extract_7z(archive_path, destination, log_path, description);
-    }
-
-    if file_name.ends_with(".gz") {
-        return extract_gzip_file(archive_path, destination, log_path, description);
-    }
-
-    Err(format!(
-        "不支持的运行时压缩包格式：{}",
-        archive_path.display()
-    ))
-}
-
-fn extract_zip(
-    archive_path: &Path,
-    destination: &Path,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
-    let archive_file = File::open(archive_path).map_err(|err| err.to_string())?;
-    let mut archive = ZipArchive::new(archive_file).map_err(|err| err.to_string())?;
-
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index).map_err(|err| err.to_string())?;
-        let Some(entry_name) = entry.enclosed_name().map(|value| value.to_path_buf()) else {
-            continue;
-        };
-        let output_path = destination.join(entry_name);
-
-        if entry.name().ends_with('/') {
-            fs::create_dir_all(&output_path).map_err(|err| err.to_string())?;
-            continue;
-        }
-
-        if let Some(parent) = output_path.parent() {
-            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-        }
-
-        let mut output = File::create(&output_path).map_err(|err| err.to_string())?;
-        std::io::copy(&mut entry, &mut output).map_err(|err| err.to_string())?;
-        output.flush().map_err(|err| err.to_string())?;
-        apply_zip_entry_permissions(&output_path, entry.unix_mode())?;
-    }
-
-    Ok(())
-}
-
-fn extract_7z(
-    archive_path: &Path,
-    destination: &Path,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
-    decompress_file(archive_path, destination).map_err(|err| err.to_string())
-}
-
-fn extract_gzip_file(
-    archive_path: &Path,
-    destination: &Path,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    fs::create_dir_all(destination).map_err(|err| err.to_string())?;
-    let output_name = archive_path
-        .file_stem()
-        .ok_or_else(|| format!("无法推断压缩包输出文件名：{}", archive_path.display()))?;
-    let output_path = destination.join(output_name);
-    let input = File::open(archive_path).map_err(|err| err.to_string())?;
-    let mut decoder = GzDecoder::new(input);
-    let mut output = File::create(&output_path).map_err(|err| err.to_string())?;
-    std::io::copy(&mut decoder, &mut output).map_err(|err| err.to_string())?;
-    output.flush().map_err(|err| err.to_string())?;
-    Ok(())
-}
-
-fn validate_ffmpeg_runtime(ffmpeg_path: &Path, log_path: &Path) -> LocalResult<()> {
-    run_command_with_log(
-        Command::new(ffmpeg_path)
-            .arg("-hide_banner")
-            .arg("-version"),
-        log_path,
-        "Validating ffmpeg runtime",
-    )
-}
-
-fn apply_zip_entry_permissions(output_path: &Path, unix_mode: Option<u32>) -> LocalResult<()> {
-    #[cfg(unix)]
-    {
-        if let Some(mode) = unix_mode {
-            fs::set_permissions(output_path, fs::Permissions::from_mode(mode))
-                .map_err(|err| err.to_string())?;
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = output_path;
-        let _ = unix_mode;
-    }
-
-    Ok(())
-}
-
-fn extract_tar_gz(
-    archive_path: &Path,
-    destination: &Path,
-    log_path: &Path,
-    description: &str,
-) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    let archive_file = File::open(archive_path).map_err(|err| err.to_string())?;
-    let decoder = GzDecoder::new(archive_file);
-    let mut archive = tar::Archive::new(decoder);
-    archive.set_preserve_mtime(false);
-    archive.unpack(destination).map_err(|err| err.to_string())
-}
-
-fn resolve_python_executable(
-    runtime_root: &Path,
-    platform: &PlatformRuntime,
-) -> LocalResult<PathBuf> {
-    for candidate in &platform.python_executable_candidates {
-        let path = runtime_root.join(candidate);
-        if path.is_file() {
-            return Ok(path);
-        }
-    }
-
-    Err("未找到托管运行环境中的 Python 可执行文件。".into())
-}
-
-fn resolve_ffmpeg_executable(runtime_root: &Path, platform: &PlatformRuntime) -> Option<PathBuf> {
-    for candidate in &platform.ffmpeg_executable_candidates {
-        let path = runtime_root.join(candidate);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-
-    None
-}
-
-fn resolve_managed_ffmpeg_path(runtime_root: &Path) -> LocalResult<Option<PathBuf>> {
-    let manifest = load_manifest()?;
-    let platform = current_platform_manifest(&manifest)?;
-    let ffmpeg_path = resolve_ffmpeg_executable(runtime_root, &platform);
-    if let Some(path) = ffmpeg_path.as_ref() {
-        ensure_unix_executable(path)?;
-    }
-    Ok(ffmpeg_path)
-}
-
-fn ensure_unix_executable(path: &Path) -> LocalResult<()> {
-    #[cfg(unix)]
-    {
-        let metadata = fs::metadata(path).map_err(|err| err.to_string())?;
-        let mut permissions = metadata.permissions();
-        let mode = permissions.mode();
-        if mode & 0o111 == 0 {
-            permissions.set_mode(mode | 0o755);
-            fs::set_permissions(path, permissions).map_err(|err| err.to_string())?;
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-    }
-
-    Ok(())
-}
-
-fn resolve_script_resource_path(app: &AppHandle, file_name: &str) -> LocalResult<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("scripts").join(file_name));
-        candidates.push(resource_dir.join(file_name));
-        candidates.push(resource_dir.join("_up_").join("scripts").join(file_name));
-    }
-
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    candidates.push(manifest_dir.join("../../../python/funasr-runner").join(file_name));
-
-    if let Ok(current_dir) = std::env::current_dir() {
-        candidates.push(current_dir.join("../../python/funasr-runner").join(file_name));
-        candidates.push(current_dir.join("python/funasr-runner").join(file_name));
-    }
-
-    if let Ok(executable_path) = std::env::current_exe() {
-        if let Some(executable_dir) = executable_path.parent() {
-            candidates.push(executable_dir.join("scripts").join(file_name));
-            candidates.push(executable_dir.join("../Resources/scripts").join(file_name));
-            candidates.push(executable_dir.join("../Resources").join(file_name));
-        }
-    }
-
-    for candidate in candidates {
-        if candidate.is_file() {
-            return Ok(candidate.canonicalize().unwrap_or(candidate));
-        }
-    }
-
-    Err(format!("未找到内置脚本资源：{file_name}"))
-}
-
-fn resolve_bundled_runtime_resource_path(
-    app: &AppHandle,
-    platform_id: &str,
-    file_name: &str,
-) -> LocalResult<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(
-            resource_dir
-                .join("runtime-bundles")
-                .join(platform_id)
-                .join(file_name),
-        );
-        candidates.push(
-            resource_dir
-                .join("_up_")
-                .join("runtime-bundles")
-                .join(platform_id)
-                .join(file_name),
-        );
-    }
-
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    candidates.push(
-        manifest_dir
-            .join("../../../runtime-bundles")
-            .join(platform_id)
-            .join(file_name),
-    );
-
-    if let Ok(current_dir) = std::env::current_dir() {
-        candidates.push(
-            current_dir
-                .join("../../runtime-bundles")
-                .join(platform_id)
-                .join(file_name),
-        );
-        candidates.push(
-            current_dir
-                .join("runtime-bundles")
-                .join(platform_id)
-                .join(file_name),
-        );
-    }
-
-    if let Ok(executable_path) = std::env::current_exe() {
-        if let Some(executable_dir) = executable_path.parent() {
-            candidates.push(
-                executable_dir
-                    .join("runtime-bundles")
-                    .join(platform_id)
-                    .join(file_name),
-            );
-            candidates.push(
-                executable_dir
-                    .join("../Resources/runtime-bundles")
-                    .join(platform_id)
-                    .join(file_name),
-            );
-        }
-    }
-
-    for candidate in candidates {
-        if candidate.is_file() {
-            return Ok(candidate.canonicalize().unwrap_or(candidate));
-        }
-    }
-
-    Err(format!(
-        "未找到当前平台的内置运行时资源：runtime-bundles/{platform_id}/{file_name}"
-    ))
-}
-
-fn load_manifest() -> LocalResult<RuntimeManifest> {
-    serde_json::from_str(RUNTIME_MANIFEST_JSON).map_err(|err| err.to_string())
-}
-
-fn current_platform_manifest(manifest: &RuntimeManifest) -> LocalResult<PlatformRuntime> {
-    let platform_id = current_platform_id()?;
-    manifest
-        .platforms
-        .iter()
-        .find(|item| item.platform_id == platform_id)
-        .cloned()
-        .ok_or_else(|| format!("暂不支持当前平台：{platform_id}"))
-}
-
-fn current_platform_id() -> LocalResult<&'static str> {
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-        Ok("darwin-aarch64")
-    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-        Ok("darwin-x64")
-    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        Ok("windows-x64")
-    } else if cfg!(all(target_os = "windows", target_arch = "x86")) {
-        Ok("windows-x86")
-    } else {
-        Err("当前平台暂不支持托管本地运行环境。".into())
-    }
 }
 
 fn unsupported_runtime_state(
@@ -991,52 +527,4 @@ fn unsupported_runtime_state(
     state.last_log_path = None;
     local_db::save_runtime_state(app, &state)?;
     Ok(Some(state))
-}
-
-fn runtime_platform_root(app: &AppHandle, platform_id: &str) -> LocalResult<PathBuf> {
-    let root = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|err| err.to_string())?
-        .join("runtime")
-        .join(platform_id);
-    fs::create_dir_all(&root).map_err(|err| err.to_string())?;
-    Ok(root)
-}
-
-fn runtime_log_path(app: &AppHandle, platform_id: &str) -> LocalResult<PathBuf> {
-    Ok(runtime_platform_root(app, platform_id)?.join("install.log"))
-}
-
-fn append_install_log(log_path: &Path, bytes: &[u8]) -> LocalResult<()> {
-    if bytes.is_empty() {
-        return Ok(());
-    }
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path)
-        .map_err(|err| err.to_string())?;
-    file.write_all(bytes).map_err(|err| err.to_string())
-}
-
-fn append_install_log_line(log_path: &Path, line: &str) -> LocalResult<()> {
-    let prefix = runtime_log_prefix();
-    append_install_log(log_path, format!("{prefix} {line}\n").as_bytes())
-}
-
-fn runtime_log_prefix() -> String {
-    format!("[Liberty-下载进度-{}]", format_display_timestamp())
-}
-
-fn format_display_timestamp() -> String {
-    Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string()
-}
-
-fn unix_timestamp_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default()
 }
