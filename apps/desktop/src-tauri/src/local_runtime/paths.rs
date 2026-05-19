@@ -1,12 +1,11 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 use crate::local_db::LocalResult;
 use crate::local_runtime::manifest::{current_platform_manifest, load_manifest, PlatformRuntime};
 
+#[cfg(unix)]
+use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 

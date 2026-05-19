@@ -199,6 +199,19 @@ select:focus-visible {
   flex: 1 1 auto;
 }
 
+.window-titlebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  transform: translateY(5px);
+  -webkit-app-region: no-drag;
+}
+
+.windows-titlebar .window-titlebar-actions {
+  transform: none;
+}
+
 .window-titlebar-metrics {
   display: inline-flex;
   align-items: center;
@@ -266,6 +279,32 @@ select:focus-visible {
 .window-control-close:hover {
   background: var(--danger);
   color: #fff;
+}
+
+.window-titlebar .titlebar-pet-toggle,
+.window-titlebar .titlebar-pill {
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.window-titlebar .titlebar-icon-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+}
+
+.window-titlebar .titlebar-icon-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.window-titlebar .toolbar-pet-dot,
+.window-titlebar .toolbar-pill-dot {
+  width: 6px;
+  height: 6px;
 }
 
 .sidebar {

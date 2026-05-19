@@ -454,5 +454,89 @@ fn paint_layered_window(
         if ok == 0 {
             return Err("更新桌宠窗口失败。".into());
         }
+
+        Ok(())
     }
+}
+
+unsafe fn draw_bubble_text(
+    memory_dc: windows_sys::Win32::Graphics::Gdi::HDC,
+    width: i32,
+    scale: f64,
+    text: &str,
+    bubble_theme: PetBubbleTheme,
+) {
+    use windows_sys::Win32::{
+        Foundation::RECT,
+        Graphics::Gdi::{
+            CreateFontW, DeleteObject, DrawTextW, SelectObject, SetBkMode, SetTextColor, DT_LEFT,
+            DT_SINGLELINE, DT_VCENTER, DT_WORD_ELLIPSIS, FW_SEMIBOLD, TRANSPARENT,
+        },
+    };
+
+    let face_name = wide_null("Segoe UI");
+    let font_height = -((13.0 * scale).round().max(11.0) as i32);
+    let font = CreateFontW(
+        font_height,
+        0,
+        0,
+        0,
+        FW_SEMIBOLD as i32,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        face_name.as_ptr(),
+    );
+    let old_font = if font.is_null() {
+        std::ptr::null_mut()
+    } else {
+        SelectObject(memory_dc, font)
+    };
+
+    SetBkMode(memory_dc, TRANSPARENT as i32);
+    let text_color = if bubble_theme.is_dark() {
+        color_ref(245, 245, 247)
+    } else {
+        color_ref(20, 21, 26)
+    };
+    SetTextColor(memory_dc, text_color);
+
+    let left = (36.0 * scale).round() as i32;
+    let top = (8.0 * scale).round() as i32;
+    let right = width.saturating_sub((36.0 * scale).round() as i32);
+    let bottom = top + (64.0 * scale).round().max(1.0) as i32;
+    let mut rect = RECT {
+        left,
+        top,
+        right,
+        bottom,
+    };
+    let wide_text = wide_null(text);
+    DrawTextW(
+        memory_dc,
+        wide_text.as_ptr(),
+        text.encode_utf16().count() as i32,
+        &mut rect,
+        DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_WORD_ELLIPSIS,
+    );
+
+    if !old_font.is_null() {
+        SelectObject(memory_dc, old_font);
+    }
+    if !font.is_null() {
+        DeleteObject(font);
+    }
+}
+
+fn color_ref(red: u8, green: u8, blue: u8) -> u32 {
+    u32::from(red) | (u32::from(green) << 8) | (u32::from(blue) << 16)
+}
+
+fn wide_null(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
 }

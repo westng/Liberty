@@ -125,7 +125,7 @@ mod windows_credential_store {
 
     pub fn get_system_secret(key: &str) -> CredentialResult<Option<String>> {
         let target = to_wide(&windows_target_name(key));
-        let mut credential = ptr::null_mut();
+        let mut credential: *mut CREDENTIALW = ptr::null_mut();
         let success = unsafe {
             CredReadW(
                 target.as_ptr(),

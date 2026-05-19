@@ -401,6 +401,36 @@ function updateGraphicsMemoryEstimate() {
         </div>
       </div>
       <div class="window-titlebar-spacer" data-tauri-drag-region></div>
+      <div class="window-titlebar-actions">
+        <button
+          class="toolbar-pet-toggle titlebar-pet-toggle"
+          type="button"
+          :aria-pressed="desktopPetVisible"
+          :title="desktopPetVisible ? '关闭桌面宠物' : '打开桌面宠物'"
+          @click="toggleToolbarPetDesktop"
+        >
+          <span class="toolbar-pet-dot" :data-active="desktopPetVisible"></span>
+          {{ desktopPetVisible ? "桌宠已开" : "桌宠已关" }}
+        </button>
+        <div class="toolbar-pill titlebar-pill">
+          <span class="toolbar-pill-dot"></span>
+          {{ toolbarStatus }}
+        </div>
+        <button
+          class="toolbar-icon-btn titlebar-icon-btn"
+          type="button"
+          :aria-label="messages.shell.github"
+          :title="messages.shell.github"
+          @click="openProjectGithub"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.88-2.78.62-3.37-1.22-3.37-1.22-.45-1.19-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.86.09-.67.35-1.12.63-1.38-2.22-.26-4.55-1.15-4.55-5.14 0-1.14.39-2.08 1.03-2.82-.1-.26-.45-1.3.1-2.72 0 0 .84-.28 2.75 1.08A9.3 9.3 0 0 1 12 6.84c.85 0 1.71.12 2.51.37 1.91-1.36 2.75-1.08 2.75-1.08.55 1.42.2 2.46.1 2.72.64.74 1.03 1.68 1.03 2.82 0 4-2.33 4.87-4.56 5.13.36.32.68.95.68 1.92 0 1.39-.01 2.5-.01 2.84 0 .27.18.6.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z"
+            />
+          </svg>
+        </button>
+      </div>
       <div v-if="isWindowsTitlebar" class="window-controls">
         <button class="window-control" type="button" aria-label="Minimize" @click="minimizeWindow">
           −
@@ -476,37 +506,6 @@ function updateGraphicsMemoryEstimate() {
 
             <div class="toolbar-copy">
               <h2 class="toolbar-title">{{ toolbarTitle }}</h2>
-            </div>
-
-            <div class="toolbar-actions">
-              <button
-                class="toolbar-pet-toggle"
-                type="button"
-                :aria-pressed="desktopPetVisible"
-                :title="desktopPetVisible ? '关闭桌面宠物' : '打开桌面宠物'"
-                @click="toggleToolbarPetDesktop"
-              >
-                <span class="toolbar-pet-dot" :data-active="desktopPetVisible"></span>
-                {{ desktopPetVisible ? "桌宠已开" : "桌宠已关" }}
-              </button>
-              <div class="toolbar-pill">
-                <span class="toolbar-pill-dot"></span>
-                {{ toolbarStatus }}
-              </div>
-              <button
-                class="toolbar-icon-btn"
-                type="button"
-                :aria-label="messages.shell.github"
-                :title="messages.shell.github"
-                @click="openProjectGithub"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    fill="currentColor"
-                    d="M12 2C6.48 2 2 6.59 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.88-2.78.62-3.37-1.22-3.37-1.22-.45-1.19-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.86.09-.67.35-1.12.63-1.38-2.22-.26-4.55-1.15-4.55-5.14 0-1.14.39-2.08 1.03-2.82-.1-.26-.45-1.3.1-2.72 0 0 .84-.28 2.75 1.08A9.3 9.3 0 0 1 12 6.84c.85 0 1.71.12 2.51.37 1.91-1.36 2.75-1.08 2.75-1.08.55 1.42.2 2.46.1 2.72.64.74 1.03 1.68 1.03 2.82 0 4-2.33 4.87-4.56 5.13.36.32.68.95.68 1.92 0 1.39-.01 2.5-.01 2.84 0 .27.18.6.69.49A10.25 10.25 0 0 0 22 12.25C22 6.59 17.52 2 12 2Z"
-                  />
-                </svg>
-              </button>
             </div>
           </header>
 
