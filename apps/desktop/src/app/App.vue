@@ -382,8 +382,8 @@ function updateGraphicsMemoryEstimate() {
   <RouterView v-if="isStandaloneRoute" />
 
   <div v-else class="app-shell">
-    <div class="window-titlebar" :class="{ 'windows-titlebar': isWindowsTitlebar }" data-tauri-drag-region>
-      <div class="window-titlebar-metrics" data-tauri-drag-region>
+    <div class="window-titlebar" :class="{ 'windows-titlebar': isWindowsTitlebar }">
+      <div class="window-titlebar-metrics">
         <div v-for="metric in toolbarMetrics" :key="metric.key" class="toolbar-metric titlebar-metric">
           <span class="toolbar-metric-icon" aria-hidden="true">
             <svg v-if="metric.key === 'cpu'" viewBox="0 0 24 24">

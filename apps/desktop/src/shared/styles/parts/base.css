@@ -187,7 +187,7 @@ select:focus-visible {
   min-height: 42px;
   padding: 7px 12px 5px 95px;
   user-select: none;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .windows-titlebar {
@@ -197,6 +197,8 @@ select:focus-visible {
 .window-titlebar-spacer {
   min-width: 0;
   flex: 1 1 auto;
+  align-self: stretch;
+  -webkit-app-region: drag;
 }
 
 .window-titlebar-actions {
@@ -219,7 +221,7 @@ select:focus-visible {
   min-width: 0;
   flex: 0 0 auto;
   transform: translateY(5px);
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .windows-titlebar .window-titlebar-metrics {
