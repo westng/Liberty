@@ -128,7 +128,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
     match msg {
         WM_LBUTTONDOWN => {
             if let Some(input_state) = input_state {
-                record_mouse_down(input_state);
+                record_mouse_down(hwnd, input_state);
             }
         }
         WM_MOUSEMOVE => {
@@ -155,7 +155,10 @@ unsafe extern "system" fn pet_window_subclass_proc(
     DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
-unsafe fn record_mouse_down(input_state: &PetWindowInputState) {
+unsafe fn record_mouse_down(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputState) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetCapture;
+
+    SetCapture(hwnd);
     if let Ok(mut guard) = input_state.drag_state.lock() {
         guard.mouse_down_at = cursor_position();
         guard.drag_started = false;
@@ -219,30 +222,13 @@ unsafe fn cursor_position() -> Option<POINT> {
 }
 
 unsafe fn begin_window_drag(hwnd: *mut std::ffi::c_void) {
-    use windows_sys::Win32::{
-        Foundation::POINTS,
-        UI::{
-            Input::KeyboardAndMouse::ReleaseCapture,
-            WindowsAndMessaging::{PostMessageW, HTCAPTION, WM_NCLBUTTONDOWN},
-        },
-    };
-
-    let Some(cursor) = cursor_position() else {
-        return;
-    };
-
-    let points = POINTS {
-        x: cursor.x as i16,
-        y: cursor.y as i16,
+    use windows_sys::Win32::UI::{
+        Input::KeyboardAndMouse::ReleaseCapture,
+        WindowsAndMessaging::{SendMessageW, HTCAPTION, WM_NCLBUTTONDOWN},
     };
 
     ReleaseCapture();
-    PostMessageW(
-        hwnd,
-        WM_NCLBUTTONDOWN,
-        HTCAPTION as usize,
-        &points as *const POINTS as isize,
-    );
+    SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION as usize, 0);
 }
 
 fn draw_bubble(buffer: &mut [u8], width: u32, scale: f64, bubble_theme: PetBubbleTheme) {
@@ -434,7 +420,8 @@ fn paint_layered_window(
         std::ptr::copy_nonoverlapping(bgra.as_ptr(), bits.cast::<u8>(), bgra.len());
         let old_bitmap = SelectObject(memory_dc, bitmap);
         if let Some(text) = bubble_text.filter(|value| !value.trim().is_empty()) {
-            draw_bubble_text(memory_dc, width, scale, text, bubble_theme);
+            let text_rect = draw_bubble_text(memory_dc, width, scale, text, bubble_theme);
+            normalize_bubble_text_alpha(bits.cast::<u8>(), width, height, text_rect);
         }
         let ok = UpdateLayeredWindow(
             hwnd,
@@ -465,7 +452,7 @@ unsafe fn draw_bubble_text(
     scale: f64,
     text: &str,
     bubble_theme: PetBubbleTheme,
-) {
+) -> windows_sys::Win32::Foundation::RECT {
     use windows_sys::Win32::{
         Foundation::RECT,
         Graphics::Gdi::{
@@ -530,6 +517,36 @@ unsafe fn draw_bubble_text(
     }
     if !font.is_null() {
         DeleteObject(font);
+    }
+
+    rect
+}
+
+unsafe fn normalize_bubble_text_alpha(
+    bits: *mut u8,
+    width: i32,
+    height: i32,
+    rect: windows_sys::Win32::Foundation::RECT,
+) {
+    if bits.is_null() || width <= 0 || height <= 0 {
+        return;
+    }
+
+    let left = rect.left.clamp(0, width);
+    let top = rect.top.clamp(0, height);
+    let right = rect.right.clamp(left, width);
+    let bottom = rect.bottom.clamp(top, height);
+
+    for y in top..bottom {
+        for x in left..right {
+            let index = ((y * width + x) * 4) as isize;
+            let blue = *bits.offset(index);
+            let green = *bits.offset(index + 1);
+            let red = *bits.offset(index + 2);
+            if red != 0 || green != 0 || blue != 0 {
+                *bits.offset(index + 3) = 255;
+            }
+        }
     }
 }
 

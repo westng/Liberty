@@ -14,12 +14,19 @@ mod local_settings;
 mod process_utils;
 mod system;
 
+#[cfg(windows)]
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_decorations(false);
+            }
             desktop_pet::manage_desktop_pet_state(app.handle());
             desktop_pet::sync_desktop_pet_on_startup(app.handle());
             Ok(())

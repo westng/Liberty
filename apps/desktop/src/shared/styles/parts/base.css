@@ -202,7 +202,7 @@ select:focus-visible {
 .window-titlebar-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
   flex: 0 0 auto;
   transform: translateY(5px);
   -webkit-app-region: no-drag;
@@ -215,20 +215,22 @@ select:focus-visible {
 .window-titlebar-metrics {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   min-width: 0;
   flex: 0 0 auto;
-  padding: 5px;
-  border: 1px solid color-mix(in srgb, var(--stroke-soft) 72%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
-  backdrop-filter: blur(16px) saturate(1.08);
   transform: translateY(5px);
   -webkit-app-region: drag;
 }
 
 .windows-titlebar .window-titlebar-metrics {
   transform: none;
+}
+
+.window-titlebar .titlebar-metric,
+.window-titlebar .titlebar-pet-toggle,
+.window-titlebar .titlebar-pill {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .window-titlebar .titlebar-metric {
@@ -243,16 +245,16 @@ select:focus-visible {
 
 .window-titlebar .titlebar-metric .toolbar-metric-icon,
 .window-titlebar .titlebar-metric .toolbar-metric-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
 }
 
 .window-titlebar .titlebar-metric .toolbar-metric-label {
-  font-size: 11px;
+  font-size: inherit;
 }
 
 .window-titlebar .titlebar-metric .toolbar-metric-value {
-  font-size: 11px;
+  font-size: inherit;
 }
 
 .window-controls {
@@ -284,27 +286,37 @@ select:focus-visible {
 .window-titlebar .titlebar-pet-toggle,
 .window-titlebar .titlebar-pill {
   gap: 5px;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 5px;
-  font-size: 11px;
+  min-height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .window-titlebar .titlebar-icon-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .window-titlebar .titlebar-icon-btn svg {
-  width: 13px;
-  height: 13px;
+  width: 17px;
+  height: 17px;
 }
 
 .window-titlebar .toolbar-pet-dot,
 .window-titlebar .toolbar-pill-dot {
   width: 6px;
   height: 6px;
+}
+
+.window-titlebar .titlebar-pet-toggle:hover,
+.window-titlebar .titlebar-icon-btn:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
 }
 
 .sidebar {
