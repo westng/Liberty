@@ -4,5 +4,6 @@ pub mod ai_templates;
 pub mod job_events;
 pub mod members;
 pub mod pet;
+pub mod pet_store;
 pub mod runtime_state;
 pub mod settings;

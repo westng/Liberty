@@ -58,6 +58,77 @@ pub fn open_external_url(url: String) -> LocalResult<()> {
 }
 
 #[tauri::command]
+pub fn prompt_pet_name(
+    title: String,
+    message: String,
+    default_value: String,
+) -> LocalResult<Option<String>> {
+    let title = normalize_dialog_text(&title);
+    let message = normalize_dialog_text(&message);
+    let default_value = normalize_dialog_text(&default_value);
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            r#"set dialogResult to display dialog "{}" default answer "{}" with title "{}" buttons {{"取消", "保存"}} default button "保存" cancel button "取消"
+return text returned of dialogResult"#,
+            escape_applescript(&message),
+            escape_applescript(&default_value),
+            escape_applescript(&title)
+        );
+        let output = Command::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .map_err(|err| err.to_string())?;
+
+        if output.status.success() {
+            return Ok(Some(
+                String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            ));
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("-128") || stderr.to_lowercase().contains("user canceled") {
+            return Ok(None);
+        }
+
+        Err(stderr.trim().to_string())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let script = format!(
+            "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::InputBox('{message}', '{title}', '{default_value}')",
+            message = escape_powershell_single_quoted(&message),
+            title = escape_powershell_single_quoted(&title),
+            default_value = escape_powershell_single_quoted(&default_value),
+        );
+        let mut command = Command::new("powershell");
+        command.args(["-NoProfile", "-STA", "-Command", &script]);
+        configure_background_process(&mut command);
+        let output = command.output().map_err(|err| err.to_string())?;
+
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout)
+                .trim_end_matches(&['\r', '\n'][..])
+                .to_string();
+            if value.is_empty() {
+                return Ok(None);
+            }
+            return Ok(Some(value));
+        }
+
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = (title, message, default_value);
+        Err("当前平台暂不支持系统级文本输入弹窗。".into())
+    }
+}
+
+#[tauri::command]
 pub fn get_process_metrics() -> LocalResult<ProcessMetrics> {
     let sampler = PROCESS_METRICS_SAMPLER.get_or_init(|| {
         let pid = Pid::from_u32(std::process::id());
@@ -83,4 +154,18 @@ pub fn get_process_metrics() -> LocalResult<ProcessMetrics> {
         cpu_percent: (process.cpu_usage() * 10.0).round() / 10.0,
         memory_mb: ((process.memory() as f64) / (1024.0 * 1024.0)).round() as u64,
     })
+}
+
+fn normalize_dialog_text(value: &str) -> String {
+    value.replace(['\r', '\n'], " ").trim().to_string()
+}
+
+#[cfg(target_os = "macos")]
+fn escape_applescript(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "windows")]
+fn escape_powershell_single_quoted(value: &str) -> String {
+    value.replace('\'', "''")
 }

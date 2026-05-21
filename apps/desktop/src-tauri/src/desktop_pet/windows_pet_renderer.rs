@@ -23,6 +23,7 @@ pub fn paint_window(
     window: &Window,
     frame_path: &Path,
     bubble_text: Option<&str>,
+    growth_float: Option<&PetGrowthFloat>,
     bubble_theme: PetBubbleTheme,
 ) -> LocalResult<()> {
     let image = image::open(frame_path)
@@ -58,6 +59,9 @@ pub fn paint_window(
     if bubble_text.is_some_and(|value| !value.trim().is_empty()) {
         draw_bubble(&mut buffer, window_width, scale, bubble_theme);
     }
+    if let Some(growth_float) = growth_float {
+        draw_growth_glow(&mut buffer, window_width, scale, growth_float);
+    }
 
     let _ = window.set_size(tauri::LogicalSize::new(PET_WINDOW_WIDTH, PET_WINDOW_HEIGHT));
     paint_layered_window(
@@ -67,6 +71,7 @@ pub fn paint_window(
         window_height as i32,
         scale,
         bubble_text,
+        growth_float,
         bubble_theme,
     )
 }
@@ -324,6 +329,39 @@ fn draw_bubble(buffer: &mut [u8], width: u32, scale: f64, bubble_theme: PetBubbl
     );
 }
 
+fn draw_growth_glow(buffer: &mut [u8], width: u32, scale: f64, growth_float: &PetGrowthFloat) {
+    let (x, y, alpha) = growth_float_rect(scale, growth_float);
+    let alpha = (alpha * 46.0).round().clamp(0.0, 46.0) as u8;
+    fill_rounded_rect(
+        buffer,
+        width,
+        x.max(0) as u32,
+        y.max(0) as u32,
+        (72.0 * scale).round().max(1.0) as u32,
+        (30.0 * scale).round().max(1.0) as u32,
+        (255, 122, 68, alpha),
+        (15.0 * scale).round().max(8.0) as u32,
+    );
+}
+
+fn growth_float_rect(scale: f64, growth_float: &PetGrowthFloat) -> (i32, i32, f64) {
+    let elapsed_ms = growth_float
+        .started_at
+        .elapsed()
+        .unwrap_or_default()
+        .as_millis()
+        .min(3_000) as f64;
+    let progress = elapsed_ms / 3_000.0;
+    let alpha = if progress < 0.72 {
+        1.0
+    } else {
+        ((1.0 - progress) / 0.28).clamp(0.0, 1.0)
+    };
+    let x = (196.0 * scale).round() as i32;
+    let y = ((102.0 - progress * 34.0) * scale).round() as i32;
+    (x, y, alpha)
+}
+
 fn fill_rounded_rect(
     buffer: &mut [u8],
     width: u32,
@@ -402,6 +440,7 @@ fn paint_layered_window(
     height: i32,
     scale: f64,
     bubble_text: Option<&str>,
+    growth_float: Option<&PetGrowthFloat>,
     bubble_theme: PetBubbleTheme,
 ) -> LocalResult<()> {
     unsafe {
@@ -471,6 +510,10 @@ fn paint_layered_window(
         let old_bitmap = SelectObject(memory_dc, bitmap);
         if let Some(text) = bubble_text.filter(|value| !value.trim().is_empty()) {
             let text_rect = draw_bubble_text(memory_dc, width, scale, text, bubble_theme);
+            normalize_bubble_text_alpha(bits.cast::<u8>(), width, height, text_rect);
+        }
+        if let Some(growth_float) = growth_float {
+            let text_rect = draw_growth_text(memory_dc, scale, growth_float);
             normalize_bubble_text_alpha(bits.cast::<u8>(), width, height, text_rect);
         }
         let ok = UpdateLayeredWindow(
@@ -560,6 +603,73 @@ unsafe fn draw_bubble_text(
         text.encode_utf16().count() as i32,
         &mut rect,
         DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_WORD_ELLIPSIS,
+    );
+
+    if !old_font.is_null() {
+        SelectObject(memory_dc, old_font);
+    }
+    if !font.is_null() {
+        DeleteObject(font);
+    }
+
+    rect
+}
+
+unsafe fn draw_growth_text(
+    memory_dc: windows_sys::Win32::Graphics::Gdi::HDC,
+    scale: f64,
+    growth_float: &PetGrowthFloat,
+) -> windows_sys::Win32::Foundation::RECT {
+    use windows_sys::Win32::{
+        Foundation::RECT,
+        Graphics::Gdi::{
+            CreateFontW, DeleteObject, DrawTextW, SelectObject, SetBkMode, SetTextColor, DT_CENTER,
+            DT_SINGLELINE, DT_VCENTER, FW_BOLD, TRANSPARENT,
+        },
+    };
+
+    let face_name = wide_null("Segoe UI");
+    let font_height = -((18.0 * scale).round().max(15.0) as i32);
+    let font = CreateFontW(
+        font_height,
+        0,
+        0,
+        0,
+        FW_BOLD as i32,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        face_name.as_ptr(),
+    );
+    let old_font = if font.is_null() {
+        std::ptr::null_mut()
+    } else {
+        SelectObject(memory_dc, font)
+    };
+
+    let (x, y, _) = growth_float_rect(scale, growth_float);
+    SetBkMode(memory_dc, TRANSPARENT as i32);
+    SetTextColor(memory_dc, color_ref(255, 104, 58));
+
+    let mut rect = RECT {
+        left: x,
+        top: y,
+        right: x + (72.0 * scale).round() as i32,
+        bottom: y + (30.0 * scale).round() as i32,
+    };
+    let text = format!("+{}", growth_float.value);
+    let wide_text = wide_null(&text);
+    DrawTextW(
+        memory_dc,
+        wide_text.as_ptr(),
+        text.encode_utf16().count() as i32,
+        &mut rect,
+        DT_CENTER | DT_SINGLELINE | DT_VCENTER,
     );
 
     if !old_font.is_null() {

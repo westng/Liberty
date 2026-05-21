@@ -1,5 +1,6 @@
 use crate::local_db::{
     self, LocalResult, PetCosmeticUnlock, PetEventLedgerEntry, PetProfile, PetSettings,
+    PetStoreState,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -35,6 +36,24 @@ pub struct PetWorkflowEventInput {
 #[serde(rename_all = "camelCase")]
 pub struct SavePetProfileInput {
     pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetStoreItemInput {
+    pub item_key: String,
+    #[serde(default = "default_purchase_quantity")]
+    pub quantity: i64,
+}
+
+fn default_purchase_quantity() -> i64 {
+    1
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetInventorySlotInput {
+    pub slot: String,
 }
 
 #[tauri::command]
@@ -91,15 +110,52 @@ pub fn list_pet_cosmetic_unlocks(app: AppHandle) -> LocalResult<Vec<PetCosmeticU
 }
 
 #[tauri::command]
+pub fn get_pet_store_state(app: AppHandle) -> LocalResult<PetStoreState> {
+    local_db::get_pet_store_state(&app)
+}
+
+#[tauri::command]
+pub fn purchase_pet_store_item(
+    app: AppHandle,
+    input: PetStoreItemInput,
+) -> LocalResult<PetStoreState> {
+    local_db::purchase_pet_store_item(&app, input.item_key.trim(), input.quantity)
+}
+
+#[tauri::command]
+pub fn equip_pet_inventory_item(
+    app: AppHandle,
+    input: PetStoreItemInput,
+) -> LocalResult<PetStoreState> {
+    local_db::equip_pet_inventory_item(&app, input.item_key.trim())
+}
+
+#[tauri::command]
+pub fn unequip_pet_inventory_slot(
+    app: AppHandle,
+    input: PetInventorySlotInput,
+) -> LocalResult<PetStoreState> {
+    local_db::unequip_pet_inventory_slot(&app, input.slot.trim())
+}
+
+#[tauri::command]
+pub fn use_pet_inventory_item(
+    app: AppHandle,
+    input: PetStoreItemInput,
+) -> LocalResult<PetStoreState> {
+    local_db::use_pet_inventory_item(&app, input.item_key.trim(), input.quantity)
+}
+
+#[tauri::command]
 pub fn apply_pet_interaction(
     app: AppHandle,
     input: PetInteractionInput,
 ) -> LocalResult<PetProfile> {
     let normalized = input.action.trim().to_lowercase();
     let (event_value, mood) = match normalized.as_str() {
-        "pet" => (2, "cheerful"),
-        "feed" => (3, "proud"),
-        "encourage" => (2, "cheerful"),
+        "pet" => (1, "cheerful"),
+        "feed" => (1, "proud"),
+        "encourage" => (1, "cheerful"),
         _ => (1, "cheerful"),
     };
 
@@ -125,12 +181,12 @@ pub fn apply_pet_workflow_event(
         Some(input.metadata.trim())
     };
     let (event_value, mood) = match normalized.as_str() {
-        "job_created" => (10, "cheerful"),
-        "transcription_started" => (2, "excited"),
-        "transcription_completed" => (20, "proud"),
-        "ai_summary_completed" => (8, "proud"),
+        "job_created" => (5, "cheerful"),
+        "transcription_started" => (3, "excited"),
+        "transcription_completed" => (12, "proud"),
+        "ai_summary_completed" => (10, "proud"),
         "export_completed" => (6, "proud"),
-        "daily_open" => (1, "idle"),
+        "daily_open" => (2, "idle"),
         _ => (1, "idle"),
     };
 

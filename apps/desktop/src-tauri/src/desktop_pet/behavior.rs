@@ -8,9 +8,9 @@ use std::{
 use tauri::{AppHandle, LogicalPosition, Manager, Window, WindowEvent};
 
 use super::{
-    PetAction, PetAnimationFrames, PetBubble, PetInstanceId, PetVisualState, BUBBLE_VISIBLE_MS,
-    DAILY_ACTION_BUCKET_MS, EXTRA_PET_OFFSET_X, EXTRA_PET_OFFSET_Y, NEEDY_AFTER_MS,
-    PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH, RECENT_EVENT_ACTION_HOLD_MS,
+    PetAction, PetAnimationFrames, PetBubble, PetGrowthFloat, PetInstanceId, PetVisualState,
+    BUBBLE_VISIBLE_MS, DAILY_ACTION_BUCKET_MS, EXTRA_PET_OFFSET_X, EXTRA_PET_OFFSET_Y,
+    NEEDY_AFTER_MS, PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH, RECENT_EVENT_ACTION_HOLD_MS,
 };
 
 pub(crate) fn handle_desktop_pet_interaction(
@@ -52,6 +52,31 @@ pub(crate) fn current_bubble_text(bubble_state: &Arc<Mutex<Option<PetBubble>>>) 
         return None;
     }
     Some(bubble.text.clone())
+}
+
+pub(crate) fn current_growth_float(
+    growth_float_state: &Arc<Mutex<Option<PetGrowthFloat>>>,
+) -> Option<PetGrowthFloat> {
+    let mut guard = growth_float_state.lock().ok()?;
+    let growth_float = guard.as_ref()?;
+    if SystemTime::now() >= growth_float.expires_at {
+        *guard = None;
+        return None;
+    }
+    Some(growth_float.clone())
+}
+
+pub(crate) fn speech_line_from_event(event: &PetEventLedgerEntry) -> Option<String> {
+    let metadata = event.metadata.as_deref()?;
+    if !matches!(event.event_type.as_str(), "store_food" | "store_equip") {
+        return None;
+    }
+
+    metadata
+        .rsplit_once('|')
+        .map(|(_, line)| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
 }
 
 fn select_interaction_dialogue(app: &AppHandle) -> String {
@@ -206,6 +231,8 @@ fn get_action_for_recent_event(event: &PetEventLedgerEntry, mood: &str) -> PetAc
     }
 
     match event.event_type.as_str() {
+        "store_food" => PetAction::Eat,
+        "store_equip" => PetAction::Snow,
         "job_created" => PetAction::Drive,
         "transcription_started" => PetAction::Work,
         "transcription_completed" | "ai_summary_completed" | "export_completed" => PetAction::Snow,
@@ -316,6 +343,8 @@ fn pet_resource_root(app: &AppHandle) -> LocalResult<PathBuf> {
 
     if let Ok(current_dir) = std::env::current_dir() {
         let dev_candidates = [
+            current_dir.join("src/assets/images/action"),
+            current_dir.join("apps/desktop/src/assets/images/action"),
             current_dir.join("resources/pet"),
             current_dir.join("src-tauri/resources/pet"),
             current_dir.join("apps/desktop/src-tauri/resources/pet"),

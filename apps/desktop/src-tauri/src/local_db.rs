@@ -1,7 +1,8 @@
 use crate::infrastructure::{
     ids, migrations,
     repositories::{
-        ai_models, ai_summary_runs, ai_templates, job_events, members, pet, runtime_state, settings,
+        ai_models, ai_summary_runs, ai_templates, job_events, members, pet, pet_store,
+        runtime_state, settings,
     },
 };
 use rusqlite::{params, Connection};
@@ -438,6 +439,18 @@ pub fn get_pet_profile(app: &AppHandle) -> LocalResult<PetProfile> {
     pet::load_profile(&conn)
 }
 
+pub fn get_pet_store_state(app: &AppHandle) -> LocalResult<PetStoreState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    pet_store::store_state(&conn, profile)
+}
+
 pub fn save_pet_profile(app: &AppHandle, profile: &PetProfile) -> LocalResult<PetProfile> {
     init_database(app)?;
     let conn = open_connection(app)?;
@@ -500,6 +513,67 @@ pub fn apply_pet_growth_event(
         mood,
         metadata,
     )
+}
+
+pub fn purchase_pet_store_item(
+    app: &AppHandle,
+    item_key: &str,
+    quantity: i64,
+) -> LocalResult<PetStoreState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    let profile = pet::load_profile_tx(&tx)?;
+    pet_store::purchase_item_tx(&tx, &profile, item_key, quantity, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    pet_store::store_state(&conn, profile)
+}
+
+pub fn equip_pet_inventory_item(app: &AppHandle, item_key: &str) -> LocalResult<PetStoreState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    pet_store::equip_item_tx(&tx, item_key, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    pet_store::store_state(&conn, profile)
+}
+
+pub fn unequip_pet_inventory_slot(app: &AppHandle, slot: &str) -> LocalResult<PetStoreState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    pet_store::unequip_slot_tx(&tx, slot, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    pet_store::store_state(&conn, profile)
+}
+
+pub fn use_pet_inventory_item(
+    app: &AppHandle,
+    item_key: &str,
+    quantity: i64,
+) -> LocalResult<PetStoreState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    pet_store::use_item_tx(&tx, item_key, quantity, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    pet_store::store_state(&conn, profile)
 }
 
 pub fn save_meeting_member(app: &AppHandle, member: &MeetingMember) -> LocalResult<()> {

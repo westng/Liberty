@@ -202,6 +202,57 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS pet_wallets (
+          pet_id TEXT NOT NULL,
+          currency_key TEXT NOT NULL,
+          balance INTEGER NOT NULL DEFAULT 0,
+          lifetime_earned INTEGER NOT NULL DEFAULT 0,
+          lifetime_spent INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(pet_id, currency_key),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_inventory (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          item_key TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          slot TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          equipped INTEGER NOT NULL DEFAULT 0,
+          source TEXT NOT NULL,
+          purchased_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          UNIQUE(pet_id, item_key),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_economy_ledger (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          entry_type TEXT NOT NULL,
+          currency_key TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          balance_after INTEGER NOT NULL,
+          source_type TEXT NOT NULL,
+          source_key TEXT NOT NULL,
+          metadata TEXT,
+          created_at TEXT NOT NULL,
+          UNIQUE(pet_id, currency_key, source_type, source_key),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_milestone_counters (
+          pet_id TEXT NOT NULL,
+          counter_key TEXT NOT NULL,
+          counter_value INTEGER NOT NULL DEFAULT 0,
+          last_event_key TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(pet_id, counter_key),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
         CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_job_source_files_job_id ON job_source_files(job_id);
         CREATE INDEX IF NOT EXISTS idx_segments_job_id ON transcript_segments(job_id, segment_type, segment_order);
@@ -210,6 +261,9 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         CREATE INDEX IF NOT EXISTS idx_meeting_members_sort_order ON meeting_members(sort_order ASC, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_event_ledger_time ON pet_event_ledger(event_time DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_cosmetic_unlocks_pet_id ON pet_cosmetic_unlocks(pet_id, unlocked_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_inventory_pet_id ON pet_inventory(pet_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_economy_pet_id ON pet_economy_ledger(pet_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_milestones_pet_id ON pet_milestone_counters(pet_id, counter_key);
         CREATE INDEX IF NOT EXISTS idx_runtime_state_status ON runtime_state(status);
         ",
     )

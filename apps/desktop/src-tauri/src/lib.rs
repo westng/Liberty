@@ -61,15 +61,20 @@ pub fn run() {
             local_pet::apply_pet_interaction,
             local_pet::apply_pet_workflow_event,
             local_pet::get_pet_profile,
+            local_pet::get_pet_store_state,
             local_pet::get_pet_settings,
             desktop_pet::get_desktop_pet_status,
             desktop_pet::hide_desktop_pet,
             local_pet::list_pet_cosmetic_unlocks,
             local_pet::list_pet_event_ledger,
             desktop_pet::open_extra_desktop_pet,
+            local_pet::purchase_pet_store_item,
             local_pet::save_pet_profile,
             desktop_pet::show_desktop_pet,
             desktop_pet::start_desktop_pet_drag,
+            local_pet::equip_pet_inventory_item,
+            local_pet::unequip_pet_inventory_slot,
+            local_pet::use_pet_inventory_item,
             local_runtime::get_runtime_install_log,
             local_runtime::get_runtime_status,
             local_runtime::install_runtime,
@@ -77,7 +82,8 @@ pub fn run() {
             local_settings::get_settings,
             local_settings::save_settings,
             system::get_process_metrics,
-            system::open_external_url
+            system::open_external_url,
+            system::prompt_pet_name
         ]);
 
     builder

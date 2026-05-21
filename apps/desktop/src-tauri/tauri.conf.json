@@ -13,7 +13,7 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "resources/pet/": "pet",
+      "../src/assets/images/action/": "pet",
       "../../../python/funasr-runner/": "scripts",
       "../../../runtime-bundles/": "runtime-bundles"
     },
@@ -40,7 +40,7 @@
         "titleBarStyle": "Overlay",
         "trafficLightPosition": {
           "x": 20,
-          "y": 28
+          "y": 23
         }
       }
     ],

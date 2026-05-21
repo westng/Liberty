@@ -211,8 +211,8 @@ pub fn ensure_stage_cosmetic_unlocks_tx(
     }
 
     let (cosmetic_type, cosmetic_key) = match profile.stage.as_str() {
-        "growing" => ("accessory", "sprout-ribbon"),
-        "mature" => ("accessory", "golden-bell"),
+        "growing" => ("accessory", "clover-bow"),
+        "mature" => ("accessory", "bell-accessory"),
         _ => return Ok(()),
     };
 

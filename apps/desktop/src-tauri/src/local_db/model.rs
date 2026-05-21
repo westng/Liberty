@@ -164,6 +164,112 @@ pub struct PetEventLedgerEntry {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct PetWallet {
+    pub pet_id: String,
+    pub currency_key: String,
+    pub balance: i64,
+    pub lifetime_earned: i64,
+    pub lifetime_spent: i64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetInventoryItem {
+    pub id: String,
+    pub pet_id: String,
+    pub item_key: String,
+    pub item_type: String,
+    pub slot: String,
+    pub quantity: i64,
+    pub equipped: bool,
+    pub source: String,
+    pub purchased_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetEconomyEntry {
+    pub id: String,
+    pub pet_id: String,
+    pub entry_type: String,
+    pub currency_key: String,
+    pub amount: i64,
+    pub balance_after: i64,
+    pub source_type: String,
+    pub source_key: String,
+    pub metadata: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetMilestoneCounter {
+    pub pet_id: String,
+    pub counter_key: String,
+    pub counter_value: i64,
+    pub last_event_key: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetStoreCatalogItem {
+    pub item_key: String,
+    pub item_type: String,
+    pub slot: String,
+    pub name_zh: String,
+    pub name_en: String,
+    pub description_zh: String,
+    pub description_en: String,
+    pub rarity: String,
+    pub price_lp: i64,
+    pub level_gate: i64,
+    pub stage_gate: String,
+    pub milestone_gate: String,
+    pub asset_key: String,
+    pub enabled: bool,
+    pub sort_order: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetStoreCatalogItemState {
+    pub item: PetStoreCatalogItem,
+    pub owned: bool,
+    pub equipped: bool,
+    pub quantity: i64,
+    pub growth_value: i64,
+    pub purchasable: bool,
+    pub locked_reason_zh: String,
+    pub locked_reason_en: String,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetEquipmentState {
+    pub current_pet: Option<PetInventoryItem>,
+    pub accessory: Option<PetInventoryItem>,
+    pub scene: Option<PetInventoryItem>,
+    pub badge: Option<PetInventoryItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetStoreState {
+    pub profile: PetProfile,
+    pub wallet: PetWallet,
+    pub catalog: Vec<PetStoreCatalogItemState>,
+    pub inventory: Vec<PetInventoryItem>,
+    pub equipment: PetEquipmentState,
+    pub counters: Vec<PetMilestoneCounter>,
+    pub economy: Vec<PetEconomyEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct MeetingMemberImportResult {
     pub created: usize,
     pub updated: usize,

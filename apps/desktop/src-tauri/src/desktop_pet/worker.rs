@@ -14,8 +14,8 @@ use tauri::{AppHandle, Manager, Window};
 
 use super::{
     behavior, DesktopPetInstance, DesktopPetState, PetAction, PetBubble, PetBubbleTheme,
-    PetInstanceId, PetVisualState, PetWorker, PetWorkerContext, ANIMATION_FRAME_MS,
-    BUBBLE_VISIBLE_MS, PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH, STATE_REFRESH_MS,
+    PetGrowthFloat, PetInstanceId, PetVisualState, PetWorker, PetWorkerContext, ANIMATION_FRAME_MS,
+    BUBBLE_VISIBLE_MS, PET_RENDER_TICK_MS, PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH, STATE_REFRESH_MS,
 };
 
 pub(crate) fn create_pet_window(
@@ -123,6 +123,7 @@ pub(crate) fn ensure_worker(
 
     let action_state = Arc::new(Mutex::new(action));
     let bubble_state = Arc::new(Mutex::new(None));
+    let growth_float_state = Arc::new(Mutex::new(None));
     let stop_signal = Arc::new(AtomicBool::new(false));
     let worker = PetWorker {
         action: action_state.clone(),
@@ -142,6 +143,7 @@ pub(crate) fn ensure_worker(
                 persist_position: !matches!(instance_id, PetInstanceId::Extra(_)),
                 action_state,
                 bubble_state,
+                growth_float_state,
                 stop_signal: stop_for_thread,
                 interaction_signal,
                 frames,
@@ -173,6 +175,7 @@ fn run_pet_worker(context: PetWorkerContext) {
         persist_position,
         action_state,
         bubble_state,
+        growth_float_state,
         stop_signal,
         interaction_signal,
         frames,
@@ -183,6 +186,7 @@ fn run_pet_worker(context: PetWorkerContext) {
     let mut last_proactive_bubble = SystemTime::now();
     let mut first_frame_logged = false;
     let mut handled_interactions = interaction_signal.load(Ordering::Relaxed);
+    let mut last_speech_event_id = String::new();
 
     while !stop_signal.load(Ordering::Relaxed) {
         let pending_interactions = interaction_signal.load(Ordering::Relaxed);
@@ -224,6 +228,33 @@ fn run_pet_worker(context: PetWorkerContext) {
                         })
                         .ok();
                 }
+
+                if let Ok(Some(event)) =
+                    local_db::list_pet_event_ledger(&app, 1).map(|events| events.into_iter().next())
+                {
+                    if event.id != last_speech_event_id {
+                        last_speech_event_id = event.id.clone();
+                        if let Some(line) = behavior::speech_line_from_event(&event) {
+                            if let Ok(mut guard) = bubble_state.lock() {
+                                *guard = Some(PetBubble {
+                                    text: line.clone(),
+                                    expires_at: SystemTime::now()
+                                        + Duration::from_millis(BUBBLE_VISIBLE_MS),
+                                });
+                            }
+                            eprintln!("[desktop-pet] event bubble text={line}");
+                        }
+                        if event.event_type == "store_food" && event.event_value > 0 {
+                            if let Ok(mut guard) = growth_float_state.lock() {
+                                *guard = Some(PetGrowthFloat {
+                                    value: event.event_value,
+                                    started_at: SystemTime::now(),
+                                    expires_at: SystemTime::now() + Duration::from_millis(3_000),
+                                });
+                            }
+                        }
+                    }
+                }
             }
             last_refresh = SystemTime::now();
         }
@@ -247,6 +278,7 @@ fn run_pet_worker(context: PetWorkerContext) {
             .map(|guard| *guard)
             .unwrap_or(PetAction::Slack);
         let bubble_text = behavior::current_bubble_text(&bubble_state);
+        let growth_float = behavior::current_growth_float(&growth_float_state);
         let bubble_theme = resolve_bubble_theme(&app, &window);
         if action != last_action {
             frame_index = 0;
@@ -267,12 +299,14 @@ fn run_pet_worker(context: PetWorkerContext) {
             let window_clone = window.clone();
             let frame_for_log = frame_path.clone();
             let should_log_frame = !first_frame_logged;
+            let growth_float_for_render = growth_float.clone();
             window
                 .run_on_main_thread(move || {
                     if let Err(error) = windows_pet_renderer::paint_window(
                         &window_clone,
                         &frame_path,
                         bubble_text.as_deref(),
+                        growth_float_for_render.as_ref(),
                         bubble_theme,
                     ) {
                         eprintln!("[desktop-pet] failed to paint window: {error}");
@@ -292,12 +326,14 @@ fn run_pet_worker(context: PetWorkerContext) {
             let window_clone = window.clone();
             let frame_for_log = frame_path.clone();
             let should_log_frame = !first_frame_logged;
+            let growth_float_for_render = growth_float.clone();
             window
                 .run_on_main_thread(move || {
                     if let Err(error) = macos_pet_renderer::paint_window(
                         &window_clone,
                         &frame_path,
                         bubble_text.as_deref(),
+                        growth_float_for_render.as_ref(),
                         bubble_theme,
                     ) {
                         eprintln!("[desktop-pet] failed to paint window: {error}");
@@ -317,8 +353,15 @@ fn run_pet_worker(context: PetWorkerContext) {
             let _ = (&window, &frame_path);
         }
 
-        frame_index = frame_index.saturating_add(1);
-        std::thread::sleep(Duration::from_millis(ANIMATION_FRAME_MS));
+        if growth_float.is_none() {
+            frame_index = frame_index.saturating_add(1);
+            std::thread::sleep(Duration::from_millis(ANIMATION_FRAME_MS));
+        } else {
+            std::thread::sleep(Duration::from_millis(PET_RENDER_TICK_MS));
+            if frame_index == 0 {
+                frame_index = frame_index.saturating_add(1);
+            }
+        }
     }
 }
 

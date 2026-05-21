@@ -27,6 +27,7 @@ pub(crate) const PET_SPRITE_WIDTH: u32 = 148;
 #[cfg(any(windows, target_os = "macos"))]
 pub(crate) const PET_SPRITE_HEIGHT: u32 = 148;
 pub(crate) const ANIMATION_FRAME_MS: u64 = 1000;
+pub(crate) const PET_RENDER_TICK_MS: u64 = 100;
 pub(crate) const STATE_REFRESH_MS: u64 = 5000;
 pub(crate) const RECENT_EVENT_ACTION_HOLD_MS: u64 = 45_000;
 pub(crate) const NEEDY_AFTER_MS: u64 = 30_000;
@@ -82,6 +83,7 @@ pub(crate) struct PetWorkerContext {
     pub(crate) persist_position: bool,
     pub(crate) action_state: Arc<Mutex<PetAction>>,
     pub(crate) bubble_state: Arc<Mutex<Option<PetBubble>>>,
+    pub(crate) growth_float_state: Arc<Mutex<Option<PetGrowthFloat>>>,
     pub(crate) stop_signal: Arc<AtomicBool>,
     pub(crate) interaction_signal: Arc<AtomicU64>,
     pub(crate) frames: PetAnimationFrames,
@@ -90,6 +92,13 @@ pub(crate) struct PetWorkerContext {
 #[derive(Debug, Clone)]
 pub(crate) struct PetBubble {
     pub(crate) text: String,
+    pub(crate) expires_at: SystemTime,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PetGrowthFloat {
+    pub(crate) value: i64,
+    pub(crate) started_at: SystemTime,
     pub(crate) expires_at: SystemTime,
 }
 

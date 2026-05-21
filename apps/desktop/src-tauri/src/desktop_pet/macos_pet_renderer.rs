@@ -9,6 +9,7 @@ use objc2_foundation::NSString;
 use objc2_quartz_core::CALayer;
 
 const BUBBLE_LAYER_NAME: &str = "LibertyDesktopPetBubbleLayer";
+const GROWTH_LABEL_TAG: isize = 8102;
 
 define_class!(
     #[unsafe(super(NSView))]
@@ -75,6 +76,7 @@ pub fn paint_window(
     window: &Window,
     frame_path: &Path,
     bubble_text: Option<&str>,
+    growth_float: Option<&PetGrowthFloat>,
     bubble_theme: PetBubbleTheme,
 ) -> LocalResult<()> {
     let mtm =
@@ -113,12 +115,67 @@ pub fn paint_window(
     image_view.setImage(Some(&image));
 
     update_bubble_label(mtm, &content_view, bubble_text, bubble_theme);
+    update_growth_label(mtm, &content_view, growth_float);
 
     image_view.displayIfNeeded();
     content_view.setNeedsDisplay(true);
     ns_window.displayIfNeeded();
 
     Ok(())
+}
+
+fn update_growth_label(
+    mtm: MainThreadMarker,
+    content_view: &NSView,
+    growth_float: Option<&PetGrowthFloat>,
+) {
+    let label = match content_view
+        .subviews()
+        .into_iter()
+        .filter_map(|view| view.downcast::<NSTextField>().ok())
+        .find(|label| label.tag() == GROWTH_LABEL_TAG)
+    {
+        Some(label) => label,
+        None => {
+            let initial = NSString::from_str("");
+            let label = NSTextField::labelWithString(&initial, mtm);
+            label.setTag(GROWTH_LABEL_TAG);
+            label.setDrawsBackground(false);
+            label.setBordered(false);
+            label.setBezeled(false);
+            label.setEditable(false);
+            label.setSelectable(false);
+            label.setAlignment(NSTextAlignment::Center);
+            label.setFont(Some(&NSFont::boldSystemFontOfSize(18.0)));
+            content_view.addSubview(&label);
+            label
+        }
+    };
+
+    let Some(growth_float) = growth_float else {
+        label.setHidden(true);
+        return;
+    };
+    let elapsed_ms = growth_float
+        .started_at
+        .elapsed()
+        .unwrap_or_default()
+        .as_millis()
+        .min(3_000) as f64;
+    let progress = elapsed_ms / 3_000.0;
+    let y = 88.0 + progress * 34.0;
+    let alpha = if progress < 0.72 {
+        1.0
+    } else {
+        ((1.0 - progress) / 0.28).clamp(0.0, 1.0)
+    };
+    let text = NSString::from_str(&format!("+{}", growth_float.value));
+    label.setStringValue(&text);
+    label.setTextColor(Some(&NSColor::colorWithCalibratedRed_green_blue_alpha(
+        1.0, 0.38, 0.22, alpha,
+    )));
+    label.setFrame(CGRect::new(CGPoint::new(196.0, y), CGSize::new(78.0, 28.0)));
+    label.setHidden(false);
 }
 
 fn create_image_view(mtm: MainThreadMarker) -> objc2::rc::Retained<NSImageView> {

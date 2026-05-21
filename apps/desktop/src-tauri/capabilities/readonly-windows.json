@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "readonly-windows-capability",
-  "description": "Read-only result windows can close themselves and follow the app theme without file-system or child-window privileges.",
-  "windows": ["ai-summary", "meeting-notes"],
+  "description": "Read-only result and detail windows can close themselves and follow the app theme without file-system or child-window privileges.",
+  "windows": ["ai-summary", "meeting-notes", "pet-store-item-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
