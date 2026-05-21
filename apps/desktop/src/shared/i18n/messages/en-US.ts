@@ -9,6 +9,7 @@ export const enUSMessages: MessageTree = {
       members: "Members",
       pet: "Pet",
       petStore: "Pet Store",
+      dailyBlindBox: "Daily Blind Box",
       settings: "Settings",
     },
     routeTitles: {
@@ -21,6 +22,7 @@ export const enUSMessages: MessageTree = {
       members: "Member Management",
       pet: "Pet Center",
       petStore: "Pet Store",
+      dailyBlindBox: "Daily Blind Box",
       aiSummary: "AI Summary",
       settings: "Settings",
     },

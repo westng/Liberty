@@ -21,9 +21,19 @@ export const categoryAccents: Record<string, string> = {
   tool: "#f6c04f",
   food: "#f58a4c",
   badge: "#5f7dff",
+  none: "#8f96a3",
 };
 
-export const petBondTiers = ["first_meet", "familiar", "grow_together", "deep_bond", "forever_partner", "bond_forever"];
+export const petBondTiers = [
+  "first_meet",
+  "familiar",
+  "steady_companion",
+  "grow_together",
+  "tacit_bond",
+  "deep_bond",
+  "long_company",
+  "bond_forever",
+];
 
 export function isCatalogItem(item: PetStoreDisplayItem): item is PetStoreCatalogItemState {
   return "item" in item;
@@ -82,6 +92,8 @@ export function itemTypeLabel(itemType: string, locale: LocaleCode) {
             ? "Tool"
             : itemType === "food"
               ? "Food"
+              : itemType === "none"
+                ? "No Prize"
               : "Badge";
   }
 
@@ -95,21 +107,29 @@ export function itemTypeLabel(itemType: string, locale: LocaleCode) {
           ? "道具"
           : itemType === "food"
             ? "食物"
-            : "徽章";
+            : itemType === "none"
+              ? "空奖"
+              : "徽章";
 }
 
 export function rarityLabel(rarity: string, locale: LocaleCode) {
   const labels: Record<string, { zh: string; en: string }> = {
     first_meet: { zh: "小小初遇", en: "First Encounter" },
     familiar: { zh: "轻轻熟悉", en: "Getting Familiar" },
+    steady_companion: { zh: "稳定陪伴", en: "Steady Companion" },
     grow_together: { zh: "一起成长", en: "Growing Together" },
+    tacit_bond: { zh: "默契养成", en: "Tacit Bond" },
     deep_bond: { zh: "深深羁绊", en: "Deep Bond" },
+    long_company: { zh: "长久相伴", en: "Long Company" },
     forever_partner: { zh: "永远伙伴", en: "Forever Partner" },
     bond_forever: { zh: "不离不弃", en: "Never Apart" },
+    baby: { zh: "小小初遇", en: "First Encounter" },
+    growing: { zh: "一起成长", en: "Growing Together" },
+    mature: { zh: "深深羁绊", en: "Deep Bond" },
   };
   const label = labels[rarity];
   if (!label) {
-    return rarity;
+    return locale === "en-US" ? "Unknown Tier" : "未知阶梯";
   }
   return locale === "en-US" ? label.en : label.zh;
 }

@@ -1,5 +1,6 @@
 import "./PetStoreItemDetailView.css";
-import { useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useEffect, useRef, useState } from "react";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import {
   findCatalogItem,
@@ -20,6 +21,7 @@ import { createLocalPetService } from "@/shared/services/tauri/pet";
 import type { PetStoreCatalogItemState, PetStoreState } from "@/shared/types/meeting";
 
 const petService = createLocalPetService();
+const PET_STORE_ITEM_SHOW_EVENT = "pet-store-item:show";
 
 export default function PetStoreItemDetailView() {
   const meetingStore = useMeetingStore();
@@ -28,7 +30,8 @@ export default function PetStoreItemDetailView() {
   const [storeState, setStoreState] = useState<PetStoreState | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const itemKey = useMemo(() => new URLSearchParams(window.location.search).get("itemKey") ?? "", []);
+  const [itemKey, setItemKey] = useState(() => new URLSearchParams(window.location.search).get("itemKey") ?? "");
+  const itemKeyRef = useRef(itemKey);
   const catalogItem = findCatalogItem(storeState, itemKey);
   const inventoryItem = findInventoryItem(storeState, itemKey);
   const displayItem = catalogItem ?? inventoryItem ?? null;
@@ -41,6 +44,48 @@ export default function PetStoreItemDetailView() {
   useEffect(() => {
     void loadStoreState();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void syncInitialItemKeyFromNativeState();
+    void listen<{ itemKey?: string }>(PET_STORE_ITEM_SHOW_EVENT, (event) => {
+      applyItemKey(event.payload?.itemKey);
+    }).then((cleanup) => {
+      if (disposed) {
+        cleanup();
+        return;
+      }
+      unlisten = cleanup;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  async function syncInitialItemKeyFromNativeState() {
+    try {
+      applyItemKey(await petService.getStoreItemDetailItem());
+    } catch {
+      return;
+    }
+  }
+
+  function applyItemKey(value?: string | null) {
+    const nextItemKey = value?.trim();
+    if (!nextItemKey) {
+      return;
+    }
+    if (nextItemKey === itemKeyRef.current) {
+      return;
+    }
+    itemKeyRef.current = nextItemKey;
+    setItemKey(nextItemKey);
+    void loadStoreState();
+  }
 
   async function loadStoreState() {
     setLoading(true);
@@ -92,13 +137,7 @@ export default function PetStoreItemDetailView() {
     if (!stageGate) {
       return isEnglish ? "None" : "无";
     }
-    if (stageGate === "growing") {
-      return isEnglish ? "Growing stage" : "成长阶段";
-    }
-    if (stageGate === "mature") {
-      return isEnglish ? "Mature stage" : "成熟阶段";
-    }
-    return stageGate;
+    return rarityLabel(stageGate, locale);
   }
 
   function sourceLabel(source: string) {
@@ -107,10 +146,13 @@ export default function PetStoreItemDetailView() {
       growth: { zh: "成长解锁", en: "Growth" },
       purchase: { zh: "购买获得", en: "Purchased" },
       achievement: { zh: "成就获得", en: "Achievement" },
+      daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
+      blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
+      blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
     };
     const label = labels[source];
     if (!label) {
-      return source || (isEnglish ? "Unknown" : "未知");
+      return isEnglish ? "Unknown" : "未知";
     }
     return isEnglish ? label.en : label.zh;
   }

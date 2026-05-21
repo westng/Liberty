@@ -60,7 +60,7 @@ The fourth refinement pass reduces remaining large orchestration files:
   archive extraction, resource path resolution, logging, and process streaming
   live in `local_runtime/*`
 - settings page state and runtime-panel calculations live in
-  `features/settings/application`, leaving `SettingsView.vue` focused on layout
+  `features/settings/application`, leaving `SettingsView.tsx` focused on layout
 
 ## Data And Migration
 

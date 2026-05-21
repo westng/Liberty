@@ -16,9 +16,6 @@
 .pet-item-visual-column,
 .pet-item-content-column {
   min-width: 0;
-  border: 1px solid var(--native-panel-border);
-  border-radius: 8px;
-  background: var(--native-panel-bg);
 }
 
 .pet-item-visual-column {

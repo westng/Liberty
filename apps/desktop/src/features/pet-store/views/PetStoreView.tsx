@@ -49,6 +49,7 @@ export default function PetStoreView() {
   const inventoryItems = (storeState?.inventory ?? []).filter((item) => item.quantity > 0);
   const wallet = storeState?.wallet;
   const profile = storeState?.profile;
+  const profileLevel = profile?.levelSnapshot?.level ?? profile?.level ?? 1;
   const counters = storeState?.counters ?? [];
   const equipment = storeState?.equipment;
   const visibleCatalogItems = activeCategory === "all"
@@ -270,10 +271,13 @@ export default function PetStoreView() {
       growth: { zh: "成长解锁", en: "Growth" },
       purchase: { zh: "购买获得", en: "Purchased" },
       achievement: { zh: "成就获得", en: "Achievement" },
+      daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
+      blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
+      blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
     };
     const label = labels[source];
     if (!label) {
-      return source;
+      return isEnglish ? "Unknown" : "未知";
     }
     return isEnglish ? label.en : label.zh;
   }
@@ -297,7 +301,7 @@ export default function PetStoreView() {
     };
     const label = labels[counterKey];
     if (!label) {
-      return counterKey;
+      return isEnglish ? "Unknown milestone" : "未知里程碑";
     }
     return isEnglish ? label.en : label.zh;
   }
@@ -677,7 +681,7 @@ export default function PetStoreView() {
             <div className="native-stat-list">
               <div>
                 <span>{isEnglish ? "Level" : "等级"}</span>
-                <strong>{profile?.level ?? 1}</strong>
+                <strong>{profileLevel}</strong>
               </div>
               <div>
                 <span>{isEnglish ? "LP Balance" : "LP 余额"}</span>

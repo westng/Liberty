@@ -1,5 +1,11 @@
 # Liberty Desktop Pet Design
 
+> Historical note: this document records the first desktop-pet design pass.
+> Current progression, LP economy, food growth, item gates, and daily blind-box
+> rules are superseded by
+> [Liberty 宠物 255 级成长生态策略](./2026-05-21-宠物255级成长生态策略.md).
+> Use that strategy as the source of truth when numbers or rules differ.
+
 ## Overview
 
 Liberty will add a desktop pet system that combines persistent companionship
@@ -34,14 +40,14 @@ The user direction for this milestone is:
 - Tie pet growth to meaningful Liberty usage behavior
 - Support active pet interactions and proactive pet feedback
 - Keep the pet system manageable through a dedicated in-app management surface
-- Reuse Liberty's Tauri desktop shell, Vue frontend, Rust local services, and
+- Reuse Liberty's Tauri desktop shell, React frontend, Rust local services, and
   SQLite persistence patterns
 
 ## Non-Goals
 
 - Multi-pet collection or switching in the first version
 - Cloud sync, account systems, or cross-device pet persistence
-- Complex game loops such as battle, crafting, breeding, or gachas
+- Complex game loops such as battle, crafting, breeding, or paid gachas
 - Deep workflow automation where the pet becomes a formal task assistant
 - Audio voice playback or microphone-triggered interactions in V1
 
@@ -60,7 +66,7 @@ The user direction for this milestone is:
 ## Selected Approach
 
 Liberty will implement a standalone desktop pet window managed by Tauri and a
-deeper in-app pet panel managed by Vue. The desktop window is responsible for
+deeper in-app pet panel managed by React. The desktop window is responsible for
 presence, lightweight interaction, and immediate feedback. The main Liberty app
 is responsible for progress visualization, management actions, configuration,
 history, and richer pet details.
@@ -260,20 +266,24 @@ Usage activity examples:
 
 ### Progression Structure
 
-V1 should use a simple, inspectable growth model:
+The current growth model follows the 255-level strategy:
 
 - `level`
 - `experience`
 - `stage`
+- `levelSnapshot`
 
-Suggested logic:
+Required logic:
 
-- level increases through cumulative experience
-- stage changes at milestone levels
+- level increases through cumulative growth value
+- level is capped at `255`
+- stage changes across 8 companion stages
 - stage change is the main visual payoff
+- `experience` continues accumulating after Lv.255
 
-The exact numbers can be tuned later, but the structure should make stage
-changes feel materially more important than individual levels.
+The exact curve, stage ranges, food growth, LP multipliers, and max-level
+behavior are defined in the 255-level strategy. This document should not be
+used as a separate numeric source.
 
 ### Stage Priority
 
@@ -366,33 +376,37 @@ optional polish. They are part of the core feature contract.
 
 ### Frontend
 
-The Vue frontend should host:
+The React frontend should host:
 
 - pet management page or panel
 - pet settings controls
 - visual progress components
 - local view models for pet state, stage, and unlock summaries
 
-Recommended areas:
+Recommended areas in the current React codebase:
 
-- a dedicated pet view under `src/views/`
-- pet-related composables under `src/composables/`
-- a service wrapper under `src/services/`
+- pet views under `apps/desktop/src/features/pet/`
+- pet-store views under `apps/desktop/src/features/pet-store/`
+- daily blind-box views under `apps/desktop/src/features/pet-blind-box/`
+- service wrappers under `apps/desktop/src/shared/services/tauri/`
 
 ### Tauri and Rust
 
 Rust should host:
 
 - pet persistence models
+- 255-level curve helpers
+- daily blind-box repository
 - experience calculation entry points
 - event application logic
 - desktop window lifecycle and configuration orchestration
 
 Likely touch points:
 
-- `src-tauri/src/local_db.rs` for storage
-- a new pet-focused module such as `src-tauri/src/local_pet.rs`
-- `src-tauri/src/main.rs` or adjacent window registration code for pet window
+- `apps/desktop/src-tauri/src/local_db.rs` for storage
+- `apps/desktop/src-tauri/src/local_db/pet_leveling.rs` for the 255-level curve
+- `apps/desktop/src-tauri/src/local_pet.rs` for pet-focused command adapters
+- `apps/desktop/src-tauri/src/lib.rs` or adjacent window registration code for pet window
   creation and commands
 
 ### Persistence Model
@@ -405,8 +419,10 @@ Permanent data:
 - level
 - experience
 - stage
+- level snapshot
 - unlocked cosmetics
 - lifetime counters
+- LP wallet, inventory, economy ledger, milestone counters, and daily blind-box history
 
 Periodic data:
 
@@ -491,12 +507,13 @@ Recommended first event set:
 
 The event layer should convert these into:
 
-- experience gains
+- growth value gains
+- LP rewards
 - mood changes
 - optional proactive desktop reactions
 
 This mapping should live in Rust or a shared service boundary, not be scattered
-across unrelated Vue views.
+across unrelated React views.
 
 ## Error Handling
 
@@ -516,8 +533,9 @@ The pet must never block core meeting processing.
 ### Rust
 
 - schema creation and migration tests for pet tables
-- experience calculation tests
+- 255-level curve tests
 - event-to-growth mapping tests
+- LP multiplier and food fixed-growth tests
 - state transition tests
 - settings persistence tests
 
@@ -556,7 +574,7 @@ The implementation plan should make concrete decisions on:
 
 - the exact desktop window behavior supported consistently on macOS and Windows
 - whether click-through ships in V1 or remains conditional by platform
-- the initial number of stages
+- tuning details for the 8 companion stages, if real usage data suggests changes
 - the initial proactive prompt frequency defaults
 - whether the first pet visuals are raster sprite sheets, web animations, or a
   lightweight canvas-based renderer

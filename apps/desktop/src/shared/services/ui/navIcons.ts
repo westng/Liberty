@@ -9,6 +9,7 @@ const iconNames = {
   people: "person-2",
   pet: "paw",
   store: "bag",
+  gift: "gift",
   gear: "gear",
   mode: "speedometer",
   processing: "timer",

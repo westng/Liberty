@@ -12,6 +12,10 @@ const eventSourceLabels: Record<string, LocalizedLabel> = {
   store_equip: { zh: "装备物品", en: "Equipped Item" },
   store_food: { zh: "投喂食物", en: "Fed Food" },
   store_tool: { zh: "使用道具", en: "Used Item" },
+  blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
+  blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
+  blind_box_empty: { zh: "盲盒空奖", en: "Empty Blind Box" },
+  daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
   tap: { zh: "点击", en: "Tap" },
   pet: { zh: "抚摸", en: "Pet" },
   feed: { zh: "投喂", en: "Feed" },
@@ -107,6 +111,9 @@ export function formatPetEventTitle(entry: PetEventLedgerEntry, locale: LocaleCo
   if (entry.eventType === "interaction") {
     return locale === "en-US" ? "Interaction" : "互动";
   }
+  if (isBlindBoxEvent(entry)) {
+    return locale === "en-US" ? "Blind Box Event" : "盲盒事件";
+  }
 
   return locale === "en-US" ? "Pet Event" : "宠物事件";
 }
@@ -164,7 +171,7 @@ function formatStructuredMetadata(entry: PetEventLedgerEntry, locale: LocaleCode
 
 function formatJsonMetadata(entry: PetEventLedgerEntry, metadata: string, locale: LocaleCode) {
   try {
-    const value = JSON.parse(metadata) as Partial<Record<"zh" | "en" | "itemKey" | "itemType" | "nameZh" | "nameEn", string>>;
+    const value = JSON.parse(metadata) as Partial<Record<"zh" | "en" | "itemKey" | "itemType" | "nameZh" | "nameEn" | "source", string>>;
     const localizedText = locale === "en-US" ? value.en : value.zh;
     if (localizedText?.trim()) {
       return localizedText.trim();
@@ -175,11 +182,28 @@ function formatJsonMetadata(entry: PetEventLedgerEntry, metadata: string, locale
         en: value.nameEn,
       });
     }
+    if (entry.eventType === "interaction") {
+      return interactionEventDetail(entry, locale);
+    }
+    if (entry.eventType === "workflow") {
+      return workflowEventDetail(entry, locale);
+    }
+    if (isBlindBoxEvent(entry)) {
+      return blindBoxEventDetail(entry, locale);
+    }
   } catch {
-    return "";
+    if (entry.eventType === "interaction") {
+      return interactionEventDetail(entry, locale);
+    }
+    if (entry.eventType === "workflow") {
+      return workflowEventDetail(entry, locale);
+    }
+    if (isBlindBoxEvent(entry)) {
+      return blindBoxEventDetail(entry, locale);
+    }
   }
 
-  return "";
+  return eventDefaultDetail(entry, locale);
 }
 
 function formatLegacyStoreMetadata(entry: PetEventLedgerEntry, parts: string[], locale: LocaleCode) {
@@ -232,10 +256,10 @@ function fallbackEnglishDetail(entry: PetEventLedgerEntry) {
     return itemEventDetail(entry, entry.eventSource, "en-US");
   }
   if (entry.eventType === "interaction") {
-    return `${formatPetEventTitle(entry, "en-US")} interaction recorded.`;
+    return interactionEventDetail(entry, "en-US");
   }
 
-  return `${formatPetEventTitle(entry, "en-US")} recorded.`;
+  return eventDefaultDetail(entry, "en-US");
 }
 
 function fallbackChineseDetail(entry: PetEventLedgerEntry) {
@@ -243,10 +267,10 @@ function fallbackChineseDetail(entry: PetEventLedgerEntry) {
     return itemEventDetail(entry, entry.eventSource, "zh-CN");
   }
   if (entry.eventType === "interaction") {
-    return `${formatPetEventTitle(entry, "zh-CN")}互动已记录。`;
+    return interactionEventDetail(entry, "zh-CN");
   }
 
-  return `${formatPetEventTitle(entry, "zh-CN")}已记录。`;
+  return eventDefaultDetail(entry, "zh-CN");
 }
 
 function containsChinese(value: string) {
@@ -259,6 +283,42 @@ function isLikelyRawId(value: string) {
 
 function isStoreEvent(entry: PetEventLedgerEntry) {
   return entry.eventType.startsWith("store_");
+}
+
+function isBlindBoxEvent(entry: PetEventLedgerEntry) {
+  return entry.eventType.startsWith("blind_box_") || entry.eventSource === "daily_blind_box";
+}
+
+function interactionEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
+  const details: Record<string, LocalizedLabel> = {
+    tap: { zh: "你轻轻叫了它一下，伙伴回应了这次互动。", en: "You checked in with your companion and it responded." },
+    pet: { zh: "你安抚了伙伴，它的心情变得更轻松。", en: "You comforted your companion and it feels calmer." },
+    feed: { zh: "你投喂了伙伴，这次照顾已记录。", en: "You fed your companion and this care was recorded." },
+    encourage: { zh: "你鼓励了伙伴，它获得了一点继续陪伴的力量。", en: "You encouraged your companion and it feels ready to keep going." },
+  };
+  return localized(details[entry.eventSource] ?? { zh: "互动已记录。", en: "Interaction recorded." }, locale);
+}
+
+function blindBoxEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
+  if (entry.eventType === "blind_box_duplicate") {
+    return locale === "en-US"
+      ? "Duplicate item converted into LP compensation."
+      : "重复物品已转换为 LP 补偿。";
+  }
+  if (entry.eventType === "blind_box_empty") {
+    return locale === "en-US"
+      ? "No item this time, but the companionship was recorded."
+      : "这次没有获得物品，但陪伴已记录。";
+  }
+  return locale === "en-US"
+    ? "Blind box reward recorded."
+    : "盲盒奖励已记录。";
+}
+
+function eventDefaultDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
+  return locale === "en-US"
+    ? `${formatPetEventTitle(entry, "en-US")} recorded.`
+    : `${formatPetEventTitle(entry, "zh-CN")}已记录。`;
 }
 
 function workflowEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {

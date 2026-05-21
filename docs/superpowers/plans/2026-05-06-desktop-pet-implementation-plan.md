@@ -1,8 +1,15 @@
 # Liberty Desktop Pet Implementation Plan
 
+> Historical note: this plan reflects the first desktop-pet implementation pass.
+> Current frontend structure, pet growth, LP economy, food rewards, item gates,
+> and daily blind-box behavior are governed by
+> [Liberty 宠物 255 级成长生态策略](../specs/2026-05-21-宠物255级成长生态策略.md).
+> Treat this file as historical sequencing context, not the source of current
+> numeric rules.
+
 ## Goal
 
-Add a real desktop-persistent pet to Liberty using the existing Tauri, Vue,
+Add a real desktop-persistent pet to Liberty using the existing Tauri, React,
 TypeScript, Rust, and SQLite architecture. The pet should live in its own
 desktop window, grow from meaningful Liberty activity, support high-frequency
 interaction with user controls, and expose a dedicated in-app management
@@ -25,9 +32,12 @@ surface.
 - Event mapping from core Liberty workflow milestones into pet growth and mood
 - Basic growth loop with:
   - level
-  - experience
-  - stage
+  - cumulative growth value
+  - 8 companion stages
+  - 255-level snapshot
   - current mood
+- LP wallet and local reward ledger
+- Daily free blind-box state and history
 - Disturbance controls with:
   - desktop enable switch
   - mute switch
@@ -50,6 +60,9 @@ surface.
   - `PetEventLedgerEntry`
   - `PetInteractionAction`
   - `PetGrowthSummary`
+  - `PetLevelSnapshot`
+  - `PetStoreState`
+  - `PetBlindBoxState`
 - Keep the first pass explicit and serializable for Tauri invoke boundaries
 - Avoid mixing pet transient state into `MeetingJob`
 
@@ -61,12 +74,19 @@ surface.
   - `pet_settings`
   - `pet_event_ledger`
   - `pet_cosmetic_unlocks`
+  - `pet_wallets`
+  - `pet_inventory`
+  - `pet_economy_ledger`
+  - `pet_milestone_counters`
+  - `pet_blind_box_draws`
 - Seed a default single pet record when no profile exists
 - Provide read and write helpers for:
   - loading the active pet
   - saving desktop settings
   - saving event ledger entries
   - applying experience and stage changes atomically
+  - applying LP rewards atomically
+  - recording daily blind-box draws
 - Keep pet writes isolated from job persistence failures
 
 ### 3. Rust Pet Module
@@ -79,6 +99,13 @@ surface.
   - `list_pet_event_ledger`
   - `apply_pet_interaction`
   - `apply_pet_workflow_event`
+  - `get_pet_store_state`
+  - `purchase_pet_store_item`
+  - `equip_pet_inventory_item`
+  - `unequip_pet_inventory_slot`
+  - `use_pet_inventory_item`
+  - `get_pet_blind_box_state`
+  - `draw_pet_blind_box`
   - `show_pet_window`
   - `hide_pet_window`
   - `update_pet_window_position`
@@ -87,7 +114,7 @@ surface.
 
 ### 4. Growth Calculation Layer
 
-- Add a small Rust-owned growth calculator instead of scattering math in Vue
+- Add a Rust-owned 255-level growth calculator instead of scattering math in React
 - Encode the source priorities from the spec:
   - task progression
   - result accumulation
@@ -101,7 +128,10 @@ surface.
 - Support:
   - cumulative experience
   - level-up detection
-  - stage threshold checks
+  - 8-stage threshold checks
+  - Lv.255 cap with continued cumulative experience
+  - work reward multipliers and LP multipliers
+  - food fixed growth values outside multiplier logic
   - cosmetic unlock hooks for later use
 
 ### 5. Mood And State Layer
@@ -133,7 +163,7 @@ surface.
 
 ### 7. Desktop Pet Frontend View
 
-- Add a standalone pet window view under `src/views/`
+- Add a standalone pet window view under the current React feature structure
 - Build a constrained UI with:
   - pet visual layer
   - small mood bubble area
@@ -159,9 +189,9 @@ surface.
 
 ### 9. Frontend Service And State Wiring
 
-- Add a new service such as `src/services/localPet.ts`
+- Add a shared service such as `apps/desktop/src/shared/services/tauri/pet.ts`
 - Wrap all pet-related Tauri invokes in that service
-- Add a focused composable such as `src/composables/usePetStore.ts`
+- Add a focused React store such as `apps/desktop/src/features/pet/stores/usePetStore.ts`
 - Keep pet state ownership separate from `useMeetingStore`
 - Add only narrow integration points from meeting workflows into pet events
 
@@ -210,7 +240,7 @@ surface.
 
 ### 13. Verification
 
-- Run TypeScript checks for new routes, services, and composables
+- Run TypeScript checks for new routes, services, and React stores
 - Run frontend production build
 - Run Rust compile checks for new Tauri module wiring
 - Manually verify:
@@ -228,7 +258,7 @@ surface.
 2. Add SQLite pet tables and bootstrap logic in `local_db.rs`
 3. Implement `local_pet.rs` with core state, settings, and event commands
 4. Register commands in `src-tauri/src/lib.rs`
-5. Add frontend pet service and pet store composable
+5. Add frontend pet service and React pet store
 6. Add desktop pet standalone route and window helper
 7. Build the desktop pet window UI with placeholder assets
 8. Add the in-app pet management page and navigation entry
@@ -240,20 +270,24 @@ surface.
 
 ### Frontend
 
-- `src/router/index.ts`
-- `src/App.vue`
-- `src/services/window.ts`
-- `src/services/localPet.ts`
-- `src/composables/usePetStore.ts`
-- `src/views/PetDesktopView.vue`
-- `src/views/PetManagementView.vue`
-- `src/types/meeting.ts` or a new pet-focused type file under `src/types/`
+- `apps/desktop/src/app/router/index.ts`
+- `apps/desktop/src/app/App.tsx`
+- `apps/desktop/src/shared/services/ui/windows.ts`
+- `apps/desktop/src/shared/services/tauri/pet.ts`
+- `apps/desktop/src/features/pet/stores/usePetStore.ts`
+- `apps/desktop/src/features/pet/views/PetManagementView.tsx`
+- `apps/desktop/src/features/pet-store/`
+- `apps/desktop/src/features/pet-blind-box/`
+- `apps/desktop/src/shared/types/meeting.ts`
 
 ### Tauri
 
 - `src-tauri/src/lib.rs`
 - `src-tauri/src/local_db.rs`
+- `src-tauri/src/local_db/pet_leveling.rs`
 - `src-tauri/src/local_pet.rs`
+- `src-tauri/src/infrastructure/repositories/pet_store.rs`
+- `src-tauri/src/infrastructure/repositories/pet_blind_box.rs`
 
 ### Assets
 

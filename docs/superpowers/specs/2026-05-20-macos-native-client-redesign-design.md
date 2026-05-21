@@ -1,5 +1,9 @@
 # Liberty 客户端 macOS 原生风格重设计方案
 
+> 当前前端已迁移到 React/TSX。本文中的页面结构和组件命名应按
+> `apps/desktop/src/app/`、`apps/desktop/src/features/` 和
+> `apps/desktop/src/shared/` 理解；旧 Vue 目录和 `.vue` 文件名不再作为实现口径。
+
 ## 目标
 
 将 Liberty 桌面客户端从偏网页后台的卡片式界面，重构为更接近 macOS 原生工具软件的界面体系。设计强调克制、清晰、可长期维护，同时保留现有业务能力和跨平台可用性。
@@ -228,7 +232,7 @@
 
 `/settings` 不做页面内视觉重构：
 
-- 不修改 `SettingsView.vue` 的业务结构。
+- 不修改 `SettingsView.tsx` 的业务结构。
 - 不重排设置项。
 - 不替换设置页专属样式。
 - 只允许外层 shell、标题栏、侧边栏变化自然影响它。
@@ -248,7 +252,7 @@
 - `StatusDot` / `StatusText`：状态表达。
 - `EmptyState`：统一空状态。
 
-组件命名要贴合现有 Vue 目录结构，避免过度抽象。每个组件职责单一，文件行数控制在可维护范围内。
+组件命名要贴合现有 React feature 目录结构，避免过度抽象。每个组件职责单一，文件行数控制在可维护范围内。
 
 ## 实施阶段
 

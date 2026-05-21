@@ -9,6 +9,7 @@ export type MessageTree = {
     members: string;
     pet: string;
     petStore: string;
+    dailyBlindBox: string;
     settings: string;
   };
   routeTitles: Record<string, string>;

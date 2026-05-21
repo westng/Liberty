@@ -21,7 +21,18 @@ export type ManagedRuntimeInstallStatus =
   | "repair_required"
   | "unsupported";
 export type PetMood = "idle" | "cheerful" | "excited" | "proud" | "needy" | "sleepy" | "bored";
-export type PetStage = "baby" | "growing" | "mature";
+export type PetStage =
+  | "first_meet"
+  | "familiar"
+  | "steady_companion"
+  | "grow_together"
+  | "tacit_bond"
+  | "deep_bond"
+  | "long_company"
+  | "bond_forever"
+  | "baby"
+  | "growing"
+  | "mature";
 export type PetInteractionAction = "tap" | "pet" | "feed" | "encourage";
 export type PetWorkflowEventType =
   | "job_created"
@@ -104,12 +115,27 @@ export interface MeetingMemberImportResult {
   updated: number;
 }
 
+export interface PetLevelSnapshot {
+  level: number;
+  currentLevelExp: number;
+  nextLevelRequired: number;
+  totalExperience: number;
+  currentStage: PetStage;
+  currentStageLabelZh: string;
+  currentStageLabelEn: string;
+  nextStage?: PetStage;
+  nextStageLevel?: number;
+  progressRatio: number;
+  isMaxLevel: boolean;
+}
+
 export interface PetProfile {
   id: string;
   name: string;
   level: number;
   experience: number;
   stage: PetStage;
+  levelSnapshot: PetLevelSnapshot;
   currentMood: PetMood;
   createdAt: string;
   updatedAt: string;
@@ -191,8 +217,8 @@ export interface PetMilestoneCounter {
 
 export interface PetStoreCatalogItem {
   itemKey: string;
-  itemType: "pet" | "cosmetic" | "theme" | "tool" | "food" | "badge";
-  slot: "pet" | "accessory" | "scene" | "badge" | "consumable";
+  itemType: "pet" | "cosmetic" | "theme" | "tool" | "food" | "badge" | "none";
+  slot: "pet" | "accessory" | "scene" | "badge" | "consumable" | "none";
   nameZh: string;
   nameEn: string;
   descriptionZh: string;
@@ -203,6 +229,7 @@ export interface PetStoreCatalogItem {
   stageGate: string;
   milestoneGate: string;
   assetKey: string;
+  growthValue: number;
   enabled: boolean;
   sortOrder: number;
 }
@@ -234,6 +261,41 @@ export interface PetStoreState {
   equipment: PetEquipmentState;
   counters: PetMilestoneCounter[];
   economy: PetEconomyEntry[];
+}
+
+export interface PetBlindBoxDrawEntry {
+  id: string;
+  petId: string;
+  drawDate: string;
+  itemKey: string;
+  itemType: PetStoreCatalogItem["itemType"];
+  quantity: number;
+  duplicateCompensationLp: number;
+  createdAt: string;
+}
+
+export interface PetBlindBoxPoolItem {
+  item: PetStoreCatalogItem;
+  owned: boolean;
+  weight: number;
+  duplicateCompensationLp: number;
+}
+
+export interface PetBlindBoxState {
+  drawDate: string;
+  dailyLimit: number;
+  usedToday: number;
+  remainingToday: number;
+  pool: PetBlindBoxPoolItem[];
+  history: PetBlindBoxDrawEntry[];
+  storeState: PetStoreState;
+}
+
+export interface PetBlindBoxDrawResult {
+  state: PetBlindBoxState;
+  draw: PetBlindBoxDrawEntry;
+  prize: PetStoreCatalogItem;
+  duplicate: boolean;
 }
 
 export interface PetWorkflowEventInput {

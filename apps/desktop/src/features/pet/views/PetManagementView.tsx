@@ -16,7 +16,7 @@ import {
 import { formatPetEventDetail, formatPetEventTitle, formatPetEventValue } from "@/features/pet/services/petEventFormatters";
 import { applyDesktopPetState, openExtraDesktopPet } from "@/shared/services/tauri/pet";
 import { promptPetName } from "@/shared/services/tauri/system";
-import type { PetInteractionAction, PetSettings } from "@/shared/types/meeting";
+import type { LocaleCode, PetInteractionAction, PetSettings, PetStage } from "@/shared/types/meeting";
 
 const ANIMATION_FRAME_INTERVAL_MS = 1000;
 
@@ -41,11 +41,10 @@ export default function PetManagementView() {
   const [petVisualStateNow, setPetVisualStateNow] = useState(Date.now());
   const [settingsForm, setSettingsForm] = useState<SettingsForm>(defaultSettingsForm);
   const locale = meetingStore.settings.locale;
-  const stageLabel = petStore.profile?.stage === "mature"
-    ? (locale === "en-US" ? "Mature" : "成熟期")
-    : petStore.profile?.stage === "growing"
-      ? (locale === "en-US" ? "Growing" : "成长期")
-      : (locale === "en-US" ? "Baby" : "幼年期");
+  const levelSnapshot = petStore.levelSnapshot;
+  const stageLabel = levelSnapshot
+    ? (locale === "en-US" ? levelSnapshot.currentStageLabelEn : levelSnapshot.currentStageLabelZh)
+    : stageLabelFromStage(petStore.profile?.stage, locale);
   const moodLabel = (() => {
     switch (petStore.profile?.currentMood) {
       case "cheerful":
@@ -64,7 +63,10 @@ export default function PetManagementView() {
         return locale === "en-US" ? "Idle" : "待机";
     }
   })();
-  const progressRatio = ((petStore.stageProgress ?? 0) / 20) * 100;
+  const progressRatio = Math.round((petStore.levelProgressRatio ?? 0) * 100);
+  const nextStageLabel = levelSnapshot?.nextStage
+    ? `${stageLabelFromStage(levelSnapshot.nextStage, locale)} Lv.${levelSnapshot.nextStageLevel ?? ""}`.trim()
+    : (locale === "en-US" ? "Max companion stage" : "最高陪伴阶段");
   const petCoverMood = petStore.profile?.currentMood ?? "idle";
   const petCoverEnvironmentState = getPetEnvironmentState(meetingStore.jobs);
   const petCoverAction = resolvePetVisualAction({
@@ -75,7 +77,7 @@ export default function PetManagementView() {
   });
   const petCoverUrl = getPetSpriteUrlForGroup(petCoverAction, petCoverFrameIndex);
   const petCoverStyle = {
-    transform: `scale(${getPetSpriteScale(petStore.profile?.stage ?? "baby")})`,
+    transform: `scale(${getPetSpriteScale(levelSnapshot?.currentStage ?? petStore.profile?.stage ?? "first_meet")})`,
   };
   const petActionIcons = useMemo(() => createPetActionIcons(), []);
   const petInteractionActions = [
@@ -310,7 +312,7 @@ export default function PetManagementView() {
               </div>
 
               <div className="pet-visual-panel">
-                <div className="pet-avatar-shell pet-avatar-shell-large" data-stage={petStore.profile?.stage ?? "baby"}>
+                <div className="pet-avatar-shell pet-avatar-shell-large" data-stage={levelSnapshot?.currentStage ?? petStore.profile?.stage ?? "first_meet"}>
                   <img className="pet-cover-image" src={petCoverUrl} style={petCoverStyle} alt="" draggable="false" />
                 </div>
                 <div className="pet-identity-row">
@@ -333,11 +335,11 @@ export default function PetManagementView() {
                 <div className="pet-status-grid">
                   <div className="pet-status-tile">
                     <span>{locale === "en-US" ? "Level" : "等级"}</span>
-                    <strong>{petStore.profile?.level ?? 1}</strong>
+                    <strong>{levelSnapshot?.level ?? petStore.profile?.level ?? 1}</strong>
                   </div>
                   <div className="pet-status-tile">
-                    <span>{locale === "en-US" ? "Experience" : "经验"}</span>
-                    <strong>{petStore.profile?.experience ?? 0}</strong>
+                    <span>{locale === "en-US" ? "Total Growth" : "累计成长"}</span>
+                    <strong>{levelSnapshot?.totalExperience ?? petStore.profile?.experience ?? 0}</strong>
                   </div>
                   <div className="pet-status-tile">
                     <span>{locale === "en-US" ? "Outfit" : "佩戴"}</span>
@@ -351,11 +353,19 @@ export default function PetManagementView() {
 
                 <div className="pet-progress-card">
                   <div className="pet-stat-row">
-                    <span>{locale === "en-US" ? "Stage progress" : "阶段进度"}</span>
-                    <strong>{petStore.stageProgress}/20</strong>
+                    <span>{petStore.isMaxLevel ? (locale === "en-US" ? "Companion Value" : "满级陪伴值") : (locale === "en-US" ? "Level Progress" : "本级成长")}</span>
+                    <strong>
+                      {petStore.isMaxLevel
+                        ? (levelSnapshot?.totalExperience ?? petStore.profile?.experience ?? 0)
+                        : `${petStore.currentLevelExp}/${petStore.nextLevelRequired}`}
+                    </strong>
                   </div>
                   <div className="pet-progress">
                     <div className="pet-progress-bar" style={{ width: `${progressRatio}%` }} />
+                  </div>
+                  <div className="pet-stat-row pet-next-stage-row">
+                    <span>{locale === "en-US" ? "Next stage" : "下一阶段"}</span>
+                    <strong>{nextStageLabel}</strong>
                   </div>
                 </div>
               </div>
@@ -465,4 +475,22 @@ function normalizePetInteractionError(content: string, locale: string) {
   }
 
   return content;
+}
+
+function stageLabelFromStage(stage: PetStage | undefined, locale: LocaleCode) {
+  const labels: Record<string, { zh: string; en: string }> = {
+    first_meet: { zh: "小小初遇", en: "First Encounter" },
+    familiar: { zh: "轻轻熟悉", en: "Getting Familiar" },
+    steady_companion: { zh: "稳定陪伴", en: "Steady Companion" },
+    grow_together: { zh: "一起成长", en: "Growing Together" },
+    tacit_bond: { zh: "默契养成", en: "Tacit Bond" },
+    deep_bond: { zh: "深深羁绊", en: "Deep Bond" },
+    long_company: { zh: "长久相伴", en: "Long Company" },
+    bond_forever: { zh: "不离不弃", en: "Never Apart" },
+    baby: { zh: "小小初遇", en: "First Encounter" },
+    growing: { zh: "一起成长", en: "Growing Together" },
+    mature: { zh: "深深羁绊", en: "Deep Bond" },
+  };
+  const label = labels[stage ?? "first_meet"] ?? labels.first_meet;
+  return locale === "en-US" ? label.en : label.zh;
 }

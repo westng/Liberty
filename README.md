@@ -42,7 +42,7 @@ Liberty is a local-first desktop application for meeting media processing. The c
 - Manage meeting members with Excel import/export, department, sort order, and recorder metadata.
 - Switch Chinese/English UI, automatic/light/dark theme, transparent/tinted glass style, and accent color.
 - View diagnostics for platform matrix, database schema version, runtime status, and security baseline.
-- Use the desktop companion, Pet Center, LP wallet, Pet Store, inventory, item detail window, and native desktop pet rendering.
+- Use the desktop companion, 255-level growth, LP wallet, Pet Store, inventory, daily free blind box, item detail window, and native desktop pet rendering.
 
 ## Runtime Modes
 
@@ -72,7 +72,7 @@ AI requests are sent by the Rust `local_ai` module to an OpenAI-compatible endpo
 
 ### Pet Pipeline
 
-The pet pipeline is a local companion system outside the core meeting flow. App startup tries to sync desktop pet state, but pet loading failure must not block the main window.
+The pet pipeline is a local companion system outside the core meeting flow. Current pet rules follow the 255-level growth ecosystem strategy: real work is the main growth source, LP is a local reward point, food grants fixed growth, and the daily blind box is a free local benefit. App startup tries to sync desktop pet state, but pet loading failure must not block the main window.
 
 See [docs/pet-system.md](./docs/pet-system.md) for the current implementation notes.
 
@@ -128,8 +128,9 @@ See [docs/pet-system.md](./docs/pet-system.md) for the current implementation no
 - `Templates` / `Template Editor`: maintain AI summary templates.
 - `Members` / `Member Editor`: maintain members, departments, sort order, and recorder metadata with Excel import/export.
 - `Settings`: appearance, locale, managed runtime, manual Python, ASR parameters, remote backend, diagnostics.
-- `Pet Center`: view pet level, experience, stage, events, desktop behavior, and interactions.
+- `Pet Center`: view pet level, cumulative growth, stage, events, desktop behavior, and interactions.
 - `Pet Store`: view LP, catalog, inventory, equipment, food/tool usage, and item details.
+- `Daily Blind Box`: open up to 10 free local boxes per day; rewards come from the Pet Store, excluding pets.
 
 ## Local Data
 
@@ -139,8 +140,8 @@ SQLite currently stores:
 - Jobs, input files, transcript segments, job events, and process-log snapshots.
 - AI models, summary templates, summary runs, and active summary selection.
 - Meeting members, departments, sort order, and recorder flag.
-- Pet profile, desktop behavior settings, growth events, and stage cosmetics.
-- LP wallet, inventory, economy ledger, and milestone counters.
+- Pet profile, desktop behavior settings, growth events, stage cosmetics, and level snapshots.
+- LP wallet, inventory, economy ledger, milestone counters, and daily blind box history.
 
 The schema is created in `apps/desktop/src-tauri/src/local_db/schema.rs`; migration versioning is maintained in `infrastructure/migrations.rs`.
 
@@ -208,7 +209,7 @@ pnpm check
 - Local mode uses the bundled managed runtime by default, with manual Python override available in Settings.
 - Local execution depends on ffmpeg, the Python runner, and model resources; incomplete runtime state is marked `repair_required`.
 - Formal DOCX meeting minutes use `apps/desktop/src-tauri/resources/templates/meeting-minutes.docx`.
-- The pet system is a local reward and companion system. It does not include real-money payments, gacha, trading, or leaderboards.
+- The pet system is a local reward and companion system. It does not include real-money payments, top-ups, trading, or leaderboards; the daily blind box is a free benefit that does not consume LP, sell attempts, or use paid probability drops.
 
 ## License
 

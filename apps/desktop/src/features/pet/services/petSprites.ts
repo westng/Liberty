@@ -35,6 +35,14 @@ const moodImageGroupMap: Record<PetMood, PetImageGroup> = {
 };
 
 const stageScaleMap: Record<PetStage, number> = {
+  first_meet: 1,
+  familiar: 1.02,
+  steady_companion: 1.03,
+  grow_together: 1.04,
+  tacit_bond: 1.05,
+  deep_bond: 1.06,
+  long_company: 1.07,
+  bond_forever: 1.08,
   baby: 1,
   growing: 1.04,
   mature: 1.08,
@@ -218,7 +226,7 @@ export function getPetSpriteFrameCountForEnvironment(environmentState: JobStage 
   return getPetSpriteFrameCountForGroup(group);
 }
 
-export function getPetSpriteScale(stage: PetStage = "baby") {
+export function getPetSpriteScale(stage: PetStage = "first_meet") {
   return stageScaleMap[stage] ?? 1;
 }
 
@@ -303,6 +311,16 @@ function getPetImageGroupForRecentEvent(event: PetEventLedgerEntry, mood: PetMoo
   }
 
   switch (event.eventType) {
+    case "store_food":
+      return "eat";
+    case "store_equip":
+      return "snow";
+    case "blind_box_reward":
+      return "run";
+    case "blind_box_empty":
+      return "toy";
+    case "blind_box_duplicate":
+      return "snow";
     case "job_created":
       return "drive";
     case "transcription_started":

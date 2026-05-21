@@ -116,11 +116,15 @@ const actions = {
 
 export function usePetStore() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const stageProgress = (snapshot.profile?.experience ?? 0) % 20;
+  const levelSnapshot = snapshot.profile?.levelSnapshot;
 
   return {
     ...snapshot,
-    stageProgress,
+    levelSnapshot,
+    currentLevelExp: levelSnapshot?.currentLevelExp ?? 0,
+    nextLevelRequired: levelSnapshot?.nextLevelRequired ?? 0,
+    levelProgressRatio: levelSnapshot?.progressRatio ?? 0,
+    isMaxLevel: levelSnapshot?.isMaxLevel ?? false,
     ...actions,
   };
 }

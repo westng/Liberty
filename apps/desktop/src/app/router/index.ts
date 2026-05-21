@@ -66,6 +66,12 @@ export const routes: RouteConfig[] = [
     component: lazy(() => import("@/features/pet-store/views/PetStoreView")),
   },
   {
+    path: "/daily-blind-box",
+    title: "每日盲盒",
+    titleKey: "dailyBlindBox",
+    component: lazy(() => import("@/features/pet-blind-box/views/PetBlindBoxView")),
+  },
+  {
     path: "/pet-store-item",
     title: "商品详情",
     standalone: true,

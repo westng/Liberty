@@ -64,6 +64,13 @@ function AppContent() {
           { label: messages.nav.petStore, to: "/pet-store", icon: "store" },
         ] satisfies NavItem[],
       },
+      {
+        key: "benefits",
+        title: store.settings.locale === "en-US" ? "Benefits" : "福利",
+        items: [
+          { label: messages.nav.dailyBlindBox, to: "/daily-blind-box", icon: "gift" },
+        ] satisfies NavItem[],
+      },
     ],
     [messages, store.settings.locale],
   );
