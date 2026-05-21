@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="apps/desktop/src-tauri/tauri.conf.json"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2"></a>
-  <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/Vue-3-42B883?logo=vue.js&logoColor=white" alt="Vue 3"></a>
+  <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111" alt="React 19"></a>
   <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5"></a>
   <a href="apps/desktop/src-tauri/Cargo.toml"><img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust stable"></a>
   <a href="python/funasr-runner/requirements.txt"><img src="https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white" alt="Python 3.9"></a>
@@ -23,180 +23,71 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-Liberty is a desktop workspace for meeting media processing, designed around a complete pipeline of local transcription, AI summarization, and result organization. The project is built with Tauri 2, Vue 3, TypeScript, Rust, and Python, with a strong focus on local execution, native desktop workflows, and centralized configuration.
+Liberty is a local-first desktop application for meeting media processing. The current frontend uses React, the desktop shell uses Tauri 2, native services are implemented in Rust, and local transcription runs through a managed Python 3.9 runtime with a FunASR runner. It can process meetings fully through local SQLite and the managed runtime, while still keeping an optional remote backend mode.
 
-![Liberty Screenshot](docs/images/QQ20260501-113612.png)
+![Liberty Create Job](docs/images/ScreenShot_2026-05-21_192125_725.png)
 
-![Liberty Pet Center](docs/images/QQ20260507-172410.png)
+![Liberty Desktop Companion](docs/images/ScreenShot_2026-05-21_192138_208.png)
 
-## Overview
+![Liberty Pet Store](docs/images/ScreenShot_2026-05-21_192159_758.png)
 
-Liberty turns raw meeting audio or video files into structured, reviewable output:
+## Current Capabilities
 
-- Import local meeting files through the native desktop file picker
-- Run local transcription and speaker diarization with FunASR
-- Track processing progress, logs, and failures inside the desktop app
-- Generate AI summaries using user-configured online models
-- Review transcripts, speaker labels, notes, and exports in a dedicated workspace
+- Create meeting jobs through the desktop file picker with local audio and video files.
+- In local mode, process one local file with the managed Python 3.9 runtime, FunASR runner, and ffmpeg.
+- Track transcription, speaker diarization, task logs, processing duration, failure reasons, and retries.
+- Manage OpenAI-compatible models, summary templates, AI summary windows, repeated summary runs, and the active summary result.
+- Review transcripts, filter by speaker, rename speakers, open meeting notes, and work from a dedicated result workspace.
+- Export transcript TXT, notes Markdown, bundled Markdown, and formal DOCX meeting minutes.
+- Manage meeting members with Excel import/export, department, sort order, and recorder metadata.
+- Switch Chinese/English UI, automatic/light/dark theme, transparent/tinted glass style, and accent color.
+- View diagnostics for platform matrix, database schema version, runtime status, and security baseline.
+- Use the desktop companion, Pet Center, LP wallet, Pet Store, inventory, item detail window, and native desktop pet rendering.
 
-Liberty is not just a transcription utility. It is a desktop-first workflow tool for managing tasks, packaging the local runtime, and preserving outputs for later review and refinement.
+## Runtime Modes
 
-## Core Capabilities
+### Local Mode
 
-### 1. Local Meeting File Processing
+When `backendUrl` is empty, the app uses local SQLite and local Tauri commands. If the user has not manually configured a Python path, the app automatically installs or repairs the managed runtime based on runtime status.
 
-- Import local audio and video files
-- Supported formats: `m4a`, `mp3`, `wav`, `aac`, `flac`, `mp4`, `mov`, `mkv`
-- Automatically preprocess media with `ffmpeg` before transcription
-- Track task state, processing duration, logs, and results end to end
+Local mode includes:
 
-### 2. Local Transcription and Speaker Diarization
+- Python, ffmpeg, and model resources described by `runtime-manifest.json`.
+- The local transcription runner under `python/funasr-runner/`.
+- Job creation, execution, retry, and log synchronization in `apps/desktop/src-tauri/src/local_jobs.rs`.
+- Runtime installation, validation, warmup, and logs in `apps/desktop/src-tauri/src/local_runtime/`.
+- SQLite storage for jobs, transcripts, AI summaries, members, settings, and pet data.
 
-- Python 3.9 + FunASR based local transcription pipeline
-- Optional speaker diarization
-- Configurable local runtime parameters including device, thread count, and batch duration
-- Managed runtime installed under the user application data directory, without relying on a system Python installation or administrator privileges
+Current local job execution processes one file with a local path. In local mode, selecting multiple files keeps the last selected file.
 
-### 3. AI Summarization
+### Remote Mode
 
-- AI summarization is explicitly user-triggered, not automatic
-- Built-in model management and template management
-- Compatible with standard OpenAI-style API interfaces
-- Stores multiple summary runs and allows switching the active result
-
-### 4. Desktop Workflow
-
-- New task creation
-- Task list and task details
-- Result workbench
-- Meeting notes window
-- AI summary window
-- Settings, managed local runtime, model management, and template management
-
-## Operating Modes
-
-Liberty currently includes two primary processing layers:
-
-### Local Runtime Pipeline
-
-Used for desktop-side offline media processing.
-
-It includes:
-
-- Managed Python 3.9 runtime
-- Python dependencies
-- Default FunASR models
-- `ffmpeg`
-- Rust-side task scheduling and SQLite persistence
-
-Before using local transcription for the first time, install the managed runtime from `Settings -> Local Runtime`.
+When `backendUrl` is set, the frontend uses `shared/services/remote/meetingApi.ts` to call the remote meeting API. Remote mode keeps job creation, listing, detail, and retry entry points, but the managed local runtime is not required before use.
 
 ### AI Summary Pipeline
 
-Used to generate structured meeting output from transcription results.
+AI summarization is not automatic after transcription. From the workbench, the user opens the AI summary window, chooses the model, template, speaker/timestamp options, generates a summary, and saves a summary run.
 
-It includes:
+AI requests are sent by the Rust `local_ai` module to an OpenAI-compatible endpoint. Model API keys are stored through the system credential store: macOS Keychain or Windows Credential Manager.
 
-- Online model configuration
-- Template configuration
-- Prompt assembly
-- Persistent summary run storage
+### Pet Pipeline
 
-AI summarization is independent from the local transcription pipeline and is always initiated by the user.
+The pet pipeline is a local companion system outside the core meeting flow. App startup tries to sync desktop pet state, but pet loading failure must not block the main window.
+
+See [docs/pet-system.md](./docs/pet-system.md) for the current implementation notes.
 
 ## Technical Architecture
 
-| Layer | Technology |
+| Layer | Current implementation |
 | --- | --- |
 | Desktop shell | Tauri 2 |
-| Frontend UI | Vue 3 + Vue Router + TypeScript + Vite |
-| Native/local services | Rust |
-| Local transcription | Python 3.9 + FunASR |
-| Local storage | SQLite |
-| AI interface | OpenAI-compatible API |
-
-### Repository Boundaries
-
-- `apps/desktop/`: the Tauri desktop application, including Vue UI and Rust native commands
-- `apps/desktop/src/features/`: user-facing domains such as jobs, AI summary, settings, members, templates, and pet
-- `apps/desktop/src/shared/`: reusable UI components, types, localization, styles, and client services
-- `apps/desktop/src-tauri/src/`: SQLite persistence, task execution, runtime installation, update handling, and native integrations
-- `python/funasr-runner/`: the Python transcription runner, runtime validation, warmup, and dependency manifest
-- `scripts/`: repository automation for Tauri startup, runtime bundle preparation, and release metadata
-
-## Supported Platforms
-
-- macOS Intel
-- macOS Apple Silicon
-- Windows x64
-
-## Development Requirements
-
-- Node.js 20+
-- `pnpm`
-- Rust stable
-- Tauri CLI
-
-## Local Development
-
-Install dependencies:
-
-```bash
-pnpm install
-```
-
-Start the frontend development server:
-
-```bash
-pnpm desktop:dev:web
-```
-
-Start the desktop application in development mode:
-
-```bash
-pnpm desktop:tauri dev
-```
-
-Notes:
-
-- Frontend changes typically hot reload
-- Rust code, Tauri configuration, and bundled script/resource changes usually require restarting `pnpm desktop:tauri dev`
-
-## Build
-
-Build the frontend:
-
-```bash
-pnpm desktop:build:web
-```
-
-Build the desktop application:
-
-```bash
-pnpm desktop:tauri build
-```
-
-## Managed Local Runtime
-
-The managed local runtime is installed and maintained by the application itself so end users can run local transcription without setting up a development environment.
-
-The installation includes:
-
-- Python 3.9 runtime
-- Python dependencies
-- Default FunASR models
-- `ffmpeg`
-
-Installation locations:
-
-- macOS: `~/Library/Application Support/com.westng.liberty/runtime/`
-- Windows: `%LOCALAPPDATA%\\com.westng.liberty\\runtime\\`
-
-Design goals:
-
-- Do not modify or depend on the system Python installation
-- Do not require administrator privileges
-- Allow download, reinstall, and log-based troubleshooting directly inside the app
+| Frontend | React 19 + TypeScript + Vite |
+| Routing | In-repo lightweight RouterContext |
+| Native services | Rust, Tauri commands, SQLite, system credentials, DOCX/XLSX processing |
+| Local transcription | Python 3.9.25 + FunASR runner + ffmpeg |
+| Local storage | SQLite through bundled `rusqlite` |
+| AI interface | OpenAI-compatible Chat Completions |
+| Desktop pet rendering | macOS AppKit private API + Windows GDI/Win32 |
 
 ## Project Structure
 
@@ -205,62 +96,119 @@ Design goals:
 ├─ apps/
 │  └─ desktop/
 │     ├─ src/
-│     │  ├─ app/                 App shell and router
-│     │  ├─ assets/              Static assets
-│     │  ├─ features/            Feature modules and views
-│     │  └─ shared/              Components, types, i18n, styles, services
+│     │  ├─ app/                 React shell, navigation, lightweight routing
+│     │  ├─ assets/              Frontend images and store assets
+│     │  ├─ features/            Jobs, AI, settings, members, pet, store pages
+│     │  └─ shared/              i18n, components, services, types, global styles
 │     └─ src-tauri/
-│        ├─ resources/           Runtime manifests and bundled resources
-│        ├─ src/                 Rust native modules and Tauri commands
-│        └─ tauri.conf.json      Tauri configuration
+│        ├─ capabilities/        Tauri window permission boundaries
+│        ├─ resources/           Runtime manifest, DOCX template, pet resources
+│        ├─ src/                 Rust commands, database, runtime, exports, pet
+│        └─ tauri.conf.json      Tauri config and bundled resources
 ├─ python/
-│  └─ funasr-runner/
-│     ├─ runner.py              Local transcription runner
-│     ├─ runtime_warmup.py      Default model warmup
-│     ├─ runtime_validate.py    Python runtime validation
-│     └─ requirements.txt       Runtime Python dependencies
-├─ scripts/
-│  ├─ run-tauri.mjs             Desktop startup wrapper
-│  ├─ start-dev-server.mjs      Vite startup wrapper
-│  └─ prepare-runtime-bundle.mjs
-├─ packages/
-│  └─ shared-types/             Reserved package boundary for generated/shared contracts
-├─ crates/                      Reserved Rust workspace boundary for extracted reusable crates
-├─ Cargo.toml                   Rust workspace
-├─ pnpm-workspace.yaml          pnpm workspace
-└─ README.md
+│  └─ funasr-runner/             Local transcription runner and Python deps
+├─ scripts/                      Startup, runtime preparation, release checks
+├─ docs/
+│  ├─ architecture/              Architecture and release readiness docs
+│  ├─ images/                    README screenshots
+│  ├─ pet-system.md              Current pet system notes
+│  └─ superpowers/               Historical designs and implementation plans
+├─ Cargo.toml                    Rust workspace
+├─ package.json                  pnpm workspace scripts
+└─ pnpm-workspace.yaml
 ```
 
-## Main Screens and Modules
+## Main Screens
 
-- `New Task`: import media files and configure a processing job
-- `Task List`: review task status, processing time, and actions
-- `Task Detail`: inspect input files, task settings, progress, and processing logs
-- `Workbench`: review transcript, speakers, AI summaries, and export options
-- `Model Management`: maintain reusable online model configurations
-- `Template Management`: maintain AI summary templates
-- `Settings`: theme, localization, local runtime parameters, and managed runtime installation
+- `New Job`: choose local media, title, language, speaker diarization, and hotwords.
+- `Jobs`: review job status, processing time, file metadata, detail, retry, and delete actions.
+- `Job Detail`: inspect input, status, progress, logs, failure reason, and workbench entry.
+- `Workbench`: review transcripts, filter by speaker, rename speakers, open AI summary and notes windows, export results.
+- `Models` / `Model Editor`: maintain OpenAI-compatible model configuration.
+- `Templates` / `Template Editor`: maintain AI summary templates.
+- `Members` / `Member Editor`: maintain members, departments, sort order, and recorder metadata with Excel import/export.
+- `Settings`: appearance, locale, managed runtime, manual Python, ASR parameters, remote backend, diagnostics.
+- `Pet Center`: view pet level, experience, stage, events, desktop behavior, and interactions.
+- `Pet Store`: view LP, catalog, inventory, equipment, food/tool usage, and item details.
 
-## Persistence and Outputs
+## Local Data
 
-Liberty uses SQLite for local persistence. The database currently stores:
+SQLite currently stores:
 
-- Task metadata
-- Input file records
-- Transcript and speaker segments
-- Task processing logs
-- AI summary runs
-- Model and template configurations
+- App settings and managed runtime state.
+- Jobs, input files, transcript segments, job events, and process-log snapshots.
+- AI models, summary templates, summary runs, and active summary selection.
+- Meeting members, departments, sort order, and recorder flag.
+- Pet profile, desktop behavior settings, growth events, and stage cosmetics.
+- LP wallet, inventory, economy ledger, and milestone counters.
 
-This allows results to remain available across application restarts.
+The schema is created in `apps/desktop/src-tauri/src/local_db/schema.rs`; migration versioning is maintained in `infrastructure/migrations.rs`.
+
+## Development Commands
+
+Install dependencies:
+
+```bash
+pnpm install
+```
+
+Start the frontend:
+
+```bash
+pnpm desktop:dev:web
+```
+
+Start the Tauri desktop app:
+
+```bash
+pnpm desktop:tauri dev
+```
+
+Build the frontend:
+
+```bash
+pnpm desktop:build:web
+```
+
+Build the desktop app:
+
+```bash
+pnpm desktop:tauri build
+```
+
+Run the full check:
+
+```bash
+pnpm check
+```
+
+`pnpm check` runs frontend typecheck/build, version/platform/security checks, Rust fmt/test/clippy.
+
+## Supported Platforms
+
+| Platform | Rust target | Validation level | Runtime backend |
+| --- | --- | --- | --- |
+| macOS Apple Silicon | `aarch64-apple-darwin` | Primary | FunASR |
+| macOS Intel | `x86_64-apple-darwin` | Primary | FunASR |
+| Windows x64 | `x86_64-pc-windows-msvc` | Primary | FunASR |
+| Windows x86 | `i686-pc-windows-msvc` | Extended | sherpa-onnx |
+
+## Documentation
+
+- [Pet system notes](./docs/pet-system.md)
+- [Enterprise desktop architecture](./docs/architecture/enterprise-desktop-architecture.md)
+- [Release readiness](./docs/architecture/release-readiness.md)
+- [Desktop pet design](./docs/superpowers/specs/2026-05-06-desktop-pet-design.md)
+- [Pet store gameplay design](./docs/superpowers/specs/2026-05-21-pet-store-gameplay-design.md)
+- [Pet 255-level growth ecosystem strategy](./docs/superpowers/specs/2026-05-21-宠物255级成长生态策略.md)
 
 ## Notes
 
-- The current local FunASR pipeline operates on a single input file per task
-- Some logs come directly from underlying dependencies such as FunASR, ModelScope, or jieba
-- Media files with damaged frames or malformed headers may still produce `ffmpeg` warnings without preventing successful transcription
-- AI summarization depends on user-provided online model configuration
-- Desktop update publishing and CI details are documented in [docs/desktop-update-release.md](/Volumes/NQJL/每日博士/开发项目/Liberty/docs/desktop-update-release.md)
+- The frontend uses React/TSX.
+- Local mode uses the bundled managed runtime by default, with manual Python override available in Settings.
+- Local execution depends on ffmpeg, the Python runner, and model resources; incomplete runtime state is marked `repair_required`.
+- Formal DOCX meeting minutes use `apps/desktop/src-tauri/resources/templates/meeting-minutes.docx`.
+- The pet system is a local reward and companion system. It does not include real-money payments, gacha, trading, or leaderboards.
 
 ## License
 
