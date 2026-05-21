@@ -1,0 +1,595 @@
+.content-shell:not(.settings-content-shell) .native-page {
+  gap: 14px;
+}
+
+.content-shell:not(.settings-content-shell) .native-split-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  gap: 14px;
+  align-items: start;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero,
+.content-shell:not(.settings-content-shell) .native-info-panel,
+.content-shell:not(.settings-content-shell) .native-list-panel,
+.content-shell:not(.settings-content-shell) .native-inspector-panel {
+  border: 1px solid var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: var(--native-panel-bg);
+  box-shadow: none;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero .section-heading,
+.content-shell:not(.settings-content-shell) .native-page-hero .job-title-line {
+  min-height: 0;
+  align-items: flex-start;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero h3 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 23px;
+  font-weight: 720;
+  letter-spacing: -0.035em;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero .section-copy {
+  max-width: 720px;
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero .summary-inline {
+  gap: 6px;
+}
+
+.content-shell:not(.settings-content-shell) .native-page-hero .summary-inline span {
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .native-list-panel,
+.content-shell:not(.settings-content-shell) .native-info-panel,
+.content-shell:not(.settings-content-shell) .native-inspector-panel {
+  padding: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .native-list-panel > .section-heading,
+.content-shell:not(.settings-content-shell) .native-info-panel > .section-heading,
+.content-shell:not(.settings-content-shell) .native-inspector-panel > .section-heading,
+.content-shell:not(.settings-content-shell) .model-management-header {
+  min-height: 0;
+  margin: 0 0 10px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .native-list-panel > .section-heading h3,
+.content-shell:not(.settings-content-shell) .native-info-panel > .section-heading h3,
+.content-shell:not(.settings-content-shell) .native-inspector-panel > .section-heading h3,
+.content-shell:not(.settings-content-shell) .model-management-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.content-shell:not(.settings-content-shell) .native-stat-list {
+  display: grid;
+  gap: 2px;
+}
+
+.content-shell:not(.settings-content-shell) .native-stat-list div {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .native-stat-list div:last-child {
+  border-bottom: 0;
+}
+
+.content-shell:not(.settings-content-shell) .native-stat-list span,
+.content-shell:not(.settings-content-shell) .native-inspector-note span,
+.content-shell:not(.settings-content-shell) .native-inspector-note p {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .native-stat-list strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 650;
+  text-align: right;
+}
+
+.content-shell:not(.settings-content-shell) .native-inspector-note {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 8px;
+  background: var(--native-subpanel-bg);
+}
+
+.content-shell:not(.settings-content-shell) .native-inspector-note strong {
+  color: var(--text-main);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.content-shell:not(.settings-content-shell) .native-inspector-note p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-table-scroll {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-table {
+  display: grid;
+  gap: 4px;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-table-head {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-row {
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-table-head > span,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-primary,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-cell,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-primary strong,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-cell strong,
+.content-shell:not(.settings-content-shell) .jobs-native-page .job-meta-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-primary,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-cell {
+  display: grid;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-row:hover {
+  border-color: var(--native-panel-border);
+  background: var(--native-row-hover);
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-row {
+  cursor: default;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-row.selected {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--native-panel-border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions {
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .primary-button,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .secondary-button,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .text-button,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-inspector-actions .primary-button,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-inspector-actions .text-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .primary-button:hover,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .secondary-button:hover,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .text-button:hover,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-inspector-actions .primary-button:hover,
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-inspector-actions .text-button:hover {
+  border-color: var(--native-panel-border);
+  background: var(--native-row-hover);
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-actions .jobs-delete-button {
+  color: var(--danger);
+}
+
+.content-shell:not(.settings-content-shell) .jobs-native-page .jobs-inspector-actions {
+  margin-top: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .native-title-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.content-shell:not(.settings-content-shell) .native-back-link {
+  width: fit-content;
+  min-height: 26px;
+  padding: 0 8px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-native-page .detail-grid,
+.content-shell:not(.settings-content-shell) .workbench-native-page .workbench-grid {
+  gap: 14px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-native-page .detail-stage-grid {
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-native-page .detail-stage-card,
+.content-shell:not(.settings-content-shell) .detail-native-page .metric-pill,
+.content-shell:not(.settings-content-shell) .detail-native-page .file-pill {
+  border-color: var(--native-panel-border);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .detail-native-page .detail-progress-panel {
+  padding: 12px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 10px;
+  background: var(--native-subpanel-bg);
+}
+
+.content-shell:not(.settings-content-shell) .detail-native-page .detail-log-card {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.content-shell:not(.settings-content-shell) .detail-native-page .job-log-entry {
+  border-radius: 7px;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-native-page .workbench-hero-actions {
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-native-page .speaker-filter-row {
+  gap: 6px;
+  padding: 4px 0 8px;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-native-page .speaker-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-native-page .transcript-column {
+  min-height: 0;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-native-page .workbench-search-field {
+  min-width: 260px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page {
+  gap: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-management-header {
+  padding: 0 2px 4px;
+  border-bottom: 0;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-list-card {
+  padding: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-list-rows {
+  gap: 3px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-list-row {
+  min-height: 54px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-list-row:hover {
+  border-color: var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-row-side {
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .model-row-main strong {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .record-meta,
+.content-shell:not(.settings-content-shell) .resource-native-page .record-tag {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .button-row {
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .resource-native-page .resource-native-hero .button-row {
+  justify-content: flex-end;
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .surface {
+  box-shadow: none;
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-companion-card,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-interaction-panel,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-settings-panel,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-control-panel,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-cosmetics-panel,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-ledger-panel {
+  border-color: var(--native-panel-border);
+  background: var(--pet-module-bg, color-mix(in srgb, var(--bg-card) 82%, transparent));
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-action-button,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-status-tile,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-progress-card,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-cosmetic-card,
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-ledger-item {
+  border-color: var(--native-panel-border);
+  background: var(--pet-subtle-bg, color-mix(in srgb, var(--bg-input) 76%, transparent));
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-action-button {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+  border-radius: 6px;
+  background: var(--pet-subtle-bg, color-mix(in srgb, var(--bg-input) 76%, transparent));
+  color: var(--text-muted);
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-action-button:hover {
+  background: var(--native-control-bg);
+  color: var(--text-main);
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-ledger-item {
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-presence-badge {
+  border-color: var(--native-panel-border);
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-settings-form {
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .toggle-row,
+.content-shell:not(.settings-content-shell) .pet-native-page .range-row {
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .pet-native-page .pet-action-button {
+  border-radius: 6px;
+}
+
+.native-summary-window {
+  background: var(--native-window-bg);
+}
+
+.native-summary-window .native-window-hero,
+.native-summary-window .surface,
+.native-editor-window .native-editor-card {
+  border: 1px solid var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: var(--native-panel-bg);
+  box-shadow: none;
+}
+
+.native-summary-window .native-window-hero {
+  padding: 14px 16px;
+}
+
+.native-summary-window .summary-window-layout {
+  gap: 14px;
+}
+
+.native-summary-window .summary-window-side,
+.native-summary-window .summary-window-main {
+  gap: 14px;
+}
+
+.native-summary-window .record-item,
+.native-summary-window .summary-preview-toolbar {
+  border-color: var(--native-panel-border);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.native-summary-window .summary-window-hero h3 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+}
+
+.native-summary-window .summary-window-hero .summary-inline span {
+  background: transparent;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 6px;
+}
+
+.native-summary-window .summary-window-side > .surface,
+.native-summary-window .summary-window-result {
+  padding: 12px;
+}
+
+.native-summary-window .section-heading.summary-centered-heading {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.native-summary-window .toggle-field {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 500;
+}
+
+.native-editor-window {
+  background: var(--native-window-bg);
+}
+
+.native-editor-window .native-editor-card {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.native-editor-window .field-grid {
+  gap: 12px;
+}
+
+.native-editor-window .native-editor-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.native-editor-window .native-editor-aside {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 10px;
+  background: var(--native-subpanel-bg);
+}
+
+.native-editor-window .native-editor-aside strong {
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.native-editor-window .native-editor-aside p,
+.native-editor-window .native-editor-aside span {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.native-editor-window .native-editor-form {
+  min-width: 0;
+}
+
+.native-editor-window .field-grid.two-col {
+  gap: 12px;
+}
+
+.native-editor-window .field input,
+.native-editor-window .field textarea,
+.native-editor-window .field select {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-color: var(--native-panel-border);
+  border-radius: 7px;
+}
+
+.native-editor-window .field textarea {
+  min-height: 170px;
+}
+
+.native-editor-window .native-editor-card > .section-heading {
+  min-height: 0;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.native-editor-window .native-editor-card > .section-heading h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.native-editor-window .toggle-field {
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 500;
+}
+
+.native-editor-window .button-row {
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--native-panel-border);
+}

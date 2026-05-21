@@ -1,4 +1,4 @@
-import { computed, reactive, toRefs } from "vue";
+import { useSyncExternalStore } from "react";
 import { createLocalPetService } from "@/shared/services/tauri/pet";
 import type {
   PetCosmeticUnlock,
@@ -9,23 +9,49 @@ import type {
   PetWorkflowEventInput,
 } from "@/shared/types/meeting";
 
-const petService = createLocalPetService();
+type PetState = {
+  profile: PetProfile | null;
+  settings: PetSettings | null;
+  cosmetics: PetCosmeticUnlock[];
+  events: PetEventLedgerEntry[];
+  loaded: boolean;
+  loading: boolean;
+};
 
-const state = reactive({
-  profile: null as PetProfile | null,
-  settings: null as PetSettings | null,
-  cosmetics: [] as PetCosmeticUnlock[],
-  events: [] as PetEventLedgerEntry[],
+let state: PetState = {
+  profile: null,
+  settings: null,
+  cosmetics: [],
+  events: [],
   loaded: false,
   loading: false,
-});
+};
+
+const petService = createLocalPetService();
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot() {
+  return state;
+}
+
+function setState(patch: Partial<PetState>) {
+  state = { ...state, ...patch };
+  for (const listener of listeners) {
+    listener();
+  }
+}
 
 async function loadPetState(force = false) {
   if (state.loaded && !force) {
     return;
   }
 
-  state.loading = true;
+  setState({ loading: true });
   try {
     const [profile, settings, cosmetics, events] = await Promise.all([
       petService.getProfile(),
@@ -33,56 +59,70 @@ async function loadPetState(force = false) {
       petService.listCosmeticUnlocks(),
       petService.listEventLedger(20),
     ]);
-    state.profile = profile;
-    state.settings = settings;
-    state.cosmetics = cosmetics;
-    state.events = events;
-    state.loaded = true;
+    setState({
+      profile,
+      settings,
+      cosmetics,
+      events,
+      loaded: true,
+    });
   } finally {
-    state.loading = false;
+    setState({ loading: false });
   }
 }
+
+async function refresh() {
+  await loadPetState(true);
+}
+
+async function saveSettings(partial: Omit<PetSettings, "petId" | "updatedAt">) {
+  const settings = await petService.saveSettings(partial);
+  setState({ settings });
+  return settings;
+}
+
+async function saveProfile(partial: Pick<PetProfile, "name">) {
+  const profile = await petService.saveProfile(partial);
+  setState({ profile });
+  return profile;
+}
+
+async function applyInteraction(action: PetInteractionAction) {
+  const [profile, events] = await Promise.all([
+    petService.applyInteraction(action),
+    petService.listEventLedger(20),
+  ]);
+  setState({ profile, events });
+  return profile;
+}
+
+async function applyWorkflowEvent(input: PetWorkflowEventInput) {
+  const [profile, events] = await Promise.all([
+    petService.applyWorkflowEvent(input),
+    petService.listEventLedger(20),
+  ]);
+  setState({ profile, events });
+  return profile;
+}
+
+const actions = {
+  loadPetState,
+  refresh,
+  saveProfile,
+  saveSettings,
+  applyInteraction,
+  applyWorkflowEvent,
+};
 
 export function usePetStore() {
-  const stageProgress = computed(() => {
-    const experience = state.profile?.experience ?? 0;
-    return experience % 20;
-  });
-
-  async function refresh() {
-    await loadPetState(true);
-  }
-
-  async function saveSettings(partial: Omit<PetSettings, "petId" | "updatedAt">) {
-    state.settings = await petService.saveSettings(partial);
-    return state.settings;
-  }
-
-  async function saveProfile(partial: Pick<PetProfile, "name">) {
-    state.profile = await petService.saveProfile(partial);
-    return state.profile;
-  }
-
-  async function applyInteraction(action: PetInteractionAction) {
-    state.profile = await petService.applyInteraction(action);
-    state.events = await petService.listEventLedger(20);
-    return state.profile;
-  }
-
-  async function applyWorkflowEvent(input: PetWorkflowEventInput) {
-    state.profile = await petService.applyWorkflowEvent(input);
-    state.events = await petService.listEventLedger(20);
-    return state.profile;
-  }
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const stageProgress = (snapshot.profile?.experience ?? 0) % 20;
 
   return {
-    ...toRefs(state),
+    ...snapshot,
     stageProgress,
-    loadPetState,
-    refresh,
-    saveProfile,
-    saveSettings,
-    applyInteraction,
-    applyWorkflowEvent,
+    ...actions,
   };
 }
+
+export type PetStore = ReturnType<typeof usePetStore>;

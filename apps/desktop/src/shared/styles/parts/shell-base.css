@@ -1,0 +1,427 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: 42px minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.window-titlebar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 12px 0 95px;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.windows-titlebar {
+  padding: 7px 0 5px 16px;
+}
+
+.window-titlebar-spacer {
+  min-width: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.windows-titlebar .window-titlebar-actions {
+  transform: none;
+}
+
+.window-titlebar-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.windows-titlebar .window-titlebar-metrics {
+  transform: none;
+}
+
+.window-titlebar .titlebar-metric,
+.window-titlebar .titlebar-pet-toggle,
+.window-titlebar .titlebar-pill {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.window-titlebar .titlebar-metric {
+  gap: 4px;
+  min-height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  -webkit-app-region: no-drag;
+}
+
+.window-titlebar .titlebar-metric .toolbar-metric-icon,
+.window-titlebar .titlebar-metric .toolbar-metric-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.window-titlebar .titlebar-metric .toolbar-metric-label {
+  font-size: inherit;
+}
+
+.window-titlebar .titlebar-metric .toolbar-metric-value {
+  font-size: inherit;
+}
+
+.window-controls {
+  display: inline-flex;
+  align-self: stretch;
+  margin-left: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  width: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.window-control:hover {
+  background: color-mix(in srgb, ButtonFace 88%, ButtonText 12%);
+  color: var(--text-main);
+}
+
+.window-control-close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.window-titlebar .titlebar-pet-toggle,
+.window-titlebar .titlebar-pill {
+  gap: 5px;
+  min-height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.window-titlebar .titlebar-icon-btn {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.window-titlebar .titlebar-icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.window-titlebar .toolbar-pet-dot,
+.window-titlebar .toolbar-pill-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.window-titlebar .titlebar-pet-toggle:hover,
+.window-titlebar .titlebar-icon-btn:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-main);
+}
+
+.sidebar {
+  margin: 10px;
+  border: 1px solid var(--shell-panel-border);
+  border-radius: var(--radius-xl);
+  background: var(--shell-panel-bg);
+  backdrop-filter: var(--shell-filter);
+  box-shadow: var(--shell-shadow);
+  overflow: hidden;
+  min-height: 0;
+  height: calc(100vh - 62px);
+  position: relative;
+  isolation: isolate;
+}
+
+.nav-wrap {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.nav-header {
+  display: grid;
+  padding: 16px;
+  border-bottom: 1px solid var(--divider-soft);
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-brand-image {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.nav-header h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.nav-slogan {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.nav-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--shell-tile-bg);
+  color: var(--text-main);
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.nav-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--stroke-soft));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+
+.nav-link.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.nav-footer {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.nav-footer-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--shell-tile-bg);
+}
+
+.nav-footer-item span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.nav-footer-item strong {
+  font-size: 0.95rem;
+}
+
+.content {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.content-page {
+  flex: 1;
+  min-height: 0;
+}
+
+.content-shell {
+  height: 100%;
+  position: relative;
+  z-index: 1;
+  margin: 10px 10px 10px 0;
+  overflow: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.content-shell::-webkit-scrollbar {
+  display: none;
+}
+
+.toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-pill);
+  background: var(--shell-tile-bg);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.toolbar-metric-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-soft);
+}
+
+.toolbar-metric-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.toolbar-metric-label {
+  font-size: 12px;
+}
+
+.toolbar-metric-value {
+  font-size: 13px;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.toolbar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-pill);
+  background: var(--shell-tile-bg);
+  color: var(--text-muted);
+}
+
+.toolbar-pet-toggle {
+  appearance: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: 6px;
+  background: ButtonFace;
+  color: ButtonText;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.toolbar-pet-toggle:hover {
+  border-color: color-mix(in srgb, var(--stroke-soft) 64%, var(--text-muted));
+  background: color-mix(in srgb, ButtonFace 88%, ButtonText 12%);
+  color: var(--text-main);
+}
+
+.toolbar-pet-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+.toolbar-pet-dot[data-active="true"] {
+  background: var(--success);
+}
+
+.toolbar-icon-btn {
+  appearance: auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--stroke-soft);
+  border-radius: 6px;
+  background: ButtonFace;
+  color: ButtonText;
+  font: inherit;
+  padding: 0;
+  transition: none;
+}
+
+.toolbar-icon-btn:hover {
+  border-color: color-mix(in srgb, var(--stroke-soft) 64%, var(--text-muted));
+  background: color-mix(in srgb, ButtonFace 88%, ButtonText 12%);
+  color: var(--text-main);
+}
+
+.toolbar-icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.toolbar-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+}
+
+.content-body {
+  min-height: 100%;
+  padding: 0 0 14px;
+  position: relative;
+  z-index: 1;
+}

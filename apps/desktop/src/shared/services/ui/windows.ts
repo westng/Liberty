@@ -118,3 +118,27 @@ export async function openMemberEditorWindow(memberId?: string) {
 
   return window;
 }
+
+export async function openPetStoreItemWindow(itemKey: string, title: string) {
+  const label = `pet-store-item-${itemKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const existing = await WebviewWindow.getByLabel(label);
+  const messages = getCurrentMessages().windows;
+
+  if (existing) {
+    await existing.setFocus();
+    return existing;
+  }
+
+  const window = new WebviewWindow(label, {
+    title: formatMessage(messages.petStoreItemTitle, { title }),
+    url: `/pet-store-item?itemKey=${encodeURIComponent(itemKey)}`,
+    width: 920,
+    height: 640,
+    minWidth: 760,
+    minHeight: 520,
+    resizable: true,
+    center: true,
+  });
+
+  return window;
+}

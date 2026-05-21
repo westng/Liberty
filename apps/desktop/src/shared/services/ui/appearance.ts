@@ -1,16 +1,31 @@
 import { getCurrentWindow, type Theme } from "@tauri-apps/api/window";
 import type { SettingsState, ThemeMode } from "@/shared/types/meeting";
 
+const systemThemeQuery = "(prefers-color-scheme: dark)";
+
 export function resolveTheme(mode: ThemeMode): "light" | "dark" {
   if (mode === "light" || mode === "dark") {
     return mode;
   }
 
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  if (typeof window !== "undefined" && window.matchMedia(systemThemeQuery).matches) {
     return "dark";
   }
 
   return "light";
+}
+
+export function watchSystemThemeChange(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  const mediaQuery = window.matchMedia(systemThemeQuery);
+  mediaQuery.addEventListener("change", callback);
+
+  return () => {
+    mediaQuery.removeEventListener("change", callback);
+  };
 }
 
 export function resolveAccentContrast(color: string): string {
@@ -39,10 +54,10 @@ export function applyAppearance(settings: SettingsState): void {
   root.style.setProperty("--accent", settings.accentColor);
   root.style.setProperty("--accent-contrast", resolveAccentContrast(settings.accentColor));
   root.lang = settings.locale;
-  void syncWindowTheme(theme);
+  void syncWindowTheme(settings.themeMode === "auto" ? null : theme);
 }
 
-async function syncWindowTheme(theme: Theme): Promise<void> {
+async function syncWindowTheme(theme: Theme | null): Promise<void> {
   try {
     await getCurrentWindow().setTheme(theme);
   } catch {

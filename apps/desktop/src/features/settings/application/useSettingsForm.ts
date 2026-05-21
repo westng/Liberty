@@ -1,5 +1,5 @@
-import { computed, reactive, ref, watch } from "vue";
-import { resolveTheme } from "@/shared/services/ui/appearance";
+import { useEffect, useMemo, useState } from "react";
+import { applyAppearance, resolveTheme } from "@/shared/services/ui/appearance";
 import type {
   LiquidGlassStyle,
   LocaleCode,
@@ -20,43 +20,50 @@ export const accentColors = [
   "#33c96f",
 ] as const;
 
+type SettingsFormState = {
+  backendUrl: string;
+  apiToken: string;
+  defaultHotwords: string;
+  summaryTemplate: string;
+  concurrency: number;
+  localAsrDevice: LocalAsrDevice;
+  localAsrThreads: number;
+  localAsrBatchSizeSeconds: number;
+};
+
+function formFromSettings(settings: SettingsState): SettingsFormState {
+  return {
+    backendUrl: settings.backendUrl,
+    apiToken: settings.apiToken,
+    defaultHotwords: settings.defaultHotwords,
+    summaryTemplate: settings.summaryTemplate,
+    concurrency: settings.concurrency,
+    localAsrDevice: settings.localAsrDevice,
+    localAsrThreads: settings.localAsrThreads,
+    localAsrBatchSizeSeconds: settings.localAsrBatchSizeSeconds,
+  };
+}
+
 export function useSettingsForm(store: MeetingStore) {
-  const saveError = ref("");
-  const form = reactive({
-    backendUrl: "",
-    apiToken: "",
-    defaultHotwords: "",
-    summaryTemplate: "",
-    concurrency: 2,
-    localAsrDevice: "auto" as LocalAsrDevice,
-    localAsrThreads: 0,
-    localAsrBatchSizeSeconds: 300,
-  });
-
-  const glassPreviewThemeClass = computed(() =>
-    resolveTheme(store.settings.value.themeMode) === "light"
-      ? "preview-glass-light"
-      : "preview-glass-dark",
+  const [saveError, setSaveError] = useState("");
+  const [form, setForm] = useState<SettingsFormState>(() => formFromSettings(store.settings));
+  const effectiveTheme = resolveTheme(store.settings.themeMode);
+  const glassPreviewThemeClass = useMemo(
+    () => (effectiveTheme === "light" ? "preview-glass-light" : "preview-glass-dark"),
+    [effectiveTheme],
   );
 
-  watch(
-    () => store.settings.value,
-    (settings) => {
-      form.backendUrl = settings.backendUrl;
-      form.apiToken = settings.apiToken;
-      form.defaultHotwords = settings.defaultHotwords;
-      form.summaryTemplate = settings.summaryTemplate;
-      form.concurrency = settings.concurrency;
-      form.localAsrDevice = settings.localAsrDevice;
-      form.localAsrThreads = settings.localAsrThreads;
-      form.localAsrBatchSizeSeconds = settings.localAsrBatchSizeSeconds;
-    },
-    { immediate: true, deep: true },
-  );
+  useEffect(() => {
+    setForm(formFromSettings(store.settings));
+  }, [store.settings]);
+
+  function patchForm(patch: Partial<SettingsFormState>) {
+    setForm((current) => ({ ...current, ...patch }));
+  }
 
   function createNextSettings(patch: Partial<SettingsState> = {}): SettingsState {
     return {
-      ...store.settings.value,
+      ...store.settings,
       backendUrl: form.backendUrl,
       apiToken: form.apiToken,
       defaultHotwords: form.defaultHotwords,
@@ -70,17 +77,20 @@ export function useSettingsForm(store: MeetingStore) {
   }
 
   async function saveAppearance(patch: Partial<SettingsState>) {
-    saveError.value = "";
+    setSaveError("");
+    const nextSettings = createNextSettings(patch);
+    applyAppearance(nextSettings);
 
     try {
-      await store.saveSettings(createNextSettings(patch));
+      await store.saveSettings(nextSettings);
     } catch (error) {
-      saveError.value = error instanceof Error ? error.message : String(error);
+      applyAppearance(store.settings);
+      setSaveError(error instanceof Error ? error.message : String(error));
     }
   }
 
   async function setThemeMode(mode: ThemeMode) {
-    if (store.settings.value.themeMode === mode) {
+    if (store.settings.themeMode === mode) {
       return;
     }
 
@@ -88,7 +98,7 @@ export function useSettingsForm(store: MeetingStore) {
   }
 
   async function setGlassStyle(style: LiquidGlassStyle) {
-    if (store.settings.value.liquidGlassStyle === style) {
+    if (store.settings.liquidGlassStyle === style) {
       return;
     }
 
@@ -96,7 +106,7 @@ export function useSettingsForm(store: MeetingStore) {
   }
 
   async function setLocale(locale: LocaleCode) {
-    if (store.settings.value.locale === locale) {
+    if (store.settings.locale === locale) {
       return;
     }
 
@@ -104,7 +114,7 @@ export function useSettingsForm(store: MeetingStore) {
   }
 
   async function setAccentColor(color: string) {
-    if (store.settings.value.accentColor.toLowerCase() === color) {
+    if (store.settings.accentColor.toLowerCase() === color) {
       return;
     }
 
@@ -112,7 +122,7 @@ export function useSettingsForm(store: MeetingStore) {
   }
 
   async function save() {
-    saveError.value = "";
+    setSaveError("");
 
     try {
       await store.saveSettings(
@@ -128,13 +138,16 @@ export function useSettingsForm(store: MeetingStore) {
         }),
       );
     } catch (error) {
-      saveError.value = error instanceof Error ? error.message : String(error);
+      setSaveError(error instanceof Error ? error.message : String(error));
     }
   }
 
   return {
     form,
+    patchForm,
     saveError,
+    setSaveError,
+    effectiveTheme,
     glassPreviewThemeClass,
     setThemeMode,
     setGlassStyle,

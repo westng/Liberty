@@ -1,50 +1,41 @@
-import { computed } from "vue";
-import type { ComputedRef } from "vue";
-import type { Messages } from "@/shared/i18n";
+import { useMemo } from "react";
+import type { MessageTree } from "@/shared/i18n";
 import type { ManagedRuntimeStatus } from "@/shared/types/meeting";
 import type { MeetingStore } from "@/features/meeting/stores/useMeetingStore";
 
 export function useRuntimePanel(
   store: MeetingStore,
-  messages: ComputedRef<Messages["settings"]>,
-  shellMessages: ComputedRef<Messages["shell"]>,
-  commonMessages: ComputedRef<Messages["common"]>,
+  messages: MessageTree["settings"],
+  shellMessages: MessageTree["shell"],
+  commonMessages: MessageTree["common"],
 ) {
-  const runtimeModeLabel = computed(() => {
-    if (store.localMode.value) {
-      return shellMessages.value.localMode;
-    }
-
-    if (store.settings.value.backendUrl) {
-      return shellMessages.value.remoteMode;
-    }
-
-    return shellMessages.value.mockModeShort;
-  });
-  const runtimeStatus = computed(() => store.runtimeStatus.value);
-  const runtimeInstallLog = computed(() => store.runtimeInstallLog.value);
-  const runtimeInstallLogReversed = computed(() => {
-    const lines = runtimeInstallLog.value
+  const runtimeModeLabel = store.localMode
+    ? shellMessages.localMode
+    : store.settings.backendUrl
+      ? shellMessages.remoteMode
+      : shellMessages.mockModeShort;
+  const runtimeStatus = store.runtimeStatus;
+  const runtimeInstallLog = store.runtimeInstallLog;
+  const runtimeInstallLogReversed = useMemo(() => {
+    const lines = runtimeInstallLog
       .split(/\r?\n/)
       .map((line) => line.trimEnd())
       .filter(Boolean);
 
     return lines.reverse().join("\n");
-  });
-  const runtimeActionLabel = computed(() =>
-    runtimeStatus.value.status === "unsupported"
-      ? messages.value.runtimeStatusUnsupported
-      : runtimeStatus.value.status === "ready"
-        ? messages.value.runtimeReinstallAction
-        : runtimeStatus.value.status === "installing"
-          ? messages.value.runtimeStatusInstalling
-          : messages.value.runtimeInstallAction,
-  );
-  const runtimeStatusLabel = computed(() => labelForRuntimeStatus(runtimeStatus.value, messages.value));
-  const runtimeStatusDescription = computed(() => runtimeDescription(runtimeStatus.value, messages.value));
-  const runtimeBusy = computed(() => runtimeStatus.value.status === "installing" || runtimeStatus.value.status === "unsupported");
-  const runtimeInstalledAtLabel = computed(() => formatRuntimeDate(runtimeStatus.value.installedAt));
-  const runtimeInstallProgress = computed(() => runtimeProgress(runtimeStatus.value, runtimeInstallLog.value, messages.value));
+  }, [runtimeInstallLog]);
+  const runtimeActionLabel = runtimeStatus.status === "unsupported"
+    ? messages.runtimeStatusUnsupported
+    : runtimeStatus.status === "ready"
+      ? messages.runtimeReinstallAction
+      : runtimeStatus.status === "installing"
+        ? messages.runtimeStatusInstalling
+        : messages.runtimeInstallAction;
+  const runtimeStatusLabel = labelForRuntimeStatus(runtimeStatus, messages);
+  const runtimeStatusDescription = runtimeDescription(runtimeStatus, messages);
+  const runtimeBusy = runtimeStatus.status === "installing" || runtimeStatus.status === "unsupported";
+  const runtimeInstalledAtLabel = formatRuntimeDate(runtimeStatus.installedAt);
+  const runtimeInstallProgress = runtimeProgress(runtimeStatus, runtimeInstallLog, messages);
 
   async function refreshRuntimePanel() {
     await store.refreshRuntimeStatus();
@@ -54,12 +45,12 @@ export function useRuntimePanel(
   function formatRuntimeDate(value?: string) {
     const normalized = value?.trim();
     if (!normalized) {
-      return commonMessages.value.dash;
+      return commonMessages.dash;
     }
 
     const fromMillis = Number(normalized);
     const date = Number.isFinite(fromMillis) && fromMillis > 0 ? new Date(fromMillis) : new Date(normalized);
-    return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString(store.settings.value.locale);
+    return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString(store.settings.locale);
   }
 
   return {
@@ -77,7 +68,7 @@ export function useRuntimePanel(
   };
 }
 
-function labelForRuntimeStatus(status: ManagedRuntimeStatus, messages: Messages["settings"]) {
+function labelForRuntimeStatus(status: ManagedRuntimeStatus, messages: MessageTree["settings"]) {
   switch (status.status) {
     case "installing":
       return messages.runtimeStatusInstalling;
@@ -94,7 +85,7 @@ function labelForRuntimeStatus(status: ManagedRuntimeStatus, messages: Messages[
   }
 }
 
-function runtimeDescription(status: ManagedRuntimeStatus, messages: Messages["settings"]) {
+function runtimeDescription(status: ManagedRuntimeStatus, messages: MessageTree["settings"]) {
   if (status.lastError?.trim()) {
     return status.lastError.trim();
   }
@@ -113,7 +104,7 @@ function runtimeDescription(status: ManagedRuntimeStatus, messages: Messages["se
   }
 }
 
-function runtimeProgress(status: ManagedRuntimeStatus, log: string, messages: Messages["settings"]) {
+function runtimeProgress(status: ManagedRuntimeStatus, log: string, messages: MessageTree["settings"]) {
   const normalized = log.trim();
 
   if (status.status === "ready" || normalized.includes("[runtime] install completed.")) {

@@ -1,0 +1,521 @@
+:root {
+  --native-window-bg: #f5f5f7;
+  --native-sidebar-bg: color-mix(in srgb, #f2f2f7 92%, var(--accent) 8%);
+  --native-sidebar-border: rgba(60, 60, 67, 0.18);
+  --native-content-bg: #fbfbfd;
+  --native-panel-bg: #fbfbfd;
+  --native-subpanel-bg: #f5f5f7;
+  --native-control-bg: #ffffff;
+  --native-panel-border: rgba(60, 60, 67, 0.16);
+  --native-row-hover: rgba(60, 60, 67, 0.06);
+  --native-row-active: color-mix(in srgb, var(--accent) 14%, transparent);
+  --native-separator: rgba(60, 60, 67, 0.14);
+  --native-inspector-bg: rgba(246, 246, 248, 0.82);
+  --native-radius-panel: 10px;
+  --native-radius-control: 7px;
+  --native-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+:root[data-theme="dark"] {
+  --native-window-bg: #1e1e20;
+  --native-sidebar-bg: #252528;
+  --native-sidebar-border: rgba(255, 255, 255, 0.1);
+  --native-content-bg: #1c1c1e;
+  --native-panel-bg: rgba(44, 44, 46, 0.9);
+  --native-subpanel-bg: rgba(37, 37, 40, 0.86);
+  --native-control-bg: #2c2c2e;
+  --native-panel-border: rgba(255, 255, 255, 0.1);
+  --native-row-hover: rgba(255, 255, 255, 0.06);
+  --native-row-active: color-mix(in srgb, var(--accent) 22%, transparent);
+  --native-separator: rgba(255, 255, 255, 0.1);
+  --native-inspector-bg: rgba(37, 37, 40, 0.86);
+  --native-shadow-panel: none;
+}
+
+body::before {
+  display: none;
+}
+
+body,
+#app {
+  background: var(--native-window-bg);
+}
+
+.app-shell {
+  grid-template-columns: 232px minmax(0, 1fr);
+  background: var(--native-window-bg);
+}
+
+.window-titlebar {
+  background: color-mix(in srgb, var(--native-window-bg) 88%, transparent);
+  border-bottom: 0;
+}
+
+.window-titlebar .titlebar-metric,
+.window-titlebar .titlebar-pet-toggle,
+.window-titlebar .titlebar-pill,
+.window-titlebar .titlebar-icon-btn {
+  color: ButtonText;
+}
+
+.window-titlebar .titlebar-metric .toolbar-metric-value {
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar {
+  height: calc(100vh - 42px);
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.nav-wrap {
+  grid-template-rows: auto 1fr auto;
+}
+
+.nav-header {
+  gap: 4px;
+  padding: 14px 12px 10px;
+  border-bottom: 0;
+}
+
+.nav-brand {
+  gap: 8px;
+}
+
+.nav-brand-image {
+  width: 24px;
+  height: 24px;
+}
+
+.nav-header h1 {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.nav-slogan {
+  padding-left: 32px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.nav-list {
+  gap: 14px;
+  padding: 6px 8px 12px;
+  overflow: auto;
+}
+
+.nav-section {
+  display: grid;
+  gap: 3px;
+}
+
+.nav-section-title {
+  margin: 0;
+  padding: 6px 8px 3px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-link {
+  min-height: 32px;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--native-radius-control);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.nav-link:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.nav-link.active {
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.nav-link-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.nav-link.active .nav-link-icon {
+  color: var(--accent-strong);
+}
+
+.nav-link-icon > span {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.nav-link-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  color: currentColor;
+}
+
+.nav-link-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-footer {
+  gap: 3px;
+  padding: 8px;
+  border-top: 0;
+}
+
+.nav-footer-item {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--native-radius-control);
+  background: transparent;
+  color: var(--text-main);
+}
+
+.nav-footer-item:hover,
+.nav-footer-link:hover {
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.nav-footer-label {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.nav-footer-item {
+  color: var(--text-main);
+}
+
+.nav-footer-item:hover .nav-link-icon {
+  color: var(--accent-strong);
+}
+
+.nav-footer-item strong {
+  max-width: 96px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-footer-link {
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.content {
+  margin: 0;
+  background: transparent;
+}
+
+.content-page,
+.content-shell {
+  background: transparent;
+}
+
+.content-shell {
+  margin: 0;
+  padding: 12px 12px 14px;
+}
+
+.content-body {
+  padding-bottom: 0;
+}
+
+.content-shell:not(.settings-content-shell) .surface,
+.content-shell:not(.settings-content-shell) .card,
+.content-shell:not(.settings-content-shell) .hero-card,
+.content-shell:not(.settings-content-shell) .table-card {
+  border-color: var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: var(--native-panel-bg);
+  box-shadow: var(--native-shadow-panel);
+}
+
+.content-shell:not(.settings-content-shell) .side-panel,
+.content-shell:not(.settings-content-shell) .detail-side-column,
+.content-shell:not(.settings-content-shell) .pet-settings-panel {
+  background: transparent;
+  box-shadow: none;
+}
+
+.content-shell:not(.settings-content-shell) .primary-button,
+.content-shell:not(.settings-content-shell) .secondary-button,
+.content-shell:not(.settings-content-shell) .ghost-button,
+.content-shell:not(.settings-content-shell) .text-button,
+.content-shell:not(.settings-content-shell) .field input,
+.content-shell:not(.settings-content-shell) .field textarea,
+.content-shell:not(.settings-content-shell) .field select,
+.content-shell:not(.settings-content-shell) .inline-panel,
+.content-shell:not(.settings-content-shell) .file-pill,
+.content-shell:not(.settings-content-shell) .job-item,
+.content-shell:not(.settings-content-shell) .timeline-item,
+.content-shell:not(.settings-content-shell) .note-block,
+.content-shell:not(.settings-content-shell) .metric-pill,
+.content-shell:not(.settings-content-shell) .record-item,
+.content-shell:not(.settings-content-shell) .record-card,
+.content-shell:not(.settings-content-shell) .model-list-row,
+.content-shell:not(.settings-content-shell) .empty-state,
+.content-shell:not(.settings-content-shell) .status-badge,
+.content-shell:not(.settings-content-shell) .count-badge {
+  border-radius: var(--native-radius-control);
+}
+
+.content-shell:not(.settings-content-shell) .primary-button,
+.content-shell:not(.settings-content-shell) .secondary-button,
+.content-shell:not(.settings-content-shell) .ghost-button,
+.content-shell:not(.settings-content-shell) .text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.content-shell:not(.settings-content-shell) .primary-button,
+.content-shell:not(.settings-content-shell) .secondary-button {
+  border-color: var(--native-panel-border);
+  background: var(--native-control-bg);
+  color: var(--text-main);
+}
+
+.content-shell:not(.settings-content-shell) .ghost-button,
+.content-shell:not(.settings-content-shell) .text-button {
+  border-color: var(--native-panel-border);
+  background: var(--native-control-bg);
+  color: var(--text-main);
+}
+
+.content-shell:not(.settings-content-shell) .primary-button:hover,
+.content-shell:not(.settings-content-shell) .secondary-button:hover,
+.content-shell:not(.settings-content-shell) .ghost-button:hover,
+.content-shell:not(.settings-content-shell) .text-button:hover {
+  border-color: color-mix(in srgb, var(--native-panel-border) 62%, var(--text-muted));
+  background: var(--native-subpanel-bg);
+}
+
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .primary-button,
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .secondary-button,
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .ghost-button,
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .text-button {
+  background: ButtonFace;
+  color: ButtonText;
+}
+
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .primary-button:hover,
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .secondary-button:hover,
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .ghost-button:hover,
+:root[data-theme="dark"] .content-shell:not(.settings-content-shell) .text-button:hover {
+  background: color-mix(in srgb, ButtonFace 88%, ButtonText 12%);
+}
+
+.content-shell:not(.settings-content-shell) .field input,
+.content-shell:not(.settings-content-shell) .field textarea,
+.content-shell:not(.settings-content-shell) .field select {
+  padding: 7px 9px;
+  background: var(--native-control-bg);
+}
+
+.content-shell:not(.settings-content-shell) .section-heading h3,
+.content-shell:not(.settings-content-shell) .job-title-line h3,
+.content-shell:not(.settings-content-shell) .note-block h4,
+.content-shell:not(.settings-content-shell) .timeline-item h4,
+.content-shell:not(.settings-content-shell) .model-management-header h3 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.content-shell:not(.settings-content-shell) .section-copy,
+.content-shell:not(.settings-content-shell) .muted,
+.content-shell:not(.settings-content-shell) .job-meta-line,
+.content-shell:not(.settings-content-shell) .note-meta,
+.content-shell:not(.settings-content-shell) .timeline-text {
+  font-size: 13px;
+}
+
+.content-shell:not(.settings-content-shell) .view-stack,
+.content-shell:not(.settings-content-shell) .workspace-primary,
+.content-shell:not(.settings-content-shell) .side-stack,
+.content-shell:not(.settings-content-shell) .summary-list,
+.content-shell:not(.settings-content-shell) .file-list,
+.content-shell:not(.settings-content-shell) .job-list,
+.content-shell:not(.settings-content-shell) .notes-list {
+  gap: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-hero,
+.content-shell:not(.settings-content-shell) .new-job-hero {
+  padding: 12px 14px;
+}
+
+.content-shell:not(.settings-content-shell) .summary-inline {
+  gap: 6px;
+}
+
+.content-shell:not(.settings-content-shell) .summary-inline span {
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: var(--native-radius-control);
+  background: var(--native-subpanel-bg);
+  font-size: 12px;
+}
+
+.workspace-grid,
+.detail-grid,
+.management-grid {
+  gap: 10px;
+}
+
+.workspace-grid,
+.workspace-grid-home {
+  grid-template-columns: minmax(0, 1fr) 304px;
+}
+
+.detail-grid {
+  grid-template-columns: minmax(0, 1fr) 312px;
+}
+
+.management-grid {
+  grid-template-columns: 300px minmax(0, 1fr);
+}
+
+.jobs-table {
+  border-radius: var(--native-radius-panel);
+}
+
+.jobs-table-scroll {
+  border: 1px solid var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: var(--native-panel-bg);
+}
+
+.jobs-table-scroll .jobs-table {
+  min-width: 980px;
+  border: 0;
+  border-radius: 0;
+}
+
+.jobs-table-head,
+.jobs-row {
+  padding: 9px 12px;
+}
+
+.jobs-table-head {
+  background: var(--native-subpanel-bg);
+}
+
+.jobs-row:hover,
+.model-list-row:hover,
+.record-item:hover {
+  background: var(--native-row-hover);
+}
+
+.jobs-row {
+  background: transparent;
+}
+
+.status-badge {
+  min-height: 22px;
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.model-list-row {
+  padding: 10px 12px;
+  border-radius: var(--native-radius-control);
+}
+
+.model-list-card {
+  padding: 8px;
+}
+
+.model-list-rows {
+  gap: 4px;
+}
+
+.model-list-row {
+  border-color: transparent;
+  background: transparent;
+}
+
+.model-list-row.active,
+.model-list-row:hover {
+  border-color: transparent;
+}
+
+.model-row-main,
+.model-row-side {
+  gap: 10px;
+}
+
+.metric-strip {
+  gap: 6px;
+}
+
+.metric-pill {
+  padding: 9px;
+  background: var(--native-subpanel-bg);
+}
+
+.metric-pill strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.drop-zone {
+  min-height: 156px;
+  border-radius: var(--native-radius-panel);
+  background: var(--native-subpanel-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

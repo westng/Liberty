@@ -6,13 +6,19 @@
   .workbench-grid,
   .management-grid,
   .setting-row,
-  .preview-grid-2,
-  .preview-grid-3,
   .field-grid.two-col,
   .field-grid.three-col,
   .metric-strip,
   .metric-strip-tight {
     grid-template-columns: 1fr;
+  }
+
+  .settings-content-shell .preview-grid-2 {
+    grid-template-columns: repeat(2, max-content);
+  }
+
+  .settings-content-shell .preview-grid-3 {
+    grid-template-columns: repeat(3, max-content);
   }
 
   .app-shell {
@@ -60,7 +66,6 @@
     overflow-x: auto;
   }
 
-  .content-toolbar,
   .section-heading,
   .job-title-line,
   .job-meta-line,

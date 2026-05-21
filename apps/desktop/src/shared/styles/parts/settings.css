@@ -23,6 +23,8 @@
   display: grid;
   gap: 0;
   padding: 0;
+  border-color: var(--native-panel-border);
+  background: var(--native-panel-bg);
 }
 
 .setting-row {
@@ -91,7 +93,7 @@
   align-items: center;
   justify-content: flex-end;
   width: 100%;
-  min-width: 0;
+  min-width: min(100%, 336px);
   min-height: 40px;
   justify-self: end;
 }
@@ -107,7 +109,7 @@
   padding: 10px 12px;
   border: 1px solid var(--stroke-soft);
   border-radius: var(--radius-md);
-  background: var(--bg-input);
+  background: var(--native-control-bg, var(--bg-input));
   color: var(--text-main);
 }
 
@@ -125,39 +127,50 @@
 
 .preview-grid {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  width: max-content;
+  max-width: 100%;
 }
 
 .preview-grid-2 {
-  grid-template-columns: repeat(2, 100px);
+  grid-template-columns: repeat(2, max-content);
 }
 
 .preview-grid-3 {
-  grid-template-columns: repeat(3, 100px);
+  grid-template-columns: repeat(3, max-content);
 }
 
 .preview-card {
   display: grid;
   justify-items: center;
-  gap: 6px;
+  align-items: center;
+  place-content: center;
+  gap: 7px;
+  width: max-content;
+  min-width: 0;
   padding: 0;
-  border: none;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  color: var(--text-main);
+  color: var(--text-muted);
+  font: inherit;
   text-align: center;
-  transition: transform 0.18s ease;
+  transition: none;
 }
 
 .preview-card:hover {
-  transform: translateY(-1px);
+  color: var(--text-main);
 }
 
 .preview-art {
   display: block;
-  width: 100%;
+  width: 100px;
+  min-width: 100px;
   height: 56px;
+  flex: 0 0 auto;
   border-radius: var(--radius-md);
   border: 1px solid color-mix(in srgb, var(--stroke-soft) 76%, transparent);
+  justify-self: center;
 }
 
 .preview-label {
@@ -167,8 +180,8 @@
 }
 
 .preview-card.active .preview-art {
-  border-color: color-mix(in srgb, var(--accent) 82%, white 18%);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 78%, transparent);
+  border-color: color-mix(in srgb, var(--stroke-soft) 54%, var(--text-main));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--stroke-soft) 54%, var(--text-main));
 }
 
 .preview-card.active .preview-label {
@@ -378,18 +391,17 @@
   border: none;
   border-radius: var(--radius-pill);
   box-shadow: 0 0 0 2px transparent;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: box-shadow 0.18s ease;
 }
 
 .color-dot:hover {
-  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--stroke-soft) 70%, var(--text-muted));
 }
 
 .color-dot.active {
   box-shadow:
     0 0 0 2px var(--bg-panel),
     0 0 0 4px color-mix(in srgb, var(--accent) 48%, var(--stroke-soft));
-  transform: scale(1.06);
 }
 
 .color-option-label {
@@ -428,4 +440,3 @@
   justify-content: flex-end;
   padding-top: 4px;
 }
-

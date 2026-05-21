@@ -5,6 +5,7 @@ import type {
   PetInteractionAction,
   PetProfile,
   PetSettings,
+  PetStoreState,
   PetWorkflowEventInput,
 } from "@/shared/types/meeting";
 
@@ -34,6 +35,13 @@ export function createLocalPetService() {
     saveProfile: (input: SavePetProfileInput) => invoke<PetProfile>("save_pet_profile", { input }),
     getSettings: () => invoke<PetSettings>("get_pet_settings"),
     saveSettings: (input: SavePetSettingsInput) => invoke<PetSettings>("save_pet_settings", { input }),
+    getStoreState: () => invoke<PetStoreState>("get_pet_store_state"),
+    purchaseStoreItem: (itemKey: string, quantity = 1) =>
+      invoke<PetStoreState>("purchase_pet_store_item", { input: { itemKey, quantity } }),
+    equipInventoryItem: (itemKey: string) => invoke<PetStoreState>("equip_pet_inventory_item", { input: { itemKey } }),
+    unequipInventorySlot: (slot: string) => invoke<PetStoreState>("unequip_pet_inventory_slot", { input: { slot } }),
+    useInventoryItem: (itemKey: string, quantity = 1) =>
+      invoke<PetStoreState>("use_pet_inventory_item", { input: { itemKey, quantity } }),
     listEventLedger: (limit = 20) => invoke<PetEventLedgerEntry[]>("list_pet_event_ledger", { limit }),
     listCosmeticUnlocks: () => invoke<PetCosmeticUnlock[]>("list_pet_cosmetic_unlocks"),
     applyInteraction: (action: PetInteractionAction) =>

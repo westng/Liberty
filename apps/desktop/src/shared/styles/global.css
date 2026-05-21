@@ -1,4 +1,8 @@
 @import "./parts/base.css";
+@import "./parts/shell-base.css";
+@import "./parts/native-shell.css";
+@import "./parts/native-pages.css";
+@import "./parts/native-redesign.css";
 @import "./parts/jobs.css";
 @import "./parts/records.css";
 @import "./parts/summary.css";

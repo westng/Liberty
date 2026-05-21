@@ -1,0 +1,589 @@
+.content-shell:not(.settings-content-shell) .view-stack {
+  gap: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-hero,
+.content-shell:not(.settings-content-shell) .detail-hero,
+.content-shell:not(.settings-content-shell) .new-job-hero {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-hero .section-copy,
+.content-shell:not(.settings-content-shell) .detail-hero .section-copy,
+.content-shell:not(.settings-content-shell) .workbench-hero .section-copy {
+  margin-top: 2px;
+}
+
+.content-shell:not(.settings-content-shell) .workspace-grid-home {
+  grid-template-columns: minmax(0, 1fr) 312px;
+  align-items: start;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-primary-card {
+  gap: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-settings-card {
+  gap: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-setting-item {
+  padding: 10px;
+  border-color: transparent;
+  background: var(--native-subpanel-bg);
+}
+
+.content-shell:not(.settings-content-shell) .upload-pane {
+  padding: 10px;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-row {
+  padding: 7px 0;
+}
+
+.content-shell:not(.settings-content-shell) .side-panel {
+  gap: 10px;
+  padding: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-table {
+  min-width: 920px;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-table-head,
+.content-shell:not(.settings-content-shell) .jobs-row {
+  grid-template-columns: minmax(190px, 1.4fr) minmax(140px, 0.9fr) 116px 104px 96px 180px;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-row {
+  min-height: 48px;
+}
+
+.content-shell:not(.settings-content-shell) .jobs-primary strong,
+.content-shell:not(.settings-content-shell) .jobs-cell strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.content-shell:not(.settings-content-shell) .detail-grid {
+  grid-template-columns: minmax(0, 1fr) 312px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-hero {
+  grid-column: 1 / -1;
+}
+
+.content-shell:not(.settings-content-shell) .detail-main-column {
+  min-height: 240px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-side-column {
+  position: sticky;
+  top: 62px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-stage-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .detail-stage-card {
+  padding: 9px;
+  border-radius: var(--native-radius-control);
+  background: var(--native-subpanel-bg);
+}
+
+.content-shell:not(.settings-content-shell) .detail-progress-card,
+.content-shell:not(.settings-content-shell) .detail-log-card {
+  grid-column: 1 / -1;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-grid {
+  grid-template-columns: minmax(0, 1fr) 312px;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-grid .workbench-hero {
+  grid-column: 1 / -1;
+}
+
+.content-shell:not(.settings-content-shell) .transcript-column {
+  grid-column: 1 / -1;
+  min-height: 560px;
+}
+
+.content-shell:not(.settings-content-shell) .workbench-hero-actions {
+  gap: 6px;
+}
+
+.content-shell:not(.settings-content-shell) .speaker-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-color: var(--native-panel-border);
+  border-radius: 6px;
+  background: var(--native-control-bg);
+  color: var(--text-main);
+}
+
+.content-shell:not(.settings-content-shell) .speaker-filter-chip.active {
+  background: var(--native-subpanel-bg);
+  color: var(--text-main);
+}
+
+.content-shell:not(.settings-content-shell) .model-page-stack {
+  gap: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .model-page-stack > .surface:first-child {
+  padding: 12px 14px;
+}
+
+.content-shell:not(.settings-content-shell) .model-management-header {
+  display: none;
+}
+
+.content-shell:not(.settings-content-shell) .model-list-card {
+  padding: 6px;
+}
+
+.content-shell:not(.settings-content-shell) .model-list-row {
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
+.content-shell:not(.settings-content-shell) .model-row-main strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.content-shell:not(.settings-content-shell) .model-row-main span,
+.content-shell:not(.settings-content-shell) .record-meta {
+  font-size: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .pet-primary-grid {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .pet-settings-panel,
+.content-shell:not(.settings-content-shell) .pet-cosmetics-panel {
+  align-self: start;
+}
+
+.content-shell:not(.settings-content-shell) .pet-ledger-panel {
+  grid-column: 1 / -1;
+}
+
+.content-shell:not(.settings-content-shell) .pet-page-stack,
+.content-shell:not(.settings-content-shell) .pet-grid {
+  gap: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .pet-status-grid {
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .pet-status-tile,
+.content-shell:not(.settings-content-shell) .pet-progress-card,
+.content-shell:not(.settings-content-shell) .desktop-pet-actions {
+  padding: 10px;
+  border-radius: var(--native-radius-control);
+  background: var(--native-subpanel-bg);
+}
+
+.content-shell:not(.settings-content-shell) .pet-action-button {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+  border-color: var(--native-panel-border);
+  border-radius: 6px;
+  background: var(--native-control-bg);
+  color: var(--text-main);
+  transform: none;
+}
+
+.content-shell:not(.settings-content-shell) .pet-action-button:hover {
+  background: var(--native-subpanel-bg);
+  color: var(--text-main);
+  transform: none;
+}
+
+.content-shell:not(.settings-content-shell) .pet-action-icon {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  color: currentColor;
+}
+
+.content-shell:not(.settings-content-shell) .pet-settings-form {
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .toggle-row,
+.content-shell:not(.settings-content-shell) .range-row {
+  min-height: 34px;
+  padding: 0;
+}
+
+.content-shell:not(.settings-content-shell) .pet-ledger-list {
+  border-radius: var(--native-radius-panel);
+}
+
+.content-shell:not(.settings-content-shell) .pet-ledger-item {
+  padding: 9px 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-native-page,
+.content-shell:not(.settings-content-shell) .new-job-workspace {
+  min-height: 100%;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 316px;
+  gap: 14px;
+  align-items: start;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-composer,
+.content-shell:not(.settings-content-shell) .new-job-rail {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 2px 2px 0;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-page-head h2 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-page-head p {
+  max-width: 560px;
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-kicker {
+  margin: 0 0 5px !important;
+  color: var(--accent-strong) !important;
+  font-size: 12px !important;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-sheet,
+.content-shell:not(.settings-content-shell) .new-job-options-panel,
+.content-shell:not(.settings-content-shell) .new-job-submit-card,
+.content-shell:not(.settings-content-shell) .new-job-recent-card {
+  padding: 14px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: var(--native-panel-bg);
+  box-shadow: var(--native-shadow-panel);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-sheet {
+  display: grid;
+  gap: 16px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-title-field {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-title-field input {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-section,
+.content-shell:not(.settings-content-shell) .new-job-options-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-section-head h3 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-section-head p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-box {
+  min-height: 132px;
+  padding: 10px;
+  border-style: solid;
+  border-color: var(--native-panel-border);
+  border-radius: var(--native-radius-control);
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-box:not(.has-files) {
+  align-content: center;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-box.has-files {
+  min-height: 0;
+  background: transparent;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-box .drop-zone-button {
+  min-height: 110px;
+  padding: 14px;
+  border: 0;
+  border-radius: calc(var(--native-radius-control) - 1px);
+  background: var(--native-subpanel-bg);
+  color: var(--text-main);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-box .drop-zone-button:hover {
+  background: var(--native-control-bg);
+}
+
+.content-shell:not(.settings-content-shell) .drop-zone-copy {
+  justify-items: center;
+  gap: 5px;
+}
+
+.content-shell:not(.settings-content-shell) .drop-zone-copy strong {
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.content-shell:not(.settings-content-shell) .drop-zone-copy p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-box-head {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-row {
+  padding: 8px 0;
+  border-color: var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-name {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 56px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option:last-of-type {
+  border-bottom: 0;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option strong,
+.content-shell:not(.settings-content-shell) .new-job-check-list strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option p,
+.content-shell:not(.settings-content-shell) .new-job-check-list span {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option select,
+.content-shell:not(.settings-content-shell) .new-job-option label {
+  width: 168px;
+  flex: 0 0 auto;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option select {
+  width: auto;
+  min-width: 128px;
+  padding: revert;
+  border: revert;
+  border-radius: revert;
+  background: revert;
+  color: revert;
+  font: revert;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option label {
+  width: auto;
+  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-main);
+  font: revert;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-option input[type="checkbox"],
+.content-shell:not(.settings-content-shell) .new-job-option input[type="radio"] {
+  width: auto;
+  margin: revert;
+  accent-color: auto;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-hotwords-field {
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-hotwords-field textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-status-grid div {
+  display: grid;
+  gap: 4px;
+  min-height: 56px;
+  align-content: center;
+  padding: 8px;
+  border-radius: var(--native-radius-control);
+  background: var(--native-subpanel-bg);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-status-grid span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-status-grid strong {
+  color: var(--text-main);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-check-list {
+  display: grid;
+  gap: 0;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-check-list div {
+  padding: 9px 0;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-error {
+  margin-top: 10px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-create-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-rail-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-recent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-recent-row:last-child {
+  border-bottom: 0;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-recent-row h4 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-recent-row p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-file-row > div:first-child,
+.content-shell:not(.settings-content-shell) .new-job-recent-row > div:first-child {
+  min-width: 0;
+}

@@ -112,13 +112,13 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
       jobId: job.id,
       filePath,
     });
-    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.title }).catch(() => undefined);
+    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
   }
 
   try {
     await writeTextFile(filePath, payload.content);
-    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.title }).catch(() => undefined);
+    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
   } catch {
     const blob = new Blob([payload.content], { type: "text/plain;charset=utf-8" });
@@ -128,7 +128,7 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
     anchor.download = payload.fileName;
     anchor.click();
     URL.revokeObjectURL(url);
-    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.title }).catch(() => undefined);
+    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
   }
 }

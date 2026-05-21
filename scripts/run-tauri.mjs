@@ -10,6 +10,7 @@ const desktopRoot = path.join(repoRoot, "apps", "desktop");
 const tauriBin = resolveTauriBin();
 const env = {
   ...process.env,
+  CARGO_TARGET_DIR: path.join(repoRoot, "target"),
   SPARKLE_FRAMEWORK_PATH:
     process.env.SPARKLE_FRAMEWORK_PATH ?? path.join(desktopRoot, "src-tauri", "vendor"),
 };

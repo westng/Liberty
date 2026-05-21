@@ -146,6 +146,96 @@ export interface PetEventLedgerEntry {
   metadata?: string;
 }
 
+export interface PetWallet {
+  petId: string;
+  currencyKey: string;
+  balance: number;
+  lifetimeEarned: number;
+  lifetimeSpent: number;
+  updatedAt: string;
+}
+
+export interface PetInventoryItem {
+  id: string;
+  petId: string;
+  itemKey: string;
+  itemType: string;
+  slot: string;
+  quantity: number;
+  equipped: boolean;
+  source: string;
+  purchasedAt: string;
+  updatedAt: string;
+}
+
+export interface PetEconomyEntry {
+  id: string;
+  petId: string;
+  entryType: string;
+  currencyKey: string;
+  amount: number;
+  balanceAfter: number;
+  sourceType: string;
+  sourceKey: string;
+  metadata?: string;
+  createdAt: string;
+}
+
+export interface PetMilestoneCounter {
+  petId: string;
+  counterKey: string;
+  counterValue: number;
+  lastEventKey: string;
+  updatedAt: string;
+}
+
+export interface PetStoreCatalogItem {
+  itemKey: string;
+  itemType: "pet" | "cosmetic" | "theme" | "tool" | "food" | "badge";
+  slot: "pet" | "accessory" | "scene" | "badge" | "consumable";
+  nameZh: string;
+  nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  rarity: string;
+  priceLp: number;
+  levelGate: number;
+  stageGate: string;
+  milestoneGate: string;
+  assetKey: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export interface PetStoreCatalogItemState {
+  item: PetStoreCatalogItem;
+  owned: boolean;
+  equipped: boolean;
+  quantity: number;
+  growthValue: number;
+  purchasable: boolean;
+  lockedReasonZh: string;
+  lockedReasonEn: string;
+  status: "equipped" | "owned" | "coming_soon" | "locked" | "achievement" | "insufficient" | "available";
+}
+
+export interface PetEquipmentState {
+  currentPet?: PetInventoryItem;
+  accessory?: PetInventoryItem;
+  scene?: PetInventoryItem;
+  badge?: PetInventoryItem;
+}
+
+export interface PetStoreState {
+  profile: PetProfile;
+  wallet: PetWallet;
+  catalog: PetStoreCatalogItemState[];
+  inventory: PetInventoryItem[];
+  equipment: PetEquipmentState;
+  counters: PetMilestoneCounter[];
+  economy: PetEconomyEntry[];
+}
+
 export interface PetWorkflowEventInput {
   eventType: PetWorkflowEventType;
   metadata?: string;

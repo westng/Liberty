@@ -19,7 +19,7 @@ type PetFrameEntry = {
   url: string;
 };
 
-const petImageModules = import.meta.glob("/src/assets/images/*/*.png", {
+const petImageModules = import.meta.glob(["/src/assets/images/action/*/*.png", "/src/assets/images/*/*.png"], {
   eager: true,
   import: "default",
 }) as Record<string, string>;
@@ -137,7 +137,15 @@ function buildPetImageGroups() {
     }
 
     const existing = groups.get(parsed.group) ?? [];
-    existing.push({ frame: parsed.frame, url });
+    const existingFrameIndex = existing.findIndex((entry) => entry.frame === parsed.frame);
+    const nextEntry = { frame: parsed.frame, url };
+    if (existingFrameIndex >= 0) {
+      if (isActionImagePath(path)) {
+        existing[existingFrameIndex] = nextEntry;
+      }
+    } else {
+      existing.push(nextEntry);
+    }
     groups.set(parsed.group, existing);
   });
 
@@ -146,6 +154,10 @@ function buildPetImageGroups() {
   });
 
   return groups;
+}
+
+function isActionImagePath(path: string) {
+  return path.includes("/assets/images/action/");
 }
 
 const petImageGroups = buildPetImageGroups();

@@ -1,0 +1,298 @@
+.runtime-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.runtime-card {
+  display: grid;
+  gap: 22px;
+  padding: 18px 18px 16px;
+}
+
+.runtime-card::after {
+  display: none;
+}
+
+.diagnostics-card .runtime-meta-item,
+.diagnostics-card .runtime-log pre {
+  background: var(--native-subpanel-bg, var(--bg-card));
+  box-shadow: none;
+}
+
+.runtime-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider-soft);
+}
+
+.runtime-card-title-wrap {
+  display: grid;
+  gap: 6px;
+  max-width: 760px;
+}
+
+.runtime-card-title {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.runtime-card-hint {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.runtime-card-status {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.runtime-status-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.runtime-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--native-subpanel-bg, var(--bg-input));
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 72%, transparent);
+}
+
+.runtime-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.runtime-status-ready {
+  color: rgb(31, 140, 84);
+  background: rgba(41, 171, 107, 0.14);
+}
+
+.runtime-status-installing {
+  color: rgb(191, 119, 9);
+  background: rgba(255, 176, 32, 0.16);
+}
+
+.runtime-status-idle,
+.runtime-status-upToDate,
+.runtime-status-restartRequired {
+  color: rgb(31, 140, 84);
+  background: rgba(41, 171, 107, 0.14);
+}
+
+.runtime-status-checking,
+.runtime-status-downloading,
+.runtime-status-updateAvailable {
+  color: rgb(191, 119, 9);
+  background: rgba(255, 176, 32, 0.16);
+}
+
+.runtime-status-failed,
+.runtime-status-repair_required,
+.runtime-status-error,
+.runtime-status-unsupported {
+  color: rgb(191, 60, 60);
+  background: rgba(255, 106, 87, 0.16);
+}
+
+.runtime-status-text {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 760px;
+  font-size: 14px;
+}
+
+.runtime-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.runtime-progress-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--bg-card) 96%, transparent) 0%,
+      color-mix(in srgb, var(--bg-panel) 92%, transparent) 100%);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
+}
+
+.runtime-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.runtime-progress-head strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.runtime-progress-track {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-input) 92%, var(--text-soft) 8%);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 80%, transparent);
+}
+
+.runtime-progress-bar {
+  display: block;
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  overflow: visible;
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--accent) 78%, white 22%) 0%,
+      var(--accent) 28%,
+      color-mix(in srgb, var(--accent) 58%, white 42%) 50%,
+      var(--accent) 72%,
+      color-mix(in srgb, var(--accent) 78%, white 22%) 100%);
+  background-size: 220% 100%;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 24%, transparent);
+  transition: width 220ms ease;
+  animation: runtime-progress-flow 1.8s linear infinite;
+}
+
+.runtime-progress-media {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  transform: translateY(-50%);
+  opacity: 0.98;
+  pointer-events: none;
+  z-index: 2;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.18));
+}
+
+.runtime-progress-copy {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@keyframes runtime-progress-flow {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-progress-bar {
+    animation: none;
+  }
+}
+
+.runtime-meta-item {
+  display: grid;
+  gap: 8px;
+  padding: 15px 16px;
+  border-radius: var(--radius-xl);
+  background: var(--native-subpanel-bg, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 88%, transparent);
+}
+
+.runtime-meta-item span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.runtime-meta-item strong {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.update-feed-label {
+  word-break: break-all;
+}
+
+.runtime-primary-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.runtime-primary-action.text-button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.runtime-log {
+  display: grid;
+  gap: 10px;
+}
+
+.runtime-log-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.runtime-log pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: var(--radius-xl);
+  background: var(--native-subpanel-bg, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 980px) {
+  .runtime-card-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .runtime-card-status {
+    justify-content: space-between;
+    justify-items: stretch;
+  }
+
+  .runtime-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .runtime-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}

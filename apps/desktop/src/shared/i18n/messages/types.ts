@@ -8,6 +8,7 @@ export type MessageTree = {
     templates: string;
     members: string;
     pet: string;
+    petStore: string;
     settings: string;
   };
   routeTitles: Record<string, string>;
@@ -53,6 +54,10 @@ export type MessageTree = {
     remoteMode: string;
     mockModeShort: string;
     github: string;
+    petEnabled: string;
+    petDisabled: string;
+    petEnableTitle: string;
+    petDisableTitle: string;
     jobCompletedTitle: string;
     jobCompletedBody: string;
     cpu: string;
@@ -72,6 +77,7 @@ export type MessageTree = {
     auto: string;
     light: string;
     dark: string;
+    effectiveTheme: string;
     transparent: string;
     tinted: string;
     localeZh: string;
@@ -238,6 +244,8 @@ export type MessageTree = {
     processRunning: string;
     details: string;
     workbench: string;
+    selectedTask: string;
+    doubleClickHint: string;
     deleteDisabled: string;
     deleteAction: string;
     deleting: string;
@@ -252,6 +260,7 @@ export type MessageTree = {
     inputFiles: string;
     hotwords: string;
     speaker: string;
+    backToJobs: string;
     viewWorkbench: string;
     retryJob: string;
     filesSection: string;
@@ -267,6 +276,7 @@ export type MessageTree = {
     renameSpeakerTitle: string;
     renameSpeakerConfirm: string;
     replace: string;
+    backToDetail: string;
     heroCopy: string;
     aiSummary: string;
     viewNotes: string;
@@ -464,5 +474,6 @@ export type MessageTree = {
     newTemplate: string;
     editMember: string;
     newMember: string;
+    petStoreItemTitle: string;
   };
 };
