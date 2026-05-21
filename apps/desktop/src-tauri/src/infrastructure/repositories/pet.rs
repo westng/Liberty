@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::local_db::{
-    LocalResult, PetCosmeticUnlock, PetEventLedgerEntry, PetProfile, PetSettings,
+    pet_leveling, LocalResult, PetCosmeticUnlock, PetEventLedgerEntry, PetProfile, PetSettings,
 };
 
 pub fn load_profile(conn: &Connection) -> LocalResult<PetProfile> {
@@ -13,6 +13,59 @@ pub fn load_profile(conn: &Connection) -> LocalResult<PetProfile> {
         map_pet_profile,
     )
     .map_err(|err| err.to_string())
+}
+
+pub fn reconcile_profile_leveling(conn: &Connection) -> LocalResult<()> {
+    let (stored_level, stored_experience, stored_stage) = conn
+        .query_row(
+            "SELECT level, experience, stage
+             FROM pet_profile
+             WHERE id = 'default-pet'",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .map_err(|err| err.to_string())?;
+
+    let calculated_snapshot = pet_leveling::level_snapshot_from_experience(stored_experience);
+    let effective_level = stored_level
+        .max(calculated_snapshot.level)
+        .clamp(1, pet_leveling::MAX_PET_LEVEL);
+    let effective_experience = if effective_level > calculated_snapshot.level {
+        pet_leveling::total_required_exp_for_level(effective_level)
+    } else {
+        stored_experience
+    };
+    let level_snapshot = pet_leveling::level_snapshot_from_experience(effective_experience);
+    let normalized_stage = pet_leveling::normalize_stage(&stored_stage, level_snapshot.level);
+
+    if stored_level == level_snapshot.level
+        && stored_experience == effective_experience
+        && stored_stage == normalized_stage
+    {
+        return Ok(());
+    }
+
+    conn.execute(
+        "UPDATE pet_profile
+         SET level = ?2, experience = ?3, stage = ?4, updated_at = ?5
+         WHERE id = ?1",
+        params![
+            "default-pet",
+            level_snapshot.level,
+            effective_experience,
+            normalized_stage,
+            chrono::Utc::now().to_rfc3339()
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+
+    Ok(())
 }
 
 pub fn load_profile_tx(tx: &Transaction<'_>) -> LocalResult<PetProfile> {
@@ -211,8 +264,9 @@ pub fn ensure_stage_cosmetic_unlocks_tx(
     }
 
     let (cosmetic_type, cosmetic_key) = match profile.stage.as_str() {
-        "growing" => ("accessory", "clover-bow"),
-        "mature" => ("accessory", "bell-accessory"),
+        "familiar" => ("accessory", "clover-bow"),
+        "grow_together" => ("accessory", "strawberry-candy"),
+        "deep_bond" => ("accessory", "bell-accessory"),
         _ => return Ok(()),
     };
 
@@ -249,7 +303,7 @@ pub fn ensure_default_exists(conn: &Connection) -> LocalResult<()> {
     conn.execute(
         "INSERT INTO pet_profile (
             id, name, level, experience, stage, current_mood, created_at, updated_at
-         ) VALUES ('default-pet', 'Libby', 1, 0, 'baby', 'idle', ?1, ?1)",
+         ) VALUES ('default-pet', 'Libby', 1, 0, 'first_meet', 'idle', ?1, ?1)",
         params![now],
     )
     .map_err(|err| err.to_string())?;
@@ -281,7 +335,7 @@ pub fn ensure_default_exists_tx(tx: &Transaction<'_>) -> LocalResult<()> {
     tx.execute(
         "INSERT INTO pet_profile (
             id, name, level, experience, stage, current_mood, created_at, updated_at
-         ) VALUES ('default-pet', 'Libby', 1, 0, 'baby', 'idle', ?1, ?1)",
+         ) VALUES ('default-pet', 'Libby', 1, 0, 'first_meet', 'idle', ?1, ?1)",
         params![now],
     )
     .map_err(|err| err.to_string())?;
@@ -297,12 +351,35 @@ pub fn ensure_default_exists_tx(tx: &Transaction<'_>) -> LocalResult<()> {
 }
 
 fn map_pet_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetProfile> {
+    let stored_level = row.get::<_, i64>(2)?;
+    let stored_experience = row.get::<_, i64>(3)?;
+    let stored_stage = row.get::<_, String>(4)?;
+    let calculated_snapshot = pet_leveling::level_snapshot_from_experience(stored_experience);
+    let effective_level = stored_level
+        .max(calculated_snapshot.level)
+        .clamp(1, pet_leveling::MAX_PET_LEVEL);
+    let effective_experience = if effective_level > calculated_snapshot.level {
+        pet_leveling::total_required_exp_for_level(effective_level)
+    } else {
+        stored_experience
+    };
+    let mut level_snapshot = pet_leveling::level_snapshot_from_experience(effective_experience);
+    let normalized_stage = pet_leveling::normalize_stage(&stored_stage, level_snapshot.level);
+    if normalized_stage != level_snapshot.current_stage {
+        level_snapshot.current_stage = normalized_stage.clone();
+        level_snapshot.current_stage_label_zh =
+            pet_leveling::stage_label_zh(&normalized_stage).into();
+        level_snapshot.current_stage_label_en =
+            pet_leveling::stage_label_en(&normalized_stage).into();
+    }
+
     Ok(PetProfile {
         id: row.get(0)?,
         name: row.get(1)?,
-        level: row.get(2)?,
-        experience: row.get(3)?,
-        stage: row.get(4)?,
+        level: level_snapshot.level,
+        experience: effective_experience,
+        stage: normalized_stage,
+        level_snapshot,
         current_mood: row.get(5)?,
         created_at: row.get(6)?,
         updated_at: row.get(7)?,

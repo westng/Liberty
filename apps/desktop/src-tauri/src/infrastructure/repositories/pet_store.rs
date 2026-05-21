@@ -4,9 +4,9 @@ use serde_json::json;
 use crate::{
     infrastructure::ids,
     local_db::{
-        LocalResult, PetEconomyEntry, PetEquipmentState, PetEventLedgerEntry, PetInventoryItem,
-        PetMilestoneCounter, PetProfile, PetStoreCatalogItem, PetStoreCatalogItemState,
-        PetStoreState, PetWallet,
+        pet_leveling, LocalResult, PetEconomyEntry, PetEquipmentState, PetEventLedgerEntry,
+        PetInventoryItem, PetMilestoneCounter, PetProfile, PetStoreCatalogItem,
+        PetStoreCatalogItemState, PetStoreState, PetWallet,
     },
 };
 
@@ -31,6 +31,7 @@ pub fn catalog_items() -> Vec<PetStoreCatalogItem> {
                 seed.stage_gate,
                 seed.milestone_gate,
                 seed.asset_key,
+                seed.growth_value,
                 true,
                 seed.sort_order,
             )
@@ -52,6 +53,7 @@ struct CatalogSeed {
     stage_gate: &'static str,
     milestone_gate: &'static str,
     asset_key: &'static str,
+    growth_value: i64,
     sort_order: i64,
 }
 
@@ -115,7 +117,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "grow_together",
         220,
         4,
-        "growing",
+        "grow_together",
         "",
         "strawberry_candy",
         120,
@@ -131,7 +133,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         420,
         4,
-        "growing",
+        "grow_together",
         "",
         "bookshelf",
         200,
@@ -211,7 +213,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         380,
         4,
-        "growing",
+        "grow_together",
         "",
         "sheep_plush",
         250,
@@ -307,7 +309,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         140,
         5,
-        "growing",
+        "grow_together",
         "",
         "gem_ticket",
         340,
@@ -339,7 +341,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         120,
         4,
-        "growing",
+        "grow_together",
         "",
         "heart_charm",
         360,
@@ -387,7 +389,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         130,
         5,
-        "growing",
+        "grow_together",
         "",
         "magic_scroll",
         390,
@@ -419,7 +421,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "forever_partner",
         200,
         8,
-        "mature",
+        "deep_bond",
         "",
         "rainbow_crystal",
         410,
@@ -520,10 +522,8 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "stopwatch",
         470,
     ),
-    seed(
+    food_seed(
         "bell-pudding-food",
-        "food",
-        "consumable",
         "铃铛布丁",
         "Bell Pudding",
         "投喂后获得一段轻快互动。",
@@ -532,14 +532,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         45,
         1,
         "",
-        "",
         "bell_pudding",
+        6,
         500,
     ),
-    seed(
+    food_seed(
         "bento-box-food",
-        "food",
-        "consumable",
         "元气便当",
         "Bento Box",
         "更扎实的一份陪伴餐点。",
@@ -548,14 +546,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         75,
         2,
         "",
-        "",
         "bento_box",
+        14,
         510,
     ),
-    seed(
+    food_seed(
         "bubble-tea-food",
-        "food",
-        "consumable",
         "珍珠奶茶",
         "Bubble Tea",
         "触发一句轻松鼓励文案。",
@@ -564,14 +560,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         35,
         1,
         "",
-        "",
         "bubble_tea",
+        6,
         520,
     ),
-    seed(
+    food_seed(
         "candy-jar-food",
-        "food",
-        "consumable",
         "糖果罐",
         "Candy Jar",
         "适合快速提升互动氛围。",
@@ -580,14 +574,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         50,
         1,
         "",
-        "",
         "candy_jar",
+        8,
         530,
     ),
-    seed(
+    food_seed(
         "chocolate-cake-food",
-        "food",
-        "consumable",
         "巧克力蛋糕",
         "Chocolate Cake",
         "完成长任务后的奖励甜点。",
@@ -595,15 +587,13 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         95,
         4,
-        "growing",
-        "",
+        "grow_together",
         "chocolate_cake",
+        16,
         540,
     ),
-    seed(
+    food_seed(
         "chocolate-chip-cookie-food",
-        "food",
-        "consumable",
         "巧克力曲奇",
         "Chocolate Chip Cookie",
         "轻量投喂道具。",
@@ -612,14 +602,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         25,
         1,
         "",
-        "",
         "chocolate_chip_cookie",
+        4,
         550,
     ),
-    seed(
+    food_seed(
         "cream-cake-food",
-        "food",
-        "consumable",
         "奶油蛋糕",
         "Cream Cake",
         "让桌宠进入满足状态。",
@@ -628,14 +616,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         70,
         2,
         "",
-        "",
         "cream_cake",
+        10,
         560,
     ),
-    seed(
+    food_seed(
         "cupcake-food",
-        "food",
-        "consumable",
         "纸杯蛋糕",
         "Cupcake",
         "日常陪伴甜点。",
@@ -644,14 +630,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         30,
         1,
         "",
-        "",
         "cupcake",
+        4,
         570,
     ),
-    seed(
+    food_seed(
         "custard-pudding-food",
-        "food",
-        "consumable",
         "焦糖布丁",
         "Custard Pudding",
         "柔和的休息时刻投喂。",
@@ -660,14 +644,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         45,
         1,
         "",
-        "",
         "custard_pudding",
+        8,
         580,
     ),
-    seed(
+    food_seed(
         "fruit-tart-food",
-        "food",
-        "consumable",
         "水果挞",
         "Fruit Tart",
         "清爽的成长奖励食物。",
@@ -676,14 +658,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         65,
         2,
         "",
-        "",
         "fruit_tart",
+        10,
         590,
     ),
-    seed(
+    food_seed(
         "ice-cream-cone-food",
-        "food",
-        "consumable",
         "冰淇淋甜筒",
         "Ice Cream Cone",
         "休息时的轻快奖励。",
@@ -692,14 +672,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         40,
         1,
         "",
-        "",
         "ice_cream_cone",
+        6,
         600,
     ),
-    seed(
+    food_seed(
         "jelly-pudding-food",
-        "food",
-        "consumable",
         "果冻布丁",
         "Jelly Pudding",
         "带来一段软萌互动反馈。",
@@ -708,14 +686,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         45,
         1,
         "",
-        "",
         "jelly_pudding",
+        8,
         610,
     ),
-    seed(
+    food_seed(
         "pink-donut-food",
-        "food",
-        "consumable",
         "粉色甜甜圈",
         "Pink Donut",
         "基础开心投喂道具。",
@@ -724,14 +700,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         25,
         1,
         "",
-        "",
         "pink_donut",
+        4,
         620,
     ),
-    seed(
+    food_seed(
         "purple-macaron-food",
-        "food",
-        "consumable",
         "紫色马卡龙",
         "Purple Macaron",
         "精致的小份陪伴甜点。",
@@ -740,14 +714,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         60,
         2,
         "",
-        "",
         "purple_macaron",
+        10,
         630,
     ),
-    seed(
+    food_seed(
         "sandwich-food",
-        "food",
-        "consumable",
         "元气三明治",
         "Sandwich",
         "适合工作间隙的饱腹投喂。",
@@ -756,14 +728,12 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         55,
         1,
         "",
-        "",
         "sandwich",
+        8,
         640,
     ),
-    seed(
+    food_seed(
         "strawberry-shortcake-food",
-        "food",
-        "consumable",
         "草莓奶油蛋糕",
         "Strawberry Shortcake",
         "高级陪伴甜点。",
@@ -771,9 +741,9 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "deep_bond",
         110,
         4,
-        "growing",
-        "",
+        "grow_together",
         "strawberry_shortcake",
+        18,
         650,
     ),
     seed(
@@ -1065,6 +1035,41 @@ const fn seed(
         stage_gate,
         milestone_gate,
         asset_key,
+        growth_value: 0,
+        sort_order,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+const fn food_seed(
+    item_key: &'static str,
+    name_zh: &'static str,
+    name_en: &'static str,
+    description_zh: &'static str,
+    description_en: &'static str,
+    rarity: &'static str,
+    price_lp: i64,
+    level_gate: i64,
+    stage_gate: &'static str,
+    asset_key: &'static str,
+    growth_value: i64,
+    sort_order: i64,
+) -> CatalogSeed {
+    CatalogSeed {
+        item_key,
+        item_type: "food",
+        slot: "consumable",
+        name_zh,
+        name_en,
+        description_zh,
+        description_en,
+        rarity,
+        price_lp,
+        level_gate,
+        stage_gate,
+        milestone_gate: "",
+        asset_key,
+        growth_value,
         sort_order,
     }
 }
@@ -1212,6 +1217,40 @@ pub fn purchase_item_tx(
     Ok(())
 }
 
+pub fn grant_catalog_item_tx(
+    tx: &Transaction<'_>,
+    item: &PetStoreCatalogItem,
+    quantity: i64,
+    source: &str,
+    now: &str,
+) -> LocalResult<()> {
+    let quantity = quantity.clamp(1, 99);
+    let existing_inventory_item = load_inventory_item_tx(tx, &item.item_key)?;
+    if item.slot == "consumable" && existing_inventory_item.is_some() {
+        tx.execute(
+            "UPDATE pet_inventory
+             SET quantity = quantity + ?3, source = ?4, updated_at = ?5
+             WHERE pet_id = ?1 AND item_key = ?2",
+            params![PET_ID, item.item_key, quantity, source, now],
+        )
+        .map_err(|err| err.to_string())?;
+    } else {
+        upsert_inventory_tx(
+            tx,
+            &inventory_record(
+                &item.item_key,
+                &item.item_type,
+                &item.slot,
+                quantity,
+                false,
+                source,
+                now,
+            ),
+        )?;
+    }
+    Ok(())
+}
+
 pub fn equip_item_tx(tx: &Transaction<'_>, item_key: &str, now: &str) -> LocalResult<()> {
     let item = load_inventory_item_tx(tx, item_key)?
         .ok_or_else(|| "该商品还不在个人仓库中。".to_string())?;
@@ -1294,8 +1333,10 @@ pub fn use_item_tx(
         let mut profile = crate::infrastructure::repositories::pet::load_profile_tx(tx)?;
         let previous_stage = profile.stage.clone();
         profile.experience = (profile.experience + growth_value).max(0);
-        profile.level = pet_level_from_experience(profile.experience);
-        profile.stage = pet_stage_from_level(profile.level).to_string();
+        let level_snapshot = pet_leveling::level_snapshot_from_experience(profile.experience);
+        profile.level = level_snapshot.level;
+        profile.stage = level_snapshot.current_stage.clone();
+        profile.level_snapshot = level_snapshot;
         profile.current_mood = "proud".into();
         profile.updated_at = now.into();
         crate::infrastructure::repositories::pet::save_profile_tx(tx, &profile)?;
@@ -1551,39 +1592,7 @@ fn growth_value_for_food(item: &PetStoreCatalogItem) -> i64 {
     if item.item_type != "food" {
         return 0;
     }
-
-    let price_base = (item.price_lp / 15).clamp(1, 8);
-    let rarity_bonus = match item.rarity.as_str() {
-        "first_meet" => 1,
-        "familiar" => 2,
-        "grow_together" => 3,
-        "deep_bond" => 4,
-        "forever_partner" | "bond_forever" => 5,
-        _ => 1,
-    };
-    let gate_bonus = if item.stage_gate == "mature" {
-        2
-    } else if item.stage_gate == "growing" || item.level_gate >= 4 {
-        1
-    } else {
-        0
-    };
-
-    (price_base + rarity_bonus + gate_bonus).clamp(2, 12)
-}
-
-fn pet_level_from_experience(experience: i64) -> i64 {
-    (experience.div_euclid(20) + 1).max(1)
-}
-
-fn pet_stage_from_level(level: i64) -> &'static str {
-    if level >= 8 {
-        "mature"
-    } else if level >= 4 {
-        "growing"
-    } else {
-        "baby"
-    }
+    item.growth_value.max(0)
 }
 
 pub fn grant_reward_tx(
@@ -1709,6 +1718,7 @@ fn catalog_item(
     stage_gate: &str,
     milestone_gate: &str,
     asset_key: &str,
+    growth_value: i64,
     enabled: bool,
     sort_order: i64,
 ) -> PetStoreCatalogItem {
@@ -1726,6 +1736,7 @@ fn catalog_item(
         stage_gate: stage_gate.into(),
         milestone_gate: milestone_gate.into(),
         asset_key: asset_key.into(),
+        growth_value,
         enabled,
         sort_order,
     }
@@ -1751,18 +1762,16 @@ fn item_state(
         && locked.is_none()
         && item.item_type != "badge"
         && wallet.balance >= item.price_lp;
-    let status = if owned {
-        if equipped {
-            "equipped"
-        } else {
-            "owned"
-        }
-    } else if !item.enabled {
+    let status = if !item.enabled {
         "coming_soon"
-    } else if locked.is_some() {
-        "locked"
+    } else if equipped {
+        "equipped"
+    } else if owned {
+        "owned"
     } else if item.item_type == "badge" {
         "achievement"
+    } else if locked.is_some() {
+        "locked"
     } else if wallet.balance < item.price_lp {
         "insufficient"
     } else {
@@ -1833,31 +1842,15 @@ fn parse_milestone_gate(value: &str) -> Option<(&str, i64)> {
 }
 
 fn stage_satisfies(current: &str, required: &str) -> bool {
-    stage_rank(current) >= stage_rank(required)
-}
-
-fn stage_rank(stage: &str) -> i64 {
-    match stage {
-        "mature" => 3,
-        "growing" => 2,
-        _ => 1,
-    }
+    pet_leveling::stage_rank(current) >= pet_leveling::stage_rank(required)
 }
 
 fn stage_label_zh(stage: &str) -> &'static str {
-    match stage {
-        "mature" => "成熟期",
-        "growing" => "成长期",
-        _ => "幼年期",
-    }
+    pet_leveling::stage_label_zh(stage)
 }
 
 fn stage_label_en(stage: &str) -> &'static str {
-    match stage {
-        "mature" => "mature",
-        "growing" => "growing",
-        _ => "baby",
-    }
+    pet_leveling::stage_label_en(stage)
 }
 
 fn counter_label_zh(counter_key: &str) -> &'static str {
@@ -2215,4 +2208,54 @@ fn map_counter(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetMilestoneCounter>
         last_event_key: row.get(3)?,
         updated_at: row.get(4)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_profile(level: i64, stage: &str) -> PetProfile {
+        let experience = crate::local_db::pet_leveling::total_required_exp_for_level(level);
+        let level_snapshot =
+            crate::local_db::pet_leveling::level_snapshot_from_experience(experience);
+        PetProfile {
+            id: PET_ID.into(),
+            name: "Libby".into(),
+            level,
+            experience,
+            stage: stage.into(),
+            level_snapshot,
+            current_mood: "idle".into(),
+            created_at: "".into(),
+            updated_at: "".into(),
+        }
+    }
+
+    #[test]
+    fn food_growth_values_are_explicit_and_stable() {
+        let cookie = find_catalog_item("chocolate-chip-cookie-food").expect("cookie seed");
+        let shortcake = find_catalog_item("strawberry-shortcake-food").expect("shortcake seed");
+        assert_eq!(growth_value_for_food(&cookie), 4);
+        assert_eq!(growth_value_for_food(&shortcake), 18);
+    }
+
+    #[test]
+    fn item_status_prioritizes_badge_achievement_before_locked() {
+        let badge = find_catalog_item("sun-badge").expect("badge seed");
+        let state = item_state(
+            badge,
+            &test_profile(1, "first_meet"),
+            &[],
+            &[],
+            &PetWallet {
+                pet_id: PET_ID.into(),
+                currency_key: LP.into(),
+                balance: 0,
+                lifetime_earned: 0,
+                lifetime_spent: 0,
+                updated_at: "".into(),
+            },
+        );
+        assert_eq!(state.status, "achievement");
+    }
 }

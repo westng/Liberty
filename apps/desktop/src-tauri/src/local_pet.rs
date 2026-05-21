@@ -1,10 +1,16 @@
 use crate::local_db::{
-    self, LocalResult, PetCosmeticUnlock, PetEventLedgerEntry, PetProfile, PetSettings,
-    PetStoreState,
+    self, LocalResult, PetBlindBoxDrawResult, PetBlindBoxState, PetCosmeticUnlock,
+    PetEventLedgerEntry, PetProfile, PetSettings, PetStoreState,
 };
 use chrono::Utc;
 use serde::Deserialize;
-use tauri::AppHandle;
+use std::sync::Mutex;
+use tauri::{AppHandle, State};
+
+#[derive(Default)]
+pub struct PetStoreItemDetailState {
+    item_key: Mutex<String>,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +50,12 @@ pub struct PetStoreItemInput {
     pub item_key: String,
     #[serde(default = "default_purchase_quantity")]
     pub quantity: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetStoreItemDetailInput {
+    pub item_key: String,
 }
 
 fn default_purchase_quantity() -> i64 {
@@ -112,6 +124,41 @@ pub fn list_pet_cosmetic_unlocks(app: AppHandle) -> LocalResult<Vec<PetCosmeticU
 #[tauri::command]
 pub fn get_pet_store_state(app: AppHandle) -> LocalResult<PetStoreState> {
     local_db::get_pet_store_state(&app)
+}
+
+#[tauri::command]
+pub fn get_pet_blind_box_state(app: AppHandle) -> LocalResult<PetBlindBoxState> {
+    local_db::get_pet_blind_box_state(&app)
+}
+
+#[tauri::command]
+pub fn draw_pet_blind_box(app: AppHandle) -> LocalResult<PetBlindBoxDrawResult> {
+    local_db::draw_pet_blind_box(&app)
+}
+
+#[tauri::command]
+pub fn set_pet_store_item_detail_item(
+    state: State<'_, PetStoreItemDetailState>,
+    input: PetStoreItemDetailInput,
+) -> LocalResult<String> {
+    let item_key = input.item_key.trim();
+    if item_key.is_empty() {
+        return Err("商品标识不能为空。".into());
+    }
+
+    *state.item_key.lock().map_err(|err| err.to_string())? = item_key.to_string();
+    Ok(item_key.to_string())
+}
+
+#[tauri::command]
+pub fn get_pet_store_item_detail_item(
+    state: State<'_, PetStoreItemDetailState>,
+) -> LocalResult<String> {
+    Ok(state
+        .item_key
+        .lock()
+        .map_err(|err| err.to_string())?
+        .clone())
 }
 
 #[tauri::command]

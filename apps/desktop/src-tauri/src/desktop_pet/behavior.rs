@@ -68,8 +68,24 @@ pub(crate) fn current_growth_float(
 
 pub(crate) fn speech_line_from_event(event: &PetEventLedgerEntry) -> Option<String> {
     let metadata = event.metadata.as_deref()?;
-    if !matches!(event.event_type.as_str(), "store_food" | "store_equip") {
+    if !matches!(
+        event.event_type.as_str(),
+        "store_food"
+            | "store_equip"
+            | "blind_box_reward"
+            | "blind_box_empty"
+            | "blind_box_duplicate"
+    ) {
         return None;
+    }
+
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(metadata) {
+        return value
+            .get("zh")
+            .and_then(|line| line.as_str())
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToString::to_string);
     }
 
     metadata
@@ -233,6 +249,9 @@ fn get_action_for_recent_event(event: &PetEventLedgerEntry, mood: &str) -> PetAc
     match event.event_type.as_str() {
         "store_food" => PetAction::Eat,
         "store_equip" => PetAction::Snow,
+        "blind_box_reward" => PetAction::Run,
+        "blind_box_empty" => PetAction::Toy,
+        "blind_box_duplicate" => PetAction::Snow,
         "job_created" => PetAction::Drive,
         "transcription_started" => PetAction::Work,
         "transcription_completed" | "ai_summary_completed" | "export_completed" => PetAction::Snow,

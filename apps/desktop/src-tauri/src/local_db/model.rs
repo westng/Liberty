@@ -114,12 +114,38 @@ pub struct MeetingMember {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct PetStageThreshold {
+    pub stage: String,
+    pub label_zh: String,
+    pub label_en: String,
+    pub level: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetLevelSnapshot {
+    pub level: i64,
+    pub current_level_exp: i64,
+    pub next_level_required: i64,
+    pub total_experience: i64,
+    pub current_stage: String,
+    pub current_stage_label_zh: String,
+    pub current_stage_label_en: String,
+    pub next_stage: Option<String>,
+    pub next_stage_level: Option<i64>,
+    pub progress_ratio: f64,
+    pub is_max_level: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct PetProfile {
     pub id: String,
     pub name: String,
     pub level: i64,
     pub experience: i64,
     pub stage: String,
+    pub level_snapshot: PetLevelSnapshot,
     pub current_mood: String,
     pub created_at: String,
     pub updated_at: String,
@@ -229,6 +255,7 @@ pub struct PetStoreCatalogItem {
     pub stage_gate: String,
     pub milestone_gate: String,
     pub asset_key: String,
+    pub growth_value: i64,
     pub enabled: bool,
     pub sort_order: i64,
 }
@@ -266,6 +293,49 @@ pub struct PetStoreState {
     pub equipment: PetEquipmentState,
     pub counters: Vec<PetMilestoneCounter>,
     pub economy: Vec<PetEconomyEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetBlindBoxDrawEntry {
+    pub id: String,
+    pub pet_id: String,
+    pub draw_date: String,
+    pub item_key: String,
+    pub item_type: String,
+    pub quantity: i64,
+    pub duplicate_compensation_lp: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetBlindBoxPoolItem {
+    pub item: PetStoreCatalogItem,
+    pub owned: bool,
+    pub weight: i64,
+    pub duplicate_compensation_lp: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetBlindBoxState {
+    pub draw_date: String,
+    pub daily_limit: i64,
+    pub used_today: i64,
+    pub remaining_today: i64,
+    pub pool: Vec<PetBlindBoxPoolItem>,
+    pub history: Vec<PetBlindBoxDrawEntry>,
+    pub store_state: PetStoreState,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetBlindBoxDrawResult {
+    pub state: PetBlindBoxState,
+    pub draw: PetBlindBoxDrawEntry,
+    pub prize: PetStoreCatalogItem,
+    pub duplicate: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

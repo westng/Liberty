@@ -3,9 +3,10 @@ use crate::{
         ids,
         repositories::{pet, pet_store},
     },
-    local_db::{LocalResult, MAX_DAILY_INTERACTION_PER_SOURCE},
+    local_db::{pet_leveling, LocalResult, MAX_DAILY_INTERACTION_PER_SOURCE},
 };
 use rusqlite::Connection;
+use serde_json::json;
 
 use super::model::{PetEventLedgerEntry, PetProfile};
 
@@ -33,22 +34,37 @@ pub(crate) fn apply_pet_growth_event(
         }
     }
 
-    let previous_stage = profile.stage.clone();
     let now = chrono::Utc::now().to_rfc3339();
     pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    profile = migrate_profile_level_floor(profile);
+    let previous_stage = profile.stage.clone();
     let reward_source_key = reward_source_key(event_type, event_source, metadata, &now);
     let reward_already_granted =
         pet_store::reward_exists_tx(&tx, "workflow_reward", &reward_source_key)?;
     let reward = reward_rule(event_type, event_source);
-    let effective_event_value = if reward_already_granted && event_type != "interaction" {
+    let base_growth = if reward_already_granted && event_type != "interaction" {
         0
     } else {
         event_value
     };
+    let growth_multiplier = if event_type == "interaction" {
+        1.0
+    } else {
+        pet_leveling::growth_reward_multiplier(profile.level)
+    };
+    let lp_multiplier = if event_type == "interaction" {
+        1.0
+    } else {
+        pet_leveling::lp_reward_multiplier(profile.level)
+    };
+    let effective_event_value = scaled_amount(base_growth, growth_multiplier);
+    let effective_lp = scaled_amount(reward.lp, lp_multiplier);
     let next_experience = (profile.experience + effective_event_value).max(0);
+    let level_snapshot = pet_leveling::level_snapshot_from_experience(next_experience);
     profile.experience = next_experience;
-    profile.level = pet_level_from_experience(next_experience);
-    profile.stage = pet_stage_from_level(profile.level).to_string();
+    profile.level = level_snapshot.level;
+    profile.stage = level_snapshot.current_stage.clone();
+    profile.level_snapshot = level_snapshot;
     profile.current_mood = mood.to_string();
     profile.updated_at = now.clone();
     pet::save_profile_tx(&tx, &profile)?;
@@ -60,7 +76,7 @@ pub(crate) fn apply_pet_growth_event(
         &tx,
         "workflow_reward",
         &reward_source_key,
-        reward.lp,
+        effective_lp,
         metadata,
         &now,
     )?;
@@ -74,7 +90,15 @@ pub(crate) fn apply_pet_growth_event(
             event_source: event_source.to_string(),
             event_value: effective_event_value,
             event_time: now,
-            metadata: metadata.map(|value| value.to_string()),
+            metadata: Some(reward_metadata(
+                metadata,
+                base_growth,
+                growth_multiplier,
+                effective_event_value,
+                reward.lp,
+                lp_multiplier,
+                effective_lp,
+            )),
         },
     )?;
     tx.commit().map_err(|err| err.to_string())?;
@@ -146,16 +170,66 @@ fn pet_interaction_label(event_source: &str) -> &'static str {
     }
 }
 
-fn pet_level_from_experience(experience: i64) -> i64 {
-    (experience.div_euclid(20) + 1).max(1)
+fn scaled_amount(base: i64, multiplier: f64) -> i64 {
+    if base <= 0 {
+        0
+    } else {
+        ((base as f64) * multiplier).round().max(0.0) as i64
+    }
 }
 
-fn pet_stage_from_level(level: i64) -> &'static str {
-    if level >= 8 {
-        "mature"
-    } else if level >= 4 {
-        "growing"
+fn migrate_profile_level_floor(mut profile: PetProfile) -> PetProfile {
+    let snapshot = pet_leveling::level_snapshot_from_experience(profile.experience);
+    let floor_level = profile
+        .level
+        .max(snapshot.level)
+        .clamp(1, pet_leveling::MAX_PET_LEVEL);
+    let effective_experience = if floor_level > snapshot.level {
+        pet_leveling::total_required_exp_for_level(floor_level)
     } else {
-        "baby"
+        profile.experience
+    };
+    let next_snapshot = pet_leveling::level_snapshot_from_experience(effective_experience);
+    profile.experience = effective_experience;
+    profile.level = next_snapshot.level;
+    profile.stage = next_snapshot.current_stage.clone();
+    profile.level_snapshot = next_snapshot;
+    profile
+}
+
+fn reward_metadata(
+    original_metadata: Option<&str>,
+    base_growth: i64,
+    growth_multiplier: f64,
+    final_growth: i64,
+    base_lp: i64,
+    lp_multiplier: f64,
+    final_lp: i64,
+) -> String {
+    json!({
+        "source": original_metadata.unwrap_or(""),
+        "baseGrowth": base_growth,
+        "growthMultiplier": growth_multiplier,
+        "finalGrowth": final_growth,
+        "baseLp": base_lp,
+        "lpMultiplier": lp_multiplier,
+        "finalLp": final_lp,
+    })
+    .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn food_style_zero_base_does_not_scale_to_positive() {
+        assert_eq!(scaled_amount(0, 2.0), 0);
+    }
+
+    #[test]
+    fn rounds_scaled_rewards() {
+        assert_eq!(scaled_amount(12, 1.6), 19);
+        assert_eq!(scaled_amount(18, 1.3), 23);
     }
 }

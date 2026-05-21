@@ -1,8 +1,8 @@
 use crate::infrastructure::{
     ids, migrations,
     repositories::{
-        ai_models, ai_summary_runs, ai_templates, job_events, members, pet, pet_store,
-        runtime_state, settings,
+        ai_models, ai_summary_runs, ai_templates, job_events, members, pet, pet_blind_box,
+        pet_store, runtime_state, settings,
     },
 };
 use rusqlite::{params, Connection};
@@ -19,6 +19,7 @@ mod jobs;
 mod legacy;
 mod model;
 mod pet_growth;
+pub(crate) mod pet_leveling;
 mod progress;
 mod schema;
 
@@ -436,6 +437,7 @@ pub fn get_pet_profile(app: &AppHandle) -> LocalResult<PetProfile> {
     init_database(app)?;
     let conn = open_connection(app)?;
     pet::ensure_default_exists(&conn)?;
+    pet::reconcile_profile_leveling(&conn)?;
     pet::load_profile(&conn)
 }
 
@@ -447,8 +449,36 @@ pub fn get_pet_store_state(app: &AppHandle) -> LocalResult<PetStoreState> {
     let now = chrono::Utc::now().to_rfc3339();
     pet_store::ensure_store_defaults_tx(&tx, &now)?;
     tx.commit().map_err(|err| err.to_string())?;
+    pet::reconcile_profile_leveling(&conn)?;
     let profile = pet::load_profile(&conn)?;
     pet_store::store_state(&conn, profile)
+}
+
+pub fn get_pet_blind_box_state(app: &AppHandle) -> LocalResult<PetBlindBoxState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    pet::reconcile_profile_leveling(&conn)?;
+    let profile = pet::load_profile(&conn)?;
+    pet_blind_box::blind_box_state(&conn, profile)
+}
+
+pub fn draw_pet_blind_box(app: &AppHandle) -> LocalResult<PetBlindBoxDrawResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    let profile = pet::load_profile_tx(&tx)?;
+    let draw = pet_blind_box::draw_blind_box_tx(&tx, &profile, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    pet_blind_box::draw_result(&conn, profile, draw)
 }
 
 pub fn save_pet_profile(app: &AppHandle, profile: &PetProfile) -> LocalResult<PetProfile> {

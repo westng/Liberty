@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection};
 
 use crate::infrastructure::migrations;
-use crate::local_db::{AiSummaryTemplate, LocalResult};
+use crate::local_db::{pet_leveling, AiSummaryTemplate, LocalResult};
 
 const BUILTIN_TEMPLATE_TIMESTAMP: &str = "2026-04-28T00:00:00.000Z";
 
@@ -243,6 +243,18 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS pet_blind_box_draws (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          draw_date TEXT NOT NULL,
+          item_key TEXT NOT NULL,
+          item_type TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          duplicate_compensation_lp INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS pet_milestone_counters (
           pet_id TEXT NOT NULL,
           counter_key TEXT NOT NULL,
@@ -263,6 +275,7 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         CREATE INDEX IF NOT EXISTS idx_pet_cosmetic_unlocks_pet_id ON pet_cosmetic_unlocks(pet_id, unlocked_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_inventory_pet_id ON pet_inventory(pet_id, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_economy_pet_id ON pet_economy_ledger(pet_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_blind_box_draws_pet_date ON pet_blind_box_draws(pet_id, draw_date, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_milestones_pet_id ON pet_milestone_counters(pet_id, counter_key);
         CREATE INDEX IF NOT EXISTS idx_runtime_state_status ON runtime_state(status);
         ",
@@ -290,6 +303,63 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
     ] {
         migrations::add_column_if_missing(conn, statement)?;
     }
+
+    migrate_pet_leveling_255(conn)?;
+
+    Ok(())
+}
+
+fn migrate_pet_leveling_255(conn: &Connection) -> LocalResult<()> {
+    let migrated = conn
+        .query_row(
+            "SELECT value FROM app_meta WHERE key = 'pet_leveling_255_migrated'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok();
+    if migrated.is_some() {
+        return Ok(());
+    }
+
+    let profile = conn
+        .query_row(
+            "SELECT level, experience FROM pet_profile WHERE id = 'default-pet'",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .ok();
+
+    if let Some((stored_level, experience)) = profile {
+        let snapshot = pet_leveling::level_snapshot_from_experience(experience);
+        let effective_level = stored_level
+            .max(snapshot.level)
+            .clamp(1, pet_leveling::MAX_PET_LEVEL);
+        let effective_experience = if effective_level > snapshot.level {
+            pet_leveling::total_required_exp_for_level(effective_level)
+        } else {
+            experience
+        };
+        let next_snapshot = pet_leveling::level_snapshot_from_experience(effective_experience);
+        conn.execute(
+            "UPDATE pet_profile
+             SET level = ?2, experience = ?3, stage = ?4, updated_at = ?5
+             WHERE id = ?1",
+            params![
+                "default-pet",
+                next_snapshot.level,
+                effective_experience,
+                next_snapshot.current_stage,
+                chrono::Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    }
+
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta(key, value) VALUES('pet_leveling_255_migrated', ?1)",
+        params!["2026-05-21"],
+    )
+    .map_err(|err| err.to_string())?;
 
     Ok(())
 }
