@@ -6,12 +6,20 @@ use crate::infrastructure::{
     },
 };
 use rusqlite::{params, Connection};
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+    time::Duration,
+};
 use tauri::{AppHandle, Manager};
 
 pub type LocalResult<T> = Result<T, String>;
 
 const MAX_DAILY_INTERACTION_PER_SOURCE: i64 = 20;
+const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+static INIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub use model::*;
 
@@ -24,6 +32,10 @@ mod progress;
 mod schema;
 
 pub fn init_database(app: &AppHandle) -> LocalResult<()> {
+    let _guard = INIT_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|err| format!("本地数据库初始化锁异常: {err}"))?;
     let mut conn = open_connection(app)?;
     schema::apply_schema(&conn)?;
     migrations::ensure_schema_version(&conn)?;
@@ -34,15 +46,27 @@ pub fn init_database(app: &AppHandle) -> LocalResult<()> {
 
 pub fn open_connection(app: &AppHandle) -> LocalResult<Connection> {
     let path = database_path(app)?;
-    Connection::open(path).map_err(|err| err.to_string())
+    let conn = Connection::open(&path)
+        .map_err(|err| format!("无法打开本地数据库 {}: {err}", path.display()))?;
+    conn.busy_timeout(SQLITE_BUSY_TIMEOUT)
+        .map_err(|err| format!("无法设置本地数据库等待超时 {}: {err}", path.display()))?;
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys = ON;
+        PRAGMA busy_timeout = 5000;
+        ",
+    )
+    .map_err(|err| format!("无法初始化本地数据库连接 {}: {err}", path.display()))?;
+    Ok(conn)
 }
 
 pub fn database_path(app: &AppHandle) -> LocalResult<PathBuf> {
     let data_root = app
         .path()
         .app_local_data_dir()
-        .map_err(|err| err.to_string())?;
-    fs::create_dir_all(&data_root).map_err(|err| err.to_string())?;
+        .map_err(|err| format!("无法定位本地数据目录: {err}"))?;
+    fs::create_dir_all(&data_root)
+        .map_err(|err| format!("无法创建本地数据目录 {}: {err}", data_root.display()))?;
     Ok(data_root.join("liberty.sqlite3"))
 }
 
