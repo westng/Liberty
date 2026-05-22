@@ -141,7 +141,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
         WM_MOUSEMOVE => {
             if let Some(input_state) = input_state {
                 if should_begin_drag(input_state) {
-                    drag_window(hwnd, window, input_state);
+                    drag_window(hwnd, input_state);
                 }
             }
         }
@@ -200,17 +200,20 @@ unsafe fn should_begin_drag(input_state: &PetWindowInputState) -> bool {
     true
 }
 
-unsafe fn drag_window(
-    hwnd: *mut std::ffi::c_void,
-    window: &Window,
-    input_state: &PetWindowInputState,
-) {
-    if move_window_from_drag(window, input_state).is_err() {
+unsafe fn drag_window(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputState) {
+    if move_window_from_drag(hwnd, input_state).is_err() {
         begin_system_window_drag(hwnd);
     }
 }
 
-fn move_window_from_drag(window: &Window, input_state: &PetWindowInputState) -> LocalResult<()> {
+unsafe fn move_window_from_drag(
+    hwnd: *mut std::ffi::c_void,
+    input_state: &PetWindowInputState,
+) -> LocalResult<()> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+    };
+
     let current = unsafe { cursor_position() }.ok_or_else(|| "获取鼠标位置失败。".to_string())?;
     let (start, window_start) = input_state
         .drag_state
@@ -223,12 +226,19 @@ fn move_window_from_drag(window: &Window, input_state: &PetWindowInputState) -> 
                 .ok_or_else(|| "桌宠拖拽起点缺失。".to_string())
         })?;
 
-    window
-        .set_position(PhysicalPosition::new(
-            window_start.x + current.x - start.x,
-            window_start.y + current.y - start.y,
-        ))
-        .map_err(|err| err.to_string())
+    let moved = SetWindowPos(
+        hwnd,
+        std::ptr::null_mut(),
+        window_start.x + current.x - start.x,
+        window_start.y + current.y - start.y,
+        0,
+        0,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+    );
+    if moved == 0 {
+        return Err("移动桌宠窗口失败。".into());
+    }
+    Ok(())
 }
 
 fn finish_mouse_interaction(input_state: &PetWindowInputState) {
