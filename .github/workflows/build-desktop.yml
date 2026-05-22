@@ -311,6 +311,11 @@ jobs:
             --platform-id "${{ matrix.platform_id }}" \
             --output-dir "runtime-bundles/${{ matrix.platform_id }}"
 
+      - name: Verify Windows Desktop Pet Drag State
+        if: startsWith(matrix.platform_id, 'windows-')
+        shell: bash
+        run: cargo test --workspace desktop_pet::drag --target ${{ matrix.rust_target }}
+
       - name: Build Tauri Bundle
         shell: bash
         run: pnpm --dir apps/desktop tauri build --target ${{ matrix.rust_target }}
