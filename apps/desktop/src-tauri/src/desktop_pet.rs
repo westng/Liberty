@@ -79,8 +79,6 @@ pub(crate) struct PetWorker {
 pub(crate) struct PetWorkerContext {
     pub(crate) app: AppHandle,
     pub(crate) window: Window,
-    pub(crate) instance_id: PetInstanceId,
-    pub(crate) persist_position: bool,
     pub(crate) action_state: Arc<Mutex<PetAction>>,
     pub(crate) bubble_state: Arc<Mutex<Option<PetBubble>>>,
     pub(crate) growth_float_state: Arc<Mutex<Option<PetGrowthFloat>>>,

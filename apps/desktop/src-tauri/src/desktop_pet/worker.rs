@@ -103,6 +103,12 @@ pub(crate) fn configure_pet_window(
     Ok(())
 }
 
+fn refresh_pet_window_state(window: &Window, visual_state: &PetVisualState) -> LocalResult<()> {
+    window
+        .set_always_on_top(visual_state.always_on_top)
+        .map_err(|err| err.to_string())
+}
+
 pub(crate) fn ensure_worker(
     app: &AppHandle,
     window: &Window,
@@ -139,8 +145,6 @@ pub(crate) fn ensure_worker(
             run_pet_worker(PetWorkerContext {
                 app: app_for_thread,
                 window: window_for_thread,
-                instance_id,
-                persist_position: !matches!(instance_id, PetInstanceId::Extra(_)),
                 action_state,
                 bubble_state,
                 growth_float_state,
@@ -171,14 +175,13 @@ fn run_pet_worker(context: PetWorkerContext) {
     let PetWorkerContext {
         app,
         window,
-        instance_id,
-        persist_position,
         action_state,
         bubble_state,
         growth_float_state,
         stop_signal,
         interaction_signal,
         frames,
+        ..
     } = context;
     let mut frame_index = 0usize;
     let mut last_action = PetAction::Slack;
@@ -212,17 +215,12 @@ fn run_pet_worker(context: PetWorkerContext) {
                     if let Ok(mut guard) = action_state.lock() {
                         *guard = visual_state.action;
                     }
-                    let app_clone = app.clone();
                     let window_clone = window.clone();
                     window
                         .run_on_main_thread(move || {
-                            if let Err(error) = configure_pet_window(
-                                &app_clone,
-                                &window_clone,
-                                &visual_state,
-                                instance_id,
-                                persist_position,
-                            ) {
+                            if let Err(error) =
+                                refresh_pet_window_state(&window_clone, &visual_state)
+                            {
                                 eprintln!("[desktop-pet] failed to configure window: {error}");
                             }
                         })

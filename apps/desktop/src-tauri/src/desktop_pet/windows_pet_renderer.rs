@@ -123,7 +123,8 @@ unsafe extern "system" fn pet_window_subclass_proc(
     use windows_sys::Win32::UI::{
         Shell::{DefSubclassProc, RemoveWindowSubclass},
         WindowsAndMessaging::{
-            HTCLIENT, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST,
+            HTCLIENT, WM_CAPTURECHANGED, WM_DESTROY, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+            WM_NCHITTEST,
         },
     };
 
@@ -140,7 +141,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
         }
         WM_MOUSEMOVE => {
             if let Some(input_state) = input_state {
-                if should_begin_drag(input_state) {
+                if should_drag_window(input_state) {
                     drag_window(hwnd, input_state);
                 }
             }
@@ -148,6 +149,11 @@ unsafe extern "system" fn pet_window_subclass_proc(
         WM_LBUTTONUP => {
             if let Some(input_state) = input_state {
                 finish_mouse_interaction(input_state);
+            }
+        }
+        WM_CAPTURECHANGED => {
+            if let Some(input_state) = input_state {
+                reset_drag_state(input_state);
             }
         }
         WM_DESTROY => {
@@ -173,7 +179,7 @@ unsafe fn record_mouse_down(hwnd: *mut std::ffi::c_void, input_state: &PetWindow
     }
 }
 
-unsafe fn should_begin_drag(input_state: &PetWindowInputState) -> bool {
+unsafe fn should_drag_window(input_state: &PetWindowInputState) -> bool {
     let Some(current) = cursor_position() else {
         return false;
     };
@@ -183,7 +189,7 @@ unsafe fn should_begin_drag(input_state: &PetWindowInputState) -> bool {
     };
 
     if guard.drag_started {
-        return false;
+        return true;
     }
 
     let Some(start) = guard.mouse_down_at else {
@@ -254,10 +260,24 @@ fn finish_mouse_interaction(input_state: &PetWindowInputState) {
         })
         .unwrap_or(false);
 
+    unsafe {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+
+        ReleaseCapture();
+    }
+
     if should_interact {
         input_state
             .interaction_signal
             .fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn reset_drag_state(input_state: &PetWindowInputState) {
+    if let Ok(mut guard) = input_state.drag_state.lock() {
+        guard.mouse_down_at = None;
+        guard.window_down_at = None;
+        guard.drag_started = false;
     }
 }
 
