@@ -1,3 +1,4 @@
+use super::drag::{DragPoint, PetDragMachine, PetDragMove};
 use super::*;
 use std::sync::{atomic::AtomicU64, Mutex};
 use tauri::PhysicalPosition;
@@ -10,9 +11,7 @@ struct PetWindowInputState {
 
 #[derive(Default)]
 struct PetWindowDragState {
-    mouse_down_at: Option<POINT>,
-    window_down_at: Option<PhysicalPosition<i32>>,
-    drag_started: bool,
+    machine: PetDragMachine,
 }
 
 pub fn prepare_window(window: &Window, interaction_signal: &Arc<AtomicU64>) -> LocalResult<()> {
@@ -141,9 +140,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
         }
         WM_MOUSEMOVE => {
             if let Some(input_state) = input_state {
-                if should_drag_window(input_state) {
-                    drag_window(hwnd, input_state);
-                }
+                drag_window(hwnd, input_state);
             }
         }
         WM_LBUTTONUP => {
@@ -173,70 +170,53 @@ unsafe fn record_mouse_down(hwnd: *mut std::ffi::c_void, input_state: &PetWindow
 
     SetCapture(hwnd);
     if let Ok(mut guard) = input_state.drag_state.lock() {
-        guard.mouse_down_at = cursor_position();
-        guard.window_down_at = window_position(hwnd);
-        guard.drag_started = false;
+        if let (Some(cursor), Some(window)) = (cursor_position(), window_position(hwnd)) {
+            guard
+                .machine
+                .record_mouse_down(cursor_drag_point(cursor), window_drag_point(window));
+        } else {
+            guard.machine.reset();
+        }
     }
 }
 
-unsafe fn should_drag_window(input_state: &PetWindowInputState) -> bool {
+unsafe fn next_drag_move(input_state: &PetWindowInputState) -> Option<DragPoint> {
     let Some(current) = cursor_position() else {
-        return false;
+        return None;
     };
 
     let Ok(mut guard) = input_state.drag_state.lock() else {
-        return false;
+        return None;
     };
 
-    if guard.drag_started {
-        return true;
+    match guard.machine.pointer_moved(cursor_drag_point(current)) {
+        PetDragMove::None => None,
+        PetDragMove::MoveTo(position) => Some(position),
     }
-
-    let Some(start) = guard.mouse_down_at else {
-        return false;
-    };
-
-    let delta_x = (current.x - start.x).abs();
-    let delta_y = (current.y - start.y).abs();
-    if delta_x < 4 && delta_y < 4 {
-        return false;
-    }
-
-    guard.drag_started = true;
-    true
 }
 
 unsafe fn drag_window(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputState) {
-    if move_window_from_drag(hwnd, input_state).is_err() {
+    let Some(position) = next_drag_move(input_state) else {
+        return;
+    };
+    if move_window_from_drag(hwnd, position).is_err() {
         begin_system_window_drag(hwnd);
     }
 }
 
 unsafe fn move_window_from_drag(
     hwnd: *mut std::ffi::c_void,
-    input_state: &PetWindowInputState,
+    position: DragPoint,
 ) -> LocalResult<()> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
     };
 
-    let current = unsafe { cursor_position() }.ok_or_else(|| "获取鼠标位置失败。".to_string())?;
-    let (start, window_start) = input_state
-        .drag_state
-        .lock()
-        .map_err(|_| "桌宠拖拽状态锁已损坏。".to_string())
-        .and_then(|guard| {
-            guard
-                .mouse_down_at
-                .zip(guard.window_down_at)
-                .ok_or_else(|| "桌宠拖拽起点缺失。".to_string())
-        })?;
-
     let moved = SetWindowPos(
         hwnd,
         std::ptr::null_mut(),
-        window_start.x + current.x - start.x,
-        window_start.y + current.y - start.y,
+        position.x,
+        position.y,
         0,
         0,
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
@@ -251,13 +231,7 @@ fn finish_mouse_interaction(input_state: &PetWindowInputState) {
     let should_interact = input_state
         .drag_state
         .lock()
-        .map(|mut guard| {
-            let should_interact = guard.mouse_down_at.is_some() && !guard.drag_started;
-            guard.mouse_down_at = None;
-            guard.window_down_at = None;
-            guard.drag_started = false;
-            should_interact
-        })
+        .map(|mut guard| guard.machine.finish_mouse_interaction())
         .unwrap_or(false);
 
     unsafe {
@@ -275,9 +249,7 @@ fn finish_mouse_interaction(input_state: &PetWindowInputState) {
 
 fn reset_drag_state(input_state: &PetWindowInputState) {
     if let Ok(mut guard) = input_state.drag_state.lock() {
-        guard.mouse_down_at = None;
-        guard.window_down_at = None;
-        guard.drag_started = false;
+        guard.machine.reset();
     }
 }
 
@@ -304,6 +276,14 @@ unsafe fn window_position(hwnd: *mut std::ffi::c_void) -> Option<PhysicalPositio
         return None;
     }
     Some(PhysicalPosition::new(rect.left, rect.top))
+}
+
+fn cursor_drag_point(point: POINT) -> DragPoint {
+    DragPoint::new(point.x, point.y)
+}
+
+fn window_drag_point(position: PhysicalPosition<i32>) -> DragPoint {
+    DragPoint::new(position.x, position.y)
 }
 
 unsafe fn begin_system_window_drag(hwnd: *mut std::ffi::c_void) {

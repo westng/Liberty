@@ -410,6 +410,8 @@ pub fn start_desktop_pet_drag(app: AppHandle) -> LocalResult<()> {
 }
 
 mod behavior;
+#[cfg(any(test, windows))]
+mod drag;
 #[cfg(target_os = "macos")]
 mod macos_pet_renderer;
 #[cfg(windows)]
