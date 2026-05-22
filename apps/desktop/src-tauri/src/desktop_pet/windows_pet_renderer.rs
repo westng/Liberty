@@ -2,16 +2,22 @@ use super::drag::{DragPoint, PetDragMachine, PetDragMove};
 use super::*;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Mutex,
+    Arc, Mutex,
 };
 use tauri::PhysicalPosition;
-use windows_sys::Win32::Foundation::POINT;
+use windows_sys::Win32::Foundation::{BOOL, LPARAM, POINT};
+
+const PET_WINDOW_SUBCLASS_ID: usize = 1;
 
 struct PetWindowInputState {
     diagnostic: Option<Arc<PetWindowDiagnostic>>,
     interaction_signal: Arc<AtomicU64>,
     drag_state: Mutex<PetWindowDragState>,
+    root_hwnd: *mut std::ffi::c_void,
 }
+
+unsafe impl Send for PetWindowInputState {}
+unsafe impl Sync for PetWindowInputState {}
 
 #[derive(Default)]
 struct PetWindowDragState {
@@ -23,6 +29,7 @@ struct PetWindowDiagnostic {
     label: String,
     message_count: AtomicU64,
     move_count: AtomicU64,
+    subclass_count: AtomicU64,
 }
 
 impl PetWindowDiagnostic {
@@ -110,19 +117,18 @@ fn set_native_window_style(
         label: window.label().to_string(),
         message_count: AtomicU64::new(0),
         move_count: AtomicU64::new(0),
+        subclass_count: AtomicU64::new(0),
     });
-    let input_state = Box::new(PetWindowInputState {
+    let input_state = Arc::new(PetWindowInputState {
         diagnostic: Some(diagnostic.clone()),
         interaction_signal: interaction_signal.clone(),
         drag_state: Mutex::new(PetWindowDragState::default()),
+        root_hwnd: hwnd.0 as *mut std::ffi::c_void,
     });
     unsafe {
-        use windows_sys::Win32::UI::{
-            Shell::SetWindowSubclass,
-            WindowsAndMessaging::{
-                GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-                WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
-            },
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            EnumChildWindows, GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED,
+            WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
         };
         let hwnd = hwnd.0 as *mut std::ffi::c_void;
         windows_sys::Win32::Foundation::SetLastError(0);
@@ -159,18 +165,61 @@ fn set_native_window_style(
                 ));
             }
         }
-        let input_state = Box::into_raw(input_state) as usize;
-        let subclassed = SetWindowSubclass(hwnd, Some(pet_window_subclass_proc), 1, input_state);
-        if subclassed == 0 {
-            drop(Box::from_raw(input_state as *mut PetWindowInputState));
-            return Err(format!(
-                "安装 Windows 桌宠拖拽消息钩子失败，Win32 error={}",
-                windows_sys::Win32::Foundation::GetLastError()
-            ));
-        }
-        diagnostic.log(format!("subclass installed hwnd={hwnd:p}"));
+        install_pet_window_subclass(hwnd, &input_state)?;
+        EnumChildWindows(
+            hwnd,
+            Some(enum_child_pet_window_proc),
+            Arc::as_ptr(&input_state) as LPARAM,
+        );
+        std::mem::forget(input_state);
+        diagnostic.log(format!(
+            "subclass installation completed root={hwnd:p} count={}",
+            diagnostic.subclass_count.load(Ordering::Relaxed)
+        ));
     }
     Ok(())
+}
+
+unsafe fn install_pet_window_subclass(
+    hwnd: *mut std::ffi::c_void,
+    input_state: &Arc<PetWindowInputState>,
+) -> LocalResult<()> {
+    use windows_sys::Win32::UI::Shell::SetWindowSubclass;
+
+    let subclassed = SetWindowSubclass(
+        hwnd,
+        Some(pet_window_subclass_proc),
+        PET_WINDOW_SUBCLASS_ID,
+        Arc::as_ptr(input_state) as usize,
+    );
+    if subclassed == 0 {
+        return Err(format!(
+            "安装 Windows 桌宠拖拽消息钩子失败，Win32 error={}",
+            windows_sys::Win32::Foundation::GetLastError()
+        ));
+    }
+    let count = input_state
+        .diagnostic
+        .as_ref()
+        .map(|diagnostic| diagnostic.subclass_count.fetch_add(1, Ordering::Relaxed) + 1)
+        .unwrap_or(0);
+    input_state.log(format!("subclass installed hwnd={hwnd:p} count={count}"));
+    Ok(())
+}
+
+unsafe extern "system" fn enum_child_pet_window_proc(
+    hwnd: *mut std::ffi::c_void,
+    lparam: LPARAM,
+) -> BOOL {
+    if lparam == 0 {
+        return 1;
+    }
+    let input_state = Arc::from_raw(lparam as *const PetWindowInputState);
+    if let Err(error) = install_pet_window_subclass(hwnd, &input_state) {
+        input_state.log(format!("child subclass failed hwnd={hwnd:p} error={error}"));
+    }
+    let _ = Arc::into_raw(input_state);
+    1
 }
 
 unsafe extern "system" fn pet_window_subclass_proc(
@@ -202,7 +251,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
         WM_LBUTTONDOWN => {
             if let Some(input_state) = input_state {
                 input_state.log("message WM_LBUTTONDOWN");
-                record_mouse_down(hwnd, input_state);
+                record_mouse_down(input_state);
             }
         }
         WM_MOUSEMOVE => {
@@ -213,7 +262,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
                         diagnostic.log(format!("message WM_MOUSEMOVE count={}", count + 1));
                     }
                 }
-                drag_window(hwnd, input_state);
+                drag_window(input_state);
             }
         }
         WM_LBUTTONUP => {
@@ -234,7 +283,8 @@ unsafe extern "system" fn pet_window_subclass_proc(
                     input_state.log("message WM_DESTROY");
                 }
                 RemoveWindowSubclass(hwnd, Some(pet_window_subclass_proc), _subclass_id);
-                drop(Box::from_raw(ref_data as *mut PetWindowInputState));
+                let input_state = Arc::from_raw(ref_data as *const PetWindowInputState);
+                input_state.log(format!("subclass removed hwnd={hwnd:p}"));
             }
         }
         _ => {}
@@ -243,13 +293,14 @@ unsafe extern "system" fn pet_window_subclass_proc(
     DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
-unsafe fn record_mouse_down(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputState) {
+unsafe fn record_mouse_down(input_state: &PetWindowInputState) {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetCapture, SetCapture};
 
-    let captured = SetCapture(hwnd);
+    let root_hwnd = input_state.root_hwnd;
+    let captured = SetCapture(root_hwnd);
     let active_capture = GetCapture();
     if let Ok(mut guard) = input_state.drag_state.lock() {
-        if let (Some(cursor), Some(window)) = (cursor_position(), window_position(hwnd)) {
+        if let (Some(cursor), Some(window)) = (cursor_position(), window_position(root_hwnd)) {
             input_state.log(format!(
                 "mouse down cursor=({}, {}) window=({}, {}) set_capture_previous={captured:p} active_capture={active_capture:p}",
                 cursor.x, cursor.y, window.x, window.y
@@ -279,7 +330,7 @@ unsafe fn next_drag_move(input_state: &PetWindowInputState) -> Option<DragPoint>
     }
 }
 
-unsafe fn drag_window(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputState) {
+unsafe fn drag_window(input_state: &PetWindowInputState) {
     let Some(position) = next_drag_move(input_state) else {
         return;
     };
@@ -295,11 +346,11 @@ unsafe fn drag_window(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputS
             position.y
         ));
     }
-    if let Err(error) = move_window_from_drag(hwnd, position) {
+    if let Err(error) = move_window_from_drag(input_state.root_hwnd, position) {
         input_state.log(format!("drag move SetWindowPos failed: {error}"));
-        begin_system_window_drag(hwnd);
+        begin_system_window_drag(input_state.root_hwnd);
     } else if count.is_some_and(|value| value < 8 || value % 20 == 0) {
-        if let Some(window) = window_position(hwnd) {
+        if let Some(window) = window_position(input_state.root_hwnd) {
             input_state.log(format!(
                 "drag move SetWindowPos ok count={} actual=({}, {})",
                 count.unwrap_or_default() + 1,
@@ -465,12 +516,13 @@ mod tests {
                 diagnostic: None,
                 interaction_signal: Arc::new(AtomicU64::new(0)),
                 drag_state: Mutex::new(PetWindowDragState::default()),
+                root_hwnd: hwnd as *mut c_void,
             };
 
             assert_ne!(SetCursorPos(100, 100), 0, "SetCursorPos start failed");
-            record_mouse_down(hwnd as *mut c_void, &input_state);
+            record_mouse_down(&input_state);
             assert_ne!(SetCursorPos(130, 125), 0, "SetCursorPos move failed");
-            drag_window(hwnd as *mut c_void, &input_state);
+            drag_window(&input_state);
 
             let mut rect = RECT {
                 left: 0,
