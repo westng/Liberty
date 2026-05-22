@@ -296,6 +296,90 @@ unsafe fn begin_system_window_drag(hwnd: *mut std::ffi::c_void) {
     SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION as usize, 0);
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{ffi::c_void, ptr};
+    use windows_sys::Win32::{
+        Foundation::{GetLastError, HWND, LPARAM, LRESULT, RECT, WPARAM},
+        UI::WindowsAndMessaging::{
+            CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowRect, RegisterClassW,
+            SetCursorPos, CS_HREDRAW, CS_VREDRAW, WNDCLASSW, WS_OVERLAPPED,
+        },
+    };
+
+    unsafe extern "system" fn test_window_proc(
+        hwnd: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        DefWindowProcW(hwnd, msg, wparam, lparam)
+    }
+
+    #[test]
+    fn drag_window_moves_real_win32_window_after_threshold() {
+        unsafe {
+            let class_name = wide_null("LibertyDesktopPetDragTestWindow");
+            let window_name = wide_null("Liberty Desktop Pet Drag Test");
+            let window_class = WNDCLASSW {
+                style: CS_HREDRAW | CS_VREDRAW,
+                lpfnWndProc: Some(test_window_proc),
+                lpszClassName: class_name.as_ptr(),
+                ..std::mem::zeroed()
+            };
+            RegisterClassW(&window_class);
+
+            let hwnd = CreateWindowExW(
+                0,
+                class_name.as_ptr(),
+                window_name.as_ptr(),
+                WS_OVERLAPPED,
+                40,
+                50,
+                160,
+                120,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            );
+            assert!(
+                !hwnd.is_null(),
+                "CreateWindowExW failed: {}",
+                GetLastError()
+            );
+
+            let input_state = PetWindowInputState {
+                interaction_signal: Arc::new(AtomicU64::new(0)),
+                drag_state: Mutex::new(PetWindowDragState::default()),
+            };
+
+            assert_ne!(SetCursorPos(100, 100), 0, "SetCursorPos start failed");
+            record_mouse_down(hwnd as *mut c_void, &input_state);
+            assert_ne!(SetCursorPos(130, 125), 0, "SetCursorPos move failed");
+            drag_window(hwnd as *mut c_void, &input_state);
+
+            let mut rect = RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+            assert_ne!(GetWindowRect(hwnd, &mut rect), 0, "GetWindowRect failed");
+            assert_eq!(rect.left, 70);
+            assert_eq!(rect.top, 75);
+
+            finish_mouse_interaction(&input_state);
+            DestroyWindow(hwnd);
+        }
+    }
+
+    fn wide_null(value: &str) -> Vec<u16> {
+        value.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+}
+
 fn draw_bubble(buffer: &mut [u8], width: u32, scale: f64, bubble_theme: PetBubbleTheme) {
     let bubble_x = (20.0 * scale).round() as u32;
     let bubble_y = (8.0 * scale).round() as u32;
