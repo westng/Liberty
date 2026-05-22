@@ -48,7 +48,18 @@ pub(crate) fn create_pet_window(
 
     #[cfg(windows)]
     {
-        windows_pet_renderer::prepare_window(&window, interaction_signal)?;
+        let window_clone = window.clone();
+        let signal = interaction_signal.clone();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        window
+            .run_on_main_thread(move || {
+                let result = windows_pet_renderer::prepare_window(&window_clone, &signal);
+                let _ = sender.send(result);
+            })
+            .map_err(|err| err.to_string())?;
+        receiver
+            .recv()
+            .map_err(|_| "Windows 桌宠主线程初始化结果丢失。".to_string())??;
     }
     #[cfg(target_os = "macos")]
     {

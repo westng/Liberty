@@ -89,24 +89,52 @@ fn set_native_window_style(
             Shell::SetWindowSubclass,
             WindowsAndMessaging::{
                 GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-                WS_EX_TOOLWINDOW,
+                WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
             },
         };
         let hwnd = hwnd.0 as *mut std::ffi::c_void;
+        windows_sys::Win32::Foundation::SetLastError(0);
         let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if style == 0 {
+            let last_error = windows_sys::Win32::Foundation::GetLastError();
+            if last_error != 0 {
+                return Err(format!("读取 Windows 桌宠窗口样式失败，Win32 error={last_error}"));
+            }
+        }
         #[cfg(target_pointer_width = "64")]
-        let next_style =
-            style | WS_EX_LAYERED as isize | WS_EX_TOOLWINDOW as isize | WS_EX_NOACTIVATE as isize;
+        let next_style = (style
+            | WS_EX_LAYERED as isize
+            | WS_EX_TOOLWINDOW as isize
+            | WS_EX_NOACTIVATE as isize)
+            & !(WS_EX_TRANSPARENT as isize);
         #[cfg(target_pointer_width = "32")]
-        let next_style =
-            style | WS_EX_LAYERED as i32 | WS_EX_TOOLWINDOW as i32 | WS_EX_NOACTIVATE as i32;
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
-        SetWindowSubclass(
+        let next_style = (style
+            | WS_EX_LAYERED as i32
+            | WS_EX_TOOLWINDOW as i32
+            | WS_EX_NOACTIVATE as i32)
+            & !(WS_EX_TRANSPARENT as i32);
+        windows_sys::Win32::Foundation::SetLastError(0);
+        let previous_style = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
+        if previous_style == 0 {
+            let last_error = windows_sys::Win32::Foundation::GetLastError();
+            if last_error != 0 {
+                return Err(format!("设置 Windows 桌宠窗口样式失败，Win32 error={last_error}"));
+            }
+        }
+        let input_state = Box::into_raw(input_state) as usize;
+        let subclassed = SetWindowSubclass(
             hwnd,
             Some(pet_window_subclass_proc),
             1,
-            Box::into_raw(input_state) as usize,
+            input_state,
         );
+        if subclassed == 0 {
+            drop(Box::from_raw(input_state as *mut PetWindowInputState));
+            return Err(format!(
+                "安装 Windows 桌宠拖拽消息钩子失败，Win32 error={}",
+                windows_sys::Win32::Foundation::GetLastError()
+            ));
+        }
     }
     Ok(())
 }
