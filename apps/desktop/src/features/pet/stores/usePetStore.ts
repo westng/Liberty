@@ -6,12 +6,14 @@ import type {
   PetInteractionAction,
   PetProfile,
   PetSettings,
+  PetStoreState,
   PetWorkflowEventInput,
 } from "@/shared/types/meeting";
 
 type PetState = {
   profile: PetProfile | null;
   settings: PetSettings | null;
+  storeState: PetStoreState | null;
   cosmetics: PetCosmeticUnlock[];
   events: PetEventLedgerEntry[];
   loaded: boolean;
@@ -21,6 +23,7 @@ type PetState = {
 let state: PetState = {
   profile: null,
   settings: null,
+  storeState: null,
   cosmetics: [],
   events: [],
   loaded: false,
@@ -53,15 +56,17 @@ async function loadPetState(force = false) {
 
   setState({ loading: true });
   try {
-    const [profile, settings, cosmetics, events] = await Promise.all([
+    const [profile, settings, storeState, cosmetics, events] = await Promise.all([
       petService.getProfile(),
       petService.getSettings(),
+      petService.getStoreState(),
       petService.listCosmeticUnlocks(),
       petService.listEventLedger(20),
     ]);
     setState({
       profile,
       settings,
+      storeState,
       cosmetics,
       events,
       loaded: true,
@@ -83,25 +88,28 @@ async function saveSettings(partial: Omit<PetSettings, "petId" | "updatedAt">) {
 
 async function saveProfile(partial: Pick<PetProfile, "name">) {
   const profile = await petService.saveProfile(partial);
-  setState({ profile });
+  const storeState = await petService.getStoreState();
+  setState({ profile, storeState });
   return profile;
 }
 
 async function applyInteraction(action: PetInteractionAction) {
-  const [profile, events] = await Promise.all([
-    petService.applyInteraction(action),
+  const profile = await petService.applyInteraction(action);
+  const [storeState, events] = await Promise.all([
+    petService.getStoreState(),
     petService.listEventLedger(20),
   ]);
-  setState({ profile, events });
+  setState({ profile, storeState, events });
   return profile;
 }
 
 async function applyWorkflowEvent(input: PetWorkflowEventInput) {
-  const [profile, events] = await Promise.all([
-    petService.applyWorkflowEvent(input),
+  const profile = await petService.applyWorkflowEvent(input);
+  const [storeState, events] = await Promise.all([
+    petService.getStoreState(),
     petService.listEventLedger(20),
   ]);
-  setState({ profile, events });
+  setState({ profile, storeState, events });
   return profile;
 }
 

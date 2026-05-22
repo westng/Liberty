@@ -14,9 +14,14 @@ import {
   resolvePetVisualAction,
 } from "@/features/pet/services/petSprites";
 import { formatPetEventDetail, formatPetEventTitle, formatPetEventValue } from "@/features/pet/services/petEventFormatters";
+import {
+  itemAssetKey as resolveItemAssetKey,
+  itemName as resolveItemName,
+  shopImageUrl as resolveShopImageUrl,
+} from "@/features/pet-store/services/petStorePresentation";
 import { applyDesktopPetState, openExtraDesktopPet } from "@/shared/services/tauri/pet";
 import { promptPetName } from "@/shared/services/tauri/system";
-import type { LocaleCode, PetInteractionAction, PetSettings, PetStage } from "@/shared/types/meeting";
+import type { LocaleCode, PetInteractionAction, PetInventoryItem, PetSettings, PetStage } from "@/shared/types/meeting";
 
 const ANIMATION_FRAME_INTERVAL_MS = 1000;
 
@@ -64,6 +69,30 @@ export default function PetManagementView() {
     }
   })();
   const progressRatio = Math.round((petStore.levelProgressRatio ?? 0) * 100);
+  const petEquipment = petStore.storeState?.equipment;
+  const equippedAccessory = petEquipment?.accessory;
+  const equippedScene = petEquipment?.scene;
+  const equippedBadge = petEquipment?.badge;
+  const equippedAppearanceItems = [
+    {
+      key: "accessory",
+      label: locale === "en-US" ? "Accessory" : "配饰",
+      emptyLabel: locale === "en-US" ? "No accessory" : "未装备配饰",
+      item: equippedAccessory,
+    },
+    {
+      key: "scene",
+      label: locale === "en-US" ? "Scene" : "场景",
+      emptyLabel: locale === "en-US" ? "No scene" : "未装备场景",
+      item: equippedScene,
+    },
+    {
+      key: "badge",
+      label: locale === "en-US" ? "Badge" : "徽章",
+      emptyLabel: locale === "en-US" ? "No badge" : "未装备徽章",
+      item: equippedBadge,
+    },
+  ];
   const nextStageLabel = levelSnapshot?.nextStage
     ? `${stageLabelFromStage(levelSnapshot.nextStage, locale)} Lv.${levelSnapshot.nextStageLevel ?? ""}`.trim()
     : (locale === "en-US" ? "Max companion stage" : "最高陪伴阶段");
@@ -106,29 +135,20 @@ export default function PetManagementView() {
       icon: petActionIcons.encourage,
     },
   ];
-  const equippedCosmetics = petStore.cosmetics.filter((item) => item.equipped).map((item) => {
-    let label = item.cosmeticKey;
-    if (item.cosmeticKey === "sprout-ribbon") {
-      label = locale === "en-US" ? "Sprout Ribbon" : "新芽丝带";
-    }
-    if (item.cosmeticKey === "golden-bell") {
-      label = locale === "en-US" ? "Golden Bell" : "金色铃铛";
-    }
-    return { ...item, label };
-  });
-
   useEffect(() => {
     void (async () => {
-      await petStore.loadPetState();
+      await petStore.loadPetState(true);
       syncSettingsForm();
     })();
     window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     const refreshTimer = window.setInterval(() => {
       setPetVisualStateNow(Date.now());
       void petStore.refresh();
     }, 4000);
     return () => {
       window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(refreshTimer);
     };
   }, []);
@@ -150,6 +170,14 @@ export default function PetManagementView() {
   }, [petStore.settings]);
 
   async function handleWindowFocus() {
+    await petStore.refresh();
+    syncSettingsForm();
+  }
+
+  async function handleVisibilityChange() {
+    if (document.visibilityState !== "visible") {
+      return;
+    }
     await petStore.refresh();
     syncSettingsForm();
   }
@@ -285,6 +313,17 @@ export default function PetManagementView() {
     }
   }
 
+  function petEquipmentName(item: PetInventoryItem) {
+    return resolveItemName(petStore.storeState, item, locale);
+  }
+
+  function petEquipmentImageUrl(item: PetInventoryItem | undefined) {
+    if (!item) {
+      return "";
+    }
+    return resolveShopImageUrl(resolveItemAssetKey(petStore.storeState, item));
+  }
+
   return (
     <section className="view-stack native-page pet-native-page pet-page-stack">
       <div className="pet-center-layout">
@@ -313,7 +352,33 @@ export default function PetManagementView() {
 
               <div className="pet-visual-panel">
                 <div className="pet-avatar-shell pet-avatar-shell-large" data-stage={levelSnapshot?.currentStage ?? petStore.profile?.stage ?? "first_meet"}>
+                  {equippedScene && (
+                    <img
+                      className="pet-equipped-layer pet-equipped-scene"
+                      src={petEquipmentImageUrl(equippedScene)}
+                      alt={petEquipmentName(equippedScene)}
+                      draggable="false"
+                    />
+                  )}
                   <img className="pet-cover-image" src={petCoverUrl} style={petCoverStyle} alt="" draggable="false" />
+                  {equippedAccessory && (
+                    <img
+                      className="pet-equipped-layer pet-equipped-accessory"
+                      src={petEquipmentImageUrl(equippedAccessory)}
+                      alt={petEquipmentName(equippedAccessory)}
+                      draggable="false"
+                    />
+                  )}
+                  {equippedBadge && (
+                    <span className="pet-equipped-layer pet-equipped-badge-effect">
+                      <img
+                        className="pet-equipped-badge"
+                        src={petEquipmentImageUrl(equippedBadge)}
+                        alt={petEquipmentName(equippedBadge)}
+                        draggable="false"
+                      />
+                    </span>
+                  )}
                 </div>
                 <div className="pet-identity-row">
                   <strong title={petStore.profile?.name ?? "Libby"}>{petStore.profile?.name ?? "Libby"}</strong>
@@ -329,29 +394,45 @@ export default function PetManagementView() {
                   </button>
                   <span>{stageLabel} · {moodLabel}</span>
                 </div>
+                <div className="pet-equipped-strip" aria-label={locale === "en-US" ? "Equipped appearance" : "已装备装扮"}>
+                  {equippedAppearanceItems.map((entry) => (
+                    <div key={entry.key} className={`pet-equipped-chip ${entry.item ? "is-equipped" : ""}`}>
+                      {entry.item ? (
+                        <img src={petEquipmentImageUrl(entry.item)} alt="" draggable="false" />
+                      ) : (
+                        <span className="pet-equipped-placeholder" aria-hidden="true" />
+                      )}
+                      <div>
+                        <span>{entry.label}</span>
+                        <strong>{entry.item ? petEquipmentName(entry.item) : entry.emptyLabel}</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="pet-companion-copy">
                 <div className="pet-status-grid">
-                  <div className="pet-status-tile">
+                  <div className="pet-info-row">
                     <span>{locale === "en-US" ? "Level" : "等级"}</span>
                     <strong>{levelSnapshot?.level ?? petStore.profile?.level ?? 1}</strong>
                   </div>
-                  <div className="pet-status-tile">
+                  <div className="pet-info-row">
                     <span>{locale === "en-US" ? "Total Growth" : "累计成长"}</span>
                     <strong>{levelSnapshot?.totalExperience ?? petStore.profile?.experience ?? 0}</strong>
                   </div>
-                  <div className="pet-status-tile">
-                    <span>{locale === "en-US" ? "Outfit" : "佩戴"}</span>
-                    <strong>{equippedCosmetics[0]?.label ?? (locale === "en-US" ? "None" : "未佩戴")}</strong>
-                  </div>
-                  <div className="pet-status-tile">
-                    <span>{locale === "en-US" ? "Rewards" : "奖励"}</span>
-                    <strong>{petStore.cosmetics.length}</strong>
-                  </div>
+                  {equippedAppearanceItems.map((entry) => {
+                    const itemName = entry.item ? petEquipmentName(entry.item) : entry.emptyLabel;
+                    return (
+                      <div key={entry.key} className="pet-info-row">
+                        <span>{entry.label}</span>
+                        <strong title={itemName}>{itemName}</strong>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className="pet-progress-card">
+                <div className="pet-progress-summary">
                   <div className="pet-stat-row">
                     <span>{petStore.isMaxLevel ? (locale === "en-US" ? "Companion Value" : "满级陪伴值") : (locale === "en-US" ? "Level Progress" : "本级成长")}</span>
                     <strong>
