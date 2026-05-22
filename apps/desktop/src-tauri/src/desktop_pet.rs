@@ -2,6 +2,8 @@ use crate::local_db::{self, LocalResult};
 use chrono::Utc;
 use serde::Serialize;
 use std::{
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -35,6 +37,7 @@ pub(crate) const DAILY_ACTION_BUCKET_MS: u64 = 120_000;
 pub(crate) const BUBBLE_VISIBLE_MS: u64 = 7_000;
 pub(crate) const EXTRA_PET_OFFSET_X: f64 = 168.0;
 pub(crate) const EXTRA_PET_OFFSET_Y: f64 = 92.0;
+const DESKTOP_PET_DIAGNOSTIC_LOG: &str = "desktop-pet-diagnostics.log";
 
 pub(crate) struct DesktopPetState {
     pub(crate) instances: Vec<DesktopPetInstance>,
@@ -79,12 +82,49 @@ pub(crate) struct PetWorker {
 pub(crate) struct PetWorkerContext {
     pub(crate) app: AppHandle,
     pub(crate) window: Window,
+    pub(crate) instance_id: PetInstanceId,
     pub(crate) action_state: Arc<Mutex<PetAction>>,
     pub(crate) bubble_state: Arc<Mutex<Option<PetBubble>>>,
     pub(crate) growth_float_state: Arc<Mutex<Option<PetGrowthFloat>>>,
     pub(crate) stop_signal: Arc<AtomicBool>,
     pub(crate) interaction_signal: Arc<AtomicU64>,
     pub(crate) frames: PetAnimationFrames,
+}
+
+pub(crate) fn diagnostic_log_path(app: &AppHandle) -> LocalResult<PathBuf> {
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|err| err.to_string())?;
+    fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    Ok(dir.join(DESKTOP_PET_DIAGNOSTIC_LOG))
+}
+
+pub(crate) fn diagnostic_log_tail(app: &AppHandle, max_lines: usize) -> LocalResult<String> {
+    let path = diagnostic_log_path(app)?;
+    let log = fs::read_to_string(path).unwrap_or_default();
+    let lines = log
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .rev()
+        .take(max_lines)
+        .collect::<Vec<_>>();
+    Ok(lines.into_iter().rev().collect::<Vec<_>>().join("\n"))
+}
+
+pub(crate) fn append_diagnostic(app: &AppHandle, line: impl AsRef<str>) {
+    let Ok(path) = diagnostic_log_path(app) else {
+        return;
+    };
+    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let _ = writeln!(
+        file,
+        "[{}] {}",
+        Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC"),
+        line.as_ref()
+    );
 }
 
 #[derive(Debug, Clone)]

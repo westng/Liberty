@@ -1,10 +1,14 @@
 use super::drag::{DragPoint, PetDragMachine, PetDragMove};
 use super::*;
-use std::sync::{atomic::AtomicU64, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex,
+};
 use tauri::PhysicalPosition;
 use windows_sys::Win32::Foundation::POINT;
 
 struct PetWindowInputState {
+    diagnostic: Arc<PetWindowDiagnostic>,
     interaction_signal: Arc<AtomicU64>,
     drag_state: Mutex<PetWindowDragState>,
 }
@@ -12,6 +16,19 @@ struct PetWindowInputState {
 #[derive(Default)]
 struct PetWindowDragState {
     machine: PetDragMachine,
+}
+
+struct PetWindowDiagnostic {
+    app: AppHandle,
+    label: String,
+    message_count: AtomicU64,
+    move_count: AtomicU64,
+}
+
+impl PetWindowDiagnostic {
+    fn log(&self, line: impl AsRef<str>) {
+        append_diagnostic(&self.app, format!("{} {}", self.label, line.as_ref()));
+    }
 }
 
 pub fn prepare_window(window: &Window, interaction_signal: &Arc<AtomicU64>) -> LocalResult<()> {
@@ -80,7 +97,14 @@ fn set_native_window_style(
     interaction_signal: &Arc<AtomicU64>,
 ) -> LocalResult<()> {
     let hwnd = window.hwnd().map_err(|err| err.to_string())?;
+    let diagnostic = Arc::new(PetWindowDiagnostic {
+        app: window.app_handle().clone(),
+        label: window.label().to_string(),
+        message_count: AtomicU64::new(0),
+        move_count: AtomicU64::new(0),
+    });
     let input_state = Box::new(PetWindowInputState {
+        diagnostic: diagnostic.clone(),
         interaction_signal: interaction_signal.clone(),
         drag_state: Mutex::new(PetWindowDragState::default()),
     });
@@ -95,6 +119,7 @@ fn set_native_window_style(
         let hwnd = hwnd.0 as *mut std::ffi::c_void;
         windows_sys::Win32::Foundation::SetLastError(0);
         let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        diagnostic.log(format!("style before exstyle=0x{style:x}"));
         if style == 0 {
             let last_error = windows_sys::Win32::Foundation::GetLastError();
             if last_error != 0 {
@@ -115,6 +140,9 @@ fn set_native_window_style(
                 & !(WS_EX_TRANSPARENT as i32);
         windows_sys::Win32::Foundation::SetLastError(0);
         let previous_style = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
+        diagnostic.log(format!(
+            "style set previous=0x{previous_style:x} next=0x{next_style:x}"
+        ));
         if previous_style == 0 {
             let last_error = windows_sys::Win32::Foundation::GetLastError();
             if last_error != 0 {
@@ -132,6 +160,7 @@ fn set_native_window_style(
                 windows_sys::Win32::Foundation::GetLastError()
             ));
         }
+        diagnostic.log(format!("subclass installed hwnd={hwnd:p}"));
     }
     Ok(())
 }
@@ -152,34 +181,55 @@ unsafe extern "system" fn pet_window_subclass_proc(
         },
     };
 
+    let input_state = (ref_data != 0).then(|| &*(ref_data as *const PetWindowInputState));
+
     if msg == WM_NCHITTEST {
+        if let Some(input_state) = input_state {
+            input_state
+                .diagnostic
+                .log("message WM_NCHITTEST -> HTCLIENT");
+        }
         return HTCLIENT as isize;
     }
 
-    let input_state = (ref_data != 0).then(|| &*(ref_data as *const PetWindowInputState));
     match msg {
         WM_LBUTTONDOWN => {
             if let Some(input_state) = input_state {
+                input_state.diagnostic.log("message WM_LBUTTONDOWN");
                 record_mouse_down(hwnd, input_state);
             }
         }
         WM_MOUSEMOVE => {
             if let Some(input_state) = input_state {
+                let count = input_state
+                    .diagnostic
+                    .message_count
+                    .fetch_add(1, Ordering::Relaxed);
+                if count < 8 || count % 40 == 0 {
+                    input_state
+                        .diagnostic
+                        .log(format!("message WM_MOUSEMOVE count={}", count + 1));
+                }
                 drag_window(hwnd, input_state);
             }
         }
         WM_LBUTTONUP => {
             if let Some(input_state) = input_state {
+                input_state.diagnostic.log("message WM_LBUTTONUP");
                 finish_mouse_interaction(input_state);
             }
         }
         WM_CAPTURECHANGED => {
             if let Some(input_state) = input_state {
+                input_state.diagnostic.log("message WM_CAPTURECHANGED");
                 reset_drag_state(input_state);
             }
         }
         WM_DESTROY => {
             if ref_data != 0 {
+                if let Some(input_state) = input_state {
+                    input_state.diagnostic.log("message WM_DESTROY");
+                }
                 RemoveWindowSubclass(hwnd, Some(pet_window_subclass_proc), _subclass_id);
                 drop(Box::from_raw(ref_data as *mut PetWindowInputState));
             }
@@ -191,15 +241,23 @@ unsafe extern "system" fn pet_window_subclass_proc(
 }
 
 unsafe fn record_mouse_down(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputState) {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetCapture;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetCapture, SetCapture};
 
-    SetCapture(hwnd);
+    let captured = SetCapture(hwnd);
+    let active_capture = GetCapture();
     if let Ok(mut guard) = input_state.drag_state.lock() {
         if let (Some(cursor), Some(window)) = (cursor_position(), window_position(hwnd)) {
+            input_state.diagnostic.log(format!(
+                "mouse down cursor=({}, {}) window=({}, {}) set_capture_previous={captured:p} active_capture={active_capture:p}",
+                cursor.x, cursor.y, window.x, window.y
+            ));
             guard
                 .machine
                 .record_mouse_down(cursor_drag_point(cursor), window_drag_point(window));
         } else {
+            input_state
+                .diagnostic
+                .log("mouse down failed to read cursor/window position");
             guard.machine.reset();
         }
     }
@@ -224,8 +282,32 @@ unsafe fn drag_window(hwnd: *mut std::ffi::c_void, input_state: &PetWindowInputS
     let Some(position) = next_drag_move(input_state) else {
         return;
     };
-    if move_window_from_drag(hwnd, position).is_err() {
+    let count = input_state
+        .diagnostic
+        .move_count
+        .fetch_add(1, Ordering::Relaxed);
+    if count < 8 || count % 20 == 0 {
+        input_state.diagnostic.log(format!(
+            "drag move requested count={} target=({}, {})",
+            count + 1,
+            position.x,
+            position.y
+        ));
+    }
+    if let Err(error) = move_window_from_drag(hwnd, position) {
+        input_state
+            .diagnostic
+            .log(format!("drag move SetWindowPos failed: {error}"));
         begin_system_window_drag(hwnd);
+    } else if count < 8 || count % 20 == 0 {
+        if let Some(window) = window_position(hwnd) {
+            input_state.diagnostic.log(format!(
+                "drag move SetWindowPos ok count={} actual=({}, {})",
+                count + 1,
+                window.x,
+                window.y
+            ));
+        }
     }
 }
 
@@ -247,7 +329,8 @@ unsafe fn move_window_from_drag(
         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
     );
     if moved == 0 {
-        return Err("移动桌宠窗口失败。".into());
+        let last_error = windows_sys::Win32::Foundation::GetLastError();
+        return Err(format!("移动桌宠窗口失败，Win32 error={last_error}"));
     }
     Ok(())
 }
@@ -260,8 +343,12 @@ fn finish_mouse_interaction(input_state: &PetWindowInputState) {
         .unwrap_or(false);
 
     unsafe {
-        use windows_sys::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetCapture, ReleaseCapture};
 
+        let active_capture = GetCapture();
+        input_state
+            .diagnostic
+            .log(format!("finish interaction active_capture={active_capture:p} should_interact={should_interact}"));
         ReleaseCapture();
     }
 

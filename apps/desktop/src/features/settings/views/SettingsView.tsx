@@ -39,6 +39,7 @@ export default function SettingsView() {
     refreshRuntimePanel,
   } = useRuntimePanel(store, messages, shellMessages, commonMessages);
   const {
+    diagnostics,
     diagnosticsError,
     diagnosticsRows,
     supportedPlatformText,
@@ -199,6 +200,13 @@ export default function SettingsView() {
             <div className="runtime-log">
               <span className="runtime-log-title">发布平台矩阵</span>
               <pre>{supportedPlatformText}</pre>
+            </div>
+          )}
+
+          {diagnostics?.desktopPetDiagnosticLogTail && (
+            <div className="runtime-log">
+              <span className="runtime-log-title">桌宠拖拽诊断日志</span>
+              <pre>{diagnostics.desktopPetDiagnosticLogTail}</pre>
             </div>
           )}
 

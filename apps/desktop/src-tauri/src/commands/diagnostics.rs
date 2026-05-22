@@ -1,4 +1,5 @@
 use crate::{
+    desktop_pet,
     domain::platform::{self, SupportedPlatform, SUPPORTED_PLATFORMS},
     infrastructure::migrations::CURRENT_SCHEMA_VERSION,
     local_db::{self, LocalResult},
@@ -24,6 +25,8 @@ pub struct DiagnosticsReport {
     pub database_path: Option<String>,
     pub schema_version: i64,
     pub runtime_status: String,
+    pub desktop_pet_diagnostic_log_path: Option<String>,
+    pub desktop_pet_diagnostic_log_tail: String,
     pub security_baseline: SecurityBaselineStatus,
 }
 
@@ -35,6 +38,11 @@ pub fn get_diagnostics(app: AppHandle) -> LocalResult<DiagnosticsReport> {
     let runtime_status = local_runtime::detect_runtime_state_for_diagnostics(&app)
         .map(|state| state.status)
         .unwrap_or_else(|error| format!("unknown: {error}"));
+    let desktop_pet_diagnostic_log_path = desktop_pet::diagnostic_log_path(&app)
+        .ok()
+        .map(|path| path.to_string_lossy().into_owned());
+    let desktop_pet_diagnostic_log_tail =
+        desktop_pet::diagnostic_log_tail(&app, 80).unwrap_or_default();
 
     Ok(DiagnosticsReport {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -43,6 +51,8 @@ pub fn get_diagnostics(app: AppHandle) -> LocalResult<DiagnosticsReport> {
         database_path,
         schema_version: CURRENT_SCHEMA_VERSION,
         runtime_status,
+        desktop_pet_diagnostic_log_path,
+        desktop_pet_diagnostic_log_tail,
         security_baseline: SecurityBaselineStatus {
             csp_enabled: option_env!("LIBERTY_CSP_DISABLED").is_none(),
             scoped_capabilities: true,

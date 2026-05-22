@@ -425,5 +425,7 @@ export interface DiagnosticsReport {
   databasePath?: string;
   schemaVersion: number;
   runtimeStatus: string;
+  desktopPetDiagnosticLogPath?: string;
+  desktopPetDiagnosticLogTail: string;
   securityBaseline: SecurityBaselineStatus;
 }

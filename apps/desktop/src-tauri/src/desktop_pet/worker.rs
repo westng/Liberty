@@ -13,9 +13,10 @@ use std::{
 use tauri::{AppHandle, Manager, Window};
 
 use super::{
-    behavior, DesktopPetInstance, DesktopPetState, PetAction, PetBubble, PetBubbleTheme,
-    PetGrowthFloat, PetInstanceId, PetVisualState, PetWorker, PetWorkerContext, ANIMATION_FRAME_MS,
-    BUBBLE_VISIBLE_MS, PET_RENDER_TICK_MS, PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH, STATE_REFRESH_MS,
+    append_diagnostic, behavior, DesktopPetInstance, DesktopPetState, PetAction, PetBubble,
+    PetBubbleTheme, PetGrowthFloat, PetInstanceId, PetVisualState, PetWorker, PetWorkerContext,
+    ANIMATION_FRAME_MS, BUBBLE_VISIBLE_MS, PET_RENDER_TICK_MS, PET_WINDOW_HEIGHT, PET_WINDOW_WIDTH,
+    STATE_REFRESH_MS,
 };
 
 pub(crate) fn create_pet_window(
@@ -44,7 +45,23 @@ pub(crate) fn create_pet_window(
         .visible(true)
         .build()
         .map_err(|err| err.to_string())?;
-    window.set_ignore_cursor_events(false).ok();
+    match window.set_ignore_cursor_events(false) {
+        Ok(()) => append_diagnostic(
+            app,
+            format!(
+                "window ignore cursor disabled instance={} label={}",
+                instance_id.log_name(),
+                instance_id.label()
+            ),
+        ),
+        Err(error) => append_diagnostic(
+            app,
+            format!(
+                "window ignore cursor disable failed instance={} error={error}",
+                instance_id.log_name()
+            ),
+        ),
+    }
 
     #[cfg(windows)]
     {
@@ -88,6 +105,19 @@ pub(crate) fn create_pet_window(
         eprintln!(
             "[desktop-pet] native window physical position x={}, y={}",
             physical_position.x, physical_position.y
+        );
+        append_diagnostic(
+            app,
+            format!(
+                "window created instance={} label={} physical=({}, {}) logical=({:.0}, {:.0}) action={}",
+                instance_id.log_name(),
+                instance_id.label(),
+                physical_position.x,
+                physical_position.y,
+                position.x,
+                position.y,
+                visual_state.action.as_str()
+            ),
         );
     }
 
@@ -156,6 +186,7 @@ pub(crate) fn ensure_worker(
             run_pet_worker(PetWorkerContext {
                 app: app_for_thread,
                 window: window_for_thread,
+                instance_id,
                 action_state,
                 bubble_state,
                 growth_float_state,
@@ -186,6 +217,7 @@ fn run_pet_worker(context: PetWorkerContext) {
     let PetWorkerContext {
         app,
         window,
+        instance_id,
         action_state,
         bubble_state,
         growth_float_state,
@@ -201,6 +233,10 @@ fn run_pet_worker(context: PetWorkerContext) {
     let mut first_frame_logged = false;
     let mut handled_interactions = interaction_signal.load(Ordering::Relaxed);
     let mut last_speech_event_id = String::new();
+    append_diagnostic(
+        &app,
+        format!("worker started instance={}", instance_id.log_name()),
+    );
 
     while !stop_signal.load(Ordering::Relaxed) {
         let pending_interactions = interaction_signal.load(Ordering::Relaxed);
