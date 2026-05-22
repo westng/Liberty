@@ -1,12 +1,8 @@
-import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { formatMessage, getCurrentMessages } from "@/shared/i18n";
-import { createLocalPetService } from "@/shared/services/tauri/pet";
 
 const PET_STORE_ITEM_WINDOW_LABEL = "pet-store-item-detail";
-const PET_STORE_ITEM_SHOW_EVENT = "pet-store-item:show";
-const petService = createLocalPetService();
-let petStoreItemWindowRequest: Promise<WebviewWindow> | null = null;
+let petStoreItemWindowQueue: Promise<unknown> = Promise.resolve();
 
 export async function openAiSummaryWindow(jobId: string, title: string) {
   const label = "ai-summary";
@@ -127,16 +123,9 @@ export async function openMemberEditorWindow(memberId?: string) {
 }
 
 export async function openPetStoreItemWindow(itemKey: string, title: string) {
-  if (petStoreItemWindowRequest) {
-    const window = await petStoreItemWindowRequest;
-    await showPetStoreItemInWindow(window, itemKey, title);
-    return window;
-  }
-
-  petStoreItemWindowRequest = openSinglePetStoreItemWindow(itemKey, title).finally(() => {
-    petStoreItemWindowRequest = null;
-  });
-  return petStoreItemWindowRequest;
+  const request = petStoreItemWindowQueue.then(() => openSinglePetStoreItemWindow(itemKey, title));
+  petStoreItemWindowQueue = request.catch(() => undefined);
+  return request;
 }
 
 async function openSinglePetStoreItemWindow(itemKey: string, title: string) {
@@ -147,11 +136,9 @@ async function openSinglePetStoreItemWindow(itemKey: string, title: string) {
   const existing = await WebviewWindow.getByLabel(PET_STORE_ITEM_WINDOW_LABEL);
 
   if (existing) {
-    await showPetStoreItemInWindow(existing, itemKey, title);
-    return existing;
+    await existing.close().catch(() => undefined);
   }
 
-  await setPetStoreItemDetailState(itemKey);
   const window = new WebviewWindow(PET_STORE_ITEM_WINDOW_LABEL, {
     title: windowTitle,
     url: `/pet-store-item?itemKey=${encodeURIComponent(itemKey)}`,
@@ -164,23 +151,6 @@ async function openSinglePetStoreItemWindow(itemKey: string, title: string) {
   });
 
   return window;
-}
-
-async function showPetStoreItemInWindow(window: WebviewWindow, itemKey: string, title: string) {
-  const messages = getCurrentMessages().windows;
-  await window.setTitle(formatMessage(messages.petStoreItemTitle, { title }));
-  await emitPetStoreItemShow(itemKey);
-  await window.show();
-  await window.setFocus();
-}
-
-async function emitPetStoreItemShow(itemKey: string) {
-  await setPetStoreItemDetailState(itemKey);
-  await emitTo(PET_STORE_ITEM_WINDOW_LABEL, PET_STORE_ITEM_SHOW_EVENT, { itemKey });
-}
-
-async function setPetStoreItemDetailState(itemKey: string) {
-  await petService.setStoreItemDetailItem(itemKey);
 }
 
 async function closeLegacyPetStoreItemWindows() {

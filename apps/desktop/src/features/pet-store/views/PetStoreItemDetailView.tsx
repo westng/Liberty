@@ -1,6 +1,5 @@
 import "./PetStoreItemDetailView.css";
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import {
   findCatalogItem,
@@ -21,7 +20,6 @@ import { createLocalPetService } from "@/shared/services/tauri/pet";
 import type { PetStoreCatalogItemState, PetStoreState } from "@/shared/types/meeting";
 
 const petService = createLocalPetService();
-const PET_STORE_ITEM_SHOW_EVENT = "pet-store-item:show";
 
 export default function PetStoreItemDetailView() {
   const meetingStore = useMeetingStore();
@@ -30,8 +28,7 @@ export default function PetStoreItemDetailView() {
   const [storeState, setStoreState] = useState<PetStoreState | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [itemKey, setItemKey] = useState(() => new URLSearchParams(window.location.search).get("itemKey") ?? "");
-  const itemKeyRef = useRef(itemKey);
+  const itemKey = new URLSearchParams(window.location.search).get("itemKey")?.trim() ?? "";
   const catalogItem = findCatalogItem(storeState, itemKey);
   const inventoryItem = findInventoryItem(storeState, itemKey);
   const displayItem = catalogItem ?? inventoryItem ?? null;
@@ -44,48 +41,6 @@ export default function PetStoreItemDetailView() {
   useEffect(() => {
     void loadStoreState();
   }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-
-    void syncInitialItemKeyFromNativeState();
-    void listen<{ itemKey?: string }>(PET_STORE_ITEM_SHOW_EVENT, (event) => {
-      applyItemKey(event.payload?.itemKey);
-    }).then((cleanup) => {
-      if (disposed) {
-        cleanup();
-        return;
-      }
-      unlisten = cleanup;
-    });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
-
-  async function syncInitialItemKeyFromNativeState() {
-    try {
-      applyItemKey(await petService.getStoreItemDetailItem());
-    } catch {
-      return;
-    }
-  }
-
-  function applyItemKey(value?: string | null) {
-    const nextItemKey = value?.trim();
-    if (!nextItemKey) {
-      return;
-    }
-    if (nextItemKey === itemKeyRef.current) {
-      return;
-    }
-    itemKeyRef.current = nextItemKey;
-    setItemKey(nextItemKey);
-    void loadStoreState();
-  }
 
   async function loadStoreState() {
     setLoading(true);

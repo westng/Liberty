@@ -22,7 +22,6 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .manage(local_pet::PetStoreItemDetailState::default())
         .setup(|app| {
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
@@ -64,7 +63,6 @@ pub fn run() {
             local_pet::draw_pet_blind_box,
             local_pet::get_pet_blind_box_state,
             local_pet::get_pet_profile,
-            local_pet::get_pet_store_item_detail_item,
             local_pet::get_pet_store_state,
             local_pet::get_pet_settings,
             desktop_pet::get_desktop_pet_status,
@@ -74,7 +72,6 @@ pub fn run() {
             desktop_pet::open_extra_desktop_pet,
             local_pet::purchase_pet_store_item,
             local_pet::save_pet_profile,
-            local_pet::set_pet_store_item_detail_item,
             desktop_pet::show_desktop_pet,
             desktop_pet::start_desktop_pet_drag,
             local_pet::equip_pet_inventory_item,

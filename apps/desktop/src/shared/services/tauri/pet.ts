@@ -40,9 +40,6 @@ export function createLocalPetService() {
     getStoreState: () => invoke<PetStoreState>("get_pet_store_state"),
     getBlindBoxState: () => invoke<PetBlindBoxState>("get_pet_blind_box_state"),
     drawBlindBox: () => invoke<PetBlindBoxDrawResult>("draw_pet_blind_box"),
-    setStoreItemDetailItem: (itemKey: string) =>
-      invoke<string>("set_pet_store_item_detail_item", { input: { itemKey } }),
-    getStoreItemDetailItem: () => invoke<string>("get_pet_store_item_detail_item"),
     purchaseStoreItem: (itemKey: string, quantity = 1) =>
       invoke<PetStoreState>("purchase_pet_store_item", { input: { itemKey, quantity } }),
     equipInventoryItem: (itemKey: string) => invoke<PetStoreState>("equip_pet_inventory_item", { input: { itemKey } }),
