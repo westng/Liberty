@@ -98,7 +98,9 @@ fn set_native_window_style(
         if style == 0 {
             let last_error = windows_sys::Win32::Foundation::GetLastError();
             if last_error != 0 {
-                return Err(format!("读取 Windows 桌宠窗口样式失败，Win32 error={last_error}"));
+                return Err(format!(
+                    "读取 Windows 桌宠窗口样式失败，Win32 error={last_error}"
+                ));
             }
         }
         #[cfg(target_pointer_width = "64")]
@@ -108,26 +110,21 @@ fn set_native_window_style(
             | WS_EX_NOACTIVATE as isize)
             & !(WS_EX_TRANSPARENT as isize);
         #[cfg(target_pointer_width = "32")]
-        let next_style = (style
-            | WS_EX_LAYERED as i32
-            | WS_EX_TOOLWINDOW as i32
-            | WS_EX_NOACTIVATE as i32)
-            & !(WS_EX_TRANSPARENT as i32);
+        let next_style =
+            (style | WS_EX_LAYERED as i32 | WS_EX_TOOLWINDOW as i32 | WS_EX_NOACTIVATE as i32)
+                & !(WS_EX_TRANSPARENT as i32);
         windows_sys::Win32::Foundation::SetLastError(0);
         let previous_style = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
         if previous_style == 0 {
             let last_error = windows_sys::Win32::Foundation::GetLastError();
             if last_error != 0 {
-                return Err(format!("设置 Windows 桌宠窗口样式失败，Win32 error={last_error}"));
+                return Err(format!(
+                    "设置 Windows 桌宠窗口样式失败，Win32 error={last_error}"
+                ));
             }
         }
         let input_state = Box::into_raw(input_state) as usize;
-        let subclassed = SetWindowSubclass(
-            hwnd,
-            Some(pet_window_subclass_proc),
-            1,
-            input_state,
-        );
+        let subclassed = SetWindowSubclass(hwnd, Some(pet_window_subclass_proc), 1, input_state);
         if subclassed == 0 {
             drop(Box::from_raw(input_state as *mut PetWindowInputState));
             return Err(format!(
