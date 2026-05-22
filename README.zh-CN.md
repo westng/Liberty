@@ -72,7 +72,7 @@ AI 接口由 Rust 侧 `local_ai` 模块请求 OpenAI 兼容接口。模型 API K
 
 ### 宠物链路
 
-宠物链路是主会议流程之外的本地陪伴系统。当前宠物规则以 255 级成长生态策略为准：工作行为是主线成长来源，LP 是本地奖励点数，食物提供固定成长值，每日盲盒是免费本地福利。应用启动会尝试同步桌宠状态，但宠物加载失败不会阻塞主窗口。
+宠物链路是主会议流程之外的本地陪伴系统。当前宠物规则统一收敛在宠物系统说明中：工作行为是主线成长来源，LP 是本地奖励点数，食物提供固定成长值，每日盲盒是免费本地福利。应用启动会尝试同步桌宠状态，但宠物加载失败不会阻塞主窗口。
 
 完整说明见 [docs/pet-system.md](./docs/pet-system.md)。
 
@@ -199,9 +199,6 @@ pnpm check
 - [宠物系统说明](./docs/pet-system.md)
 - [企业级桌面架构说明](./docs/architecture/enterprise-desktop-architecture.md)
 - [发布就绪检查](./docs/architecture/release-readiness.md)
-- [桌面宠物设计](./docs/superpowers/specs/2026-05-06-desktop-pet-design.md)
-- [宠物商店玩法设计](./docs/superpowers/specs/2026-05-21-pet-store-gameplay-design.md)
-- [宠物 255 级成长生态策略](./docs/superpowers/specs/2026-05-21-宠物255级成长生态策略.md)
 
 ## 注意事项
 

@@ -1,78 +1,27 @@
-# Liberty 宠物系统说明
+# Liberty 宠物系统
 
-## 权威口径
-
-宠物系统的产品、经济、等级和奖励规则以 [宠物 255 级成长生态策略](./superpowers/specs/2026-05-21-宠物255级成长生态策略.md) 为准。旧的 3 阶段线性等级、按价格推导食物成长值、付费抽卡或可购买次数等描述均不再作为当前口径。
-
-本文只说明当前项目中的宠物系统结构和实现边界。
+本文是 Liberty 宠物系统的当前权威说明。旧设计文档和实现计划只保留为历史记录；如果旧文档与本文冲突，以本文为准。
 
 ## 定位
 
-Liberty 的宠物系统是桌面端本地陪伴能力。它围绕真实会议工作流记录成长值、LP、事件、库存、装备和每日福利状态，让用户完成任务、转写、AI 总结和导出时获得轻量反馈。
+宠物系统是 Liberty 桌面端的本地陪伴能力，不属于会议处理主链路。它围绕真实会议工作流记录成长值、LP、事件、库存、装备和每日福利状态，让用户完成任务、转写、AI 总结和导出时获得轻量反馈。
 
-宠物系统不属于会议处理主链路。它不能阻塞任务创建、转写、总结、导出或结果查看；主窗口初始化时会尝试同步桌宠状态，但失败后只记录错误并继续保持应用可用。
+宠物系统必须保持 best-effort：宠物加载、奖励发放、桌宠渲染或商店状态失败时，不能阻塞任务创建、转写、总结、导出或结果查看。
 
 ## 当前页面
 
-### 宠物中心
+| 页面 | 路由 | 当前职责 |
+| --- | --- | --- |
+| 宠物中心 | `/pet` | 宠物名称、等级、累计成长、阶段、心情、本级进度、下一阶段、互动、事件流水、桌宠设置 |
+| 宠物商店 | `/pet-store` | LP、商品目录、库存、购买、装备、取消装备、使用食物和消耗道具 |
+| 每日盲盒 | `/daily-blind-box` | 每天 10 次免费本地福利，展示奖池、抽取动画、今日历史、重复补偿 |
+| 商品详情 | `/pet-store-item?itemKey=...` | 商品图片、分类、状态、价格、持有数量、门槛、来源、食物成长值 |
 
-入口：`/pet`
+每日盲盒不是付费抽卡系统：不消耗 LP，不出售次数，不关联充值、真钱权益或付费概率掉落。
 
-当前页面能力：
+## 成长和经济
 
-- 展示宠物名称、等级、累计成长值、当前阶段、心情、本级进度和下一阶段。
-- 满级时展示 `Lv.255 · 不离不弃`，继续展示累计成长值，不再展示下一级进度。
-- 支持修改宠物名称，名称通过原生输入弹窗处理。
-- 支持点击、抚摸、投喂、鼓励四类互动。
-- 展示最近宠物事件，包括工作事件、互动事件、商店装备、食物使用和盲盒事件。
-- 配置桌宠行为：启用桌宠、始终置顶、静音提示、专注模式、主动程度。
-- 支持多开一个桌面宠物窗口。
-
-### 宠物商店
-
-入口：`/pet-store`
-
-当前页面能力：
-
-- 展示 LP 余额、等级、库存数量、可购买数量和锁定数量。
-- 支持商店和个人仓库两个视图。
-- 支持按全部、宠物、装扮、场景、道具、食物、徽章筛选。
-- 支持购买商品、装备商品、取消装备槽位、使用食物和消耗道具。
-- 食物卡展示固定成长值，使用后按 `growthValue × quantity` 增加累计成长值并写入事件流水。
-- 商品卡可打开独立商品详情窗口。
-
-### 每日盲盒
-
-入口：`/pet-blind-box`
-
-当前页面能力：
-
-- 每天最多开启 10 次，按本地自然日重置。
-- 开启不消耗 LP，不提供付费购买次数，不关联充值或真钱权益。
-- 奖池来自宠物商店内容，但排除宠物本体。
-- 奖池可完整展示，并包含“什么都没抽中”的空奖。
-- 消耗品重复获得时叠加数量。
-- 已拥有的非消耗品重复获得时转为少量 LP 补偿。
-- 每次开启写入本地盲盒历史，并通过宠物事件流水触发轻量反馈。
-
-每日盲盒是本地免费福利，不是付费抽卡系统。
-
-### 商品详情
-
-入口：`/pet-store-item?itemKey=...`
-
-当前页面能力：
-
-- 展示商品图片、分类、羁绊阶梯、状态、价格、持有数量、等级门槛、阶段门槛和里程碑门槛。
-- 对已有商品展示来源：默认、成长、购买、成就、每日盲盒或盲盒重复补偿。
-- 对食物展示固定成长值。
-- 商品图支持翻转预览。
-
-## 成长规则
-
-当前成长系统采用 255 级累计经验曲线。`experience` 表示累计成长值，不是本级内经验。
-
-等级快照由 Rust 后端统一计算并返回给前端，前端不再自行计算 `experience / 20` 或 `experience % 20`。
+当前成长系统采用 255 级累计成长曲线。`experience` 表示累计成长值，不是本级内经验。等级快照由 Rust 后端统一计算，前端只消费后端返回的 `PetLevelSnapshot`。
 
 关键字段：
 
@@ -87,7 +36,7 @@ Liberty 的宠物系统是桌面端本地陪伴能力。它围绕真实会议工
 | `progressRatio` | 本级进度比例 |
 | `isMaxLevel` | 是否已达到 Lv.255 |
 
-当前阶段：
+阶段划分：
 
 | 阶段 | 等级范围 | 中文名 |
 | --- | ---: | --- |
@@ -108,22 +57,7 @@ Liberty 的宠物系统是桌面端本地陪伴能力。它围绕真实会议工
 | `growing` | `grow_together` |
 | `mature` | `deep_bond` |
 
-当前交互事件：
-
-| 事件 | 基础成长值 | 基础 LP | 心情 |
-| --- | ---: | ---: | --- |
-| `tap` | +1 | +1 | `cheerful` |
-| `pet` | +1 | +1 | `cheerful` |
-| `feed` | +1 | +1 | `proud` |
-| `encourage` | +1 | +1 | `cheerful` |
-
-互动事件有每日上限，当前由 `MAX_DAILY_INTERACTION_PER_SOURCE` 控制。超过上限后仍可播放动作或提示，但不继续发放成长值和 LP。
-
-## 工作奖励
-
-会议工作流通过 `apply_pet_workflow_event` 触发宠物成长和 LP 奖励。
-
-基础奖励：
+工作奖励基础值：
 
 | 工作事件 | 基础成长值 | 基础 LP | 心情 |
 | --- | ---: | ---: | --- |
@@ -134,11 +68,25 @@ Liberty 的宠物系统是桌面端本地陪伴能力。它围绕真实会议工
 | `ai_summary_completed` | +10 | +15 | `proud` |
 | `export_completed` | +6 | +10 | `proud` |
 
-工作成长值会按当前等级应用成长值阶段系数，LP 会按 LP 阶段系数小幅提升。食物成长值固定，不参与这些阶段系数。
+互动奖励基础值：
 
-奖励通过 `source_type + source_key` 保持幂等。同一个任务的同一工作事件不会重复发放完整奖励；每日打开按本地自然日去重；互动事件会生成独立事件键。
+| 互动事件 | 基础成长值 | 基础 LP | 心情 |
+| --- | ---: | ---: | --- |
+| `tap` | +1 | +1 | `cheerful` |
+| `pet` | +1 | +1 | `cheerful` |
+| `feed` | +1 | +1 | `proud` |
+| `encourage` | +1 | +1 | `cheerful` |
 
-## 商店商品
+工作成长值按当前等级应用成长值阶段系数，LP 按 LP 阶段系数小幅提升。食物成长值固定，不参与阶段系数。
+
+奖励幂等规则：
+
+- 工作奖励通过 `source_type + source_key` 去重，同一个任务的同一工作事件不会重复发放完整奖励。
+- 每日打开按本地自然日去重。
+- 互动事件有每日上限，由 `MAX_DAILY_INTERACTION_PER_SOURCE` 控制。
+- 食物使用按 `growthValue × quantity` 增加累计成长值。
+
+## 商店和盲盒
 
 商品目录当前写在 Rust 代码中：
 
@@ -148,7 +96,7 @@ apps/desktop/src-tauri/src/infrastructure/repositories/pet_store.rs
 
 商品类型：
 
-| 类型 | 槽位/用途 |
+| 类型 | 用途 |
 | --- | --- |
 | `pet` | 当前宠物槽；当前只有默认宠物本体 |
 | `cosmetic` | 配饰槽 |
@@ -169,11 +117,16 @@ coming_soon
 → available
 ```
 
-食物成长值来自显式 `growthValue` 字段。商店卡片、商品详情、个人仓库、使用确认、事件流水和宠物中心最近事件必须展示同一个成长值。
+盲盒规则：
 
-徽章原则上不售卖，主要通过里程碑自动入库。若未来出现可购买纪念章，必须和成就徽章视觉区分。
+- 每天最多开启 10 次，按本地自然日重置。
+- 奖池来自宠物商店内容，但排除宠物本体。
+- 奖池包含空奖。
+- 消耗品重复获得时叠加数量。
+- 已拥有的非消耗品重复获得时转为少量 LP 补偿。
+- 每次开启写入本地盲盒历史，并写入宠物事件流水。
 
-## 本地数据表
+## 本地数据
 
 宠物系统使用 SQLite 表：
 
@@ -188,6 +141,42 @@ coming_soon
 | `pet_economy_ledger` | LP 获取和消耗流水，带唯一键防重复 |
 | `pet_milestone_counters` | 任务、转写、总结、导出、活跃天数等计数 |
 | `pet_blind_box_draws` | 每日盲盒开启历史 |
+
+## 模块边界
+
+前端模块：
+
+```text
+apps/desktop/src/features/pet/
+apps/desktop/src/features/pet-store/
+apps/desktop/src/features/pet-blind-box/
+apps/desktop/src/shared/services/tauri/pet.ts
+apps/desktop/src/shared/types/meeting.ts
+```
+
+Rust 模块：
+
+```text
+apps/desktop/src-tauri/src/local_pet.rs
+apps/desktop/src-tauri/src/local_db/pet_leveling.rs
+apps/desktop/src-tauri/src/local_db/pet_growth.rs
+apps/desktop/src-tauri/src/infrastructure/repositories/pet.rs
+apps/desktop/src-tauri/src/infrastructure/repositories/pet_store.rs
+apps/desktop/src-tauri/src/infrastructure/repositories/pet_blind_box.rs
+apps/desktop/src-tauri/src/desktop_pet.rs
+apps/desktop/src-tauri/src/desktop_pet/
+```
+
+职责：
+
+- `local_pet.rs`：Tauri 命令入口和参数转换。
+- `pet_leveling.rs`：255 级曲线、8 阶段映射、等级快照、奖励系数。
+- `pet_growth.rs`：成长事件、LP 奖励、幂等键、里程碑计数。
+- `repositories/pet.rs`：宠物档案、设置、事件、阶段装扮。
+- `repositories/pet_store.rs`：商品目录、钱包、购买、装备、使用、成就自动解锁。
+- `repositories/pet_blind_box.rs`：每日盲盒状态、开启、奖池、历史、重复补偿、空奖记录。
+- `desktop_pet.rs`：桌宠窗口生命周期、多开、拖拽、状态管理。
+- `desktop_pet/*renderer.rs`：macOS / Windows 原生渲染。
 
 ## Tauri 命令
 
@@ -208,6 +197,8 @@ coming_soon
 - `use_pet_inventory_item`
 - `get_pet_blind_box_state`
 - `draw_pet_blind_box`
+- `set_pet_store_item_detail_item`
+- `get_pet_store_item_detail_item`
 - `show_desktop_pet`
 - `hide_desktop_pet`
 - `open_extra_desktop_pet`
@@ -215,81 +206,44 @@ coming_soon
 - `start_desktop_pet_drag`
 - `prompt_pet_name`
 
-## 前端模块
+## 资源
 
-```text
-apps/desktop/src/features/pet/
-├─ services/petDialogues.ts
-├─ services/petEventFormatters.ts
-├─ services/petSprites.ts
-├─ stores/usePetStore.ts
-└─ views/PetManagementView.tsx
-
-apps/desktop/src/features/pet-store/
-├─ services/petStorePresentation.ts
-└─ views/
-   ├─ PetStoreView.tsx
-   └─ PetStoreItemDetailView.tsx
-
-apps/desktop/src/features/pet-blind-box/
-└─ views/
-   ├─ PetBlindBoxView.tsx
-   └─ PetBlindBoxThreeStage.tsx
-```
-
-前端通过 `apps/desktop/src/shared/services/tauri/pet.ts` 调用 Tauri 命令。
-
-## Rust 模块
-
-```text
-apps/desktop/src-tauri/src/local_pet.rs
-apps/desktop/src-tauri/src/local_db/pet_growth.rs
-apps/desktop/src-tauri/src/local_db/pet_leveling.rs
-apps/desktop/src-tauri/src/infrastructure/repositories/pet.rs
-apps/desktop/src-tauri/src/infrastructure/repositories/pet_store.rs
-apps/desktop/src-tauri/src/infrastructure/repositories/pet_blind_box.rs
-apps/desktop/src-tauri/src/desktop_pet.rs
-apps/desktop/src-tauri/src/desktop_pet/
-```
-
-职责划分：
-
-- `local_pet.rs`：Tauri 命令入参和调用入口。
-- `pet_leveling.rs`：255 级曲线、8 阶段映射、等级快照和奖励系数。
-- `pet_growth.rs`：成长事件、LP 奖励、幂等键和里程碑计数。
-- `repositories/pet.rs`：宠物档案、设置、事件和阶段装扮。
-- `repositories/pet_store.rs`：商品目录、钱包、购买、装备、使用、成就自动解锁。
-- `repositories/pet_blind_box.rs`：每日盲盒状态、开启、奖池、历史、重复补偿和空奖记录。
-- `desktop_pet.rs`：桌宠窗口生命周期、多开、拖拽和状态管理。
-- `desktop_pet/*renderer.rs`：macOS / Windows 原生渲染。
-
-## 桌宠资源
-
-桌宠动作资源位于：
+桌宠动作资源：
 
 ```text
 apps/desktop/src-tauri/resources/pet/
+apps/desktop/src/assets/images/action/
 ```
 
-前端预览和打包资源使用：
+商店素材：
 
 ```text
-apps/desktop/src/assets/images/action/
 apps/desktop/src/assets/images/shop/
 ```
 
 `tauri.conf.json` 会把 `apps/desktop/src/assets/images/action/` 打包为 `pet` 资源，供原生桌宠窗口读取。
 
-## 当前边界
+## 验收命令
 
-- 宠物系统是本地能力，不依赖账号。
-- LP 是本地奖励点数，不是现实货币。
-- 当前没有真钱支付、充值、交易、排行榜或云同步。
-- 每日盲盒是本地免费福利，不消耗 LP、不出售次数、不关联付费概率掉落。
-- 宠物系统对会议主流程是 best-effort：失败不应影响会议任务。
+宠物系统变更至少跑：
 
-## 关联文档
+```bash
+/Users/west/Library/pnpm/pnpm check
+```
 
-- [桌面宠物设计](./superpowers/specs/2026-05-06-desktop-pet-design.md)
-- [宠物商店玩法设计](./superpowers/specs/2026-05-21-pet-store-gameplay-design.md)
-- [宠物 255 级成长生态策略](./superpowers/specs/2026-05-21-宠物255级成长生态策略.md)
+重点覆盖：
+
+- 前端 typecheck 和生产构建。
+- Rust fmt/test/clippy。
+- release 版本、平台矩阵和安全基线检查。
+- `pet_leveling` 等级边界、阶段阈值、满级处理、奖励倍率测试。
+- `pet_store` 食物固定成长值、商品状态优先级测试。
+
+## 历史记录
+
+以下文件只保留设计背景和决策来源，不再作为当前规则来源：
+
+- [桌面宠物设计记录](./superpowers/specs/2026-05-06-desktop-pet-design.md)
+- [桌面宠物实现计划记录](./superpowers/plans/2026-05-06-desktop-pet-implementation-plan.md)
+- [宠物商店玩法设计记录](./superpowers/specs/2026-05-21-pet-store-gameplay-design.md)
+- [255 级成长策略记录](./superpowers/specs/2026-05-21-宠物255级成长生态策略.md)

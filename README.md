@@ -72,7 +72,7 @@ AI requests are sent by the Rust `local_ai` module to an OpenAI-compatible endpo
 
 ### Pet Pipeline
 
-The pet pipeline is a local companion system outside the core meeting flow. Current pet rules follow the 255-level growth ecosystem strategy: real work is the main growth source, LP is a local reward point, food grants fixed growth, and the daily blind box is a free local benefit. App startup tries to sync desktop pet state, but pet loading failure must not block the main window.
+The pet pipeline is a local companion system outside the core meeting flow. Current pet rules are centralized in the pet system notes: real work is the main growth source, LP is a local reward point, food grants fixed growth, and the daily blind box is a free local benefit. App startup tries to sync desktop pet state, but pet loading failure must not block the main window.
 
 See [docs/pet-system.md](./docs/pet-system.md) for the current implementation notes.
 
@@ -199,9 +199,6 @@ pnpm check
 - [Pet system notes](./docs/pet-system.md)
 - [Enterprise desktop architecture](./docs/architecture/enterprise-desktop-architecture.md)
 - [Release readiness](./docs/architecture/release-readiness.md)
-- [Desktop pet design](./docs/superpowers/specs/2026-05-06-desktop-pet-design.md)
-- [Pet store gameplay design](./docs/superpowers/specs/2026-05-21-pet-store-gameplay-design.md)
-- [Pet 255-level growth ecosystem strategy](./docs/superpowers/specs/2026-05-21-宠物255级成长生态策略.md)
 
 ## Notes
 
