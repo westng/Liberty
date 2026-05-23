@@ -5,7 +5,10 @@ use std::sync::{
     Arc, Mutex,
 };
 use tauri::PhysicalPosition;
-use windows_sys::Win32::Foundation::{BOOL, LPARAM, POINT};
+use windows_sys::{
+    core::BOOL,
+    Win32::Foundation::{LPARAM, POINT},
+};
 
 const PET_WINDOW_SUBCLASS_ID: usize = 1;
 
@@ -169,9 +172,8 @@ fn set_native_window_style(
         EnumChildWindows(
             hwnd,
             Some(enum_child_pet_window_proc),
-            Arc::as_ptr(&input_state) as LPARAM,
+            &input_state as *const Arc<PetWindowInputState> as LPARAM,
         );
-        std::mem::forget(input_state);
         diagnostic.log(format!(
             "subclass installation completed root={hwnd:p} count={}",
             diagnostic.subclass_count.load(Ordering::Relaxed)
@@ -186,13 +188,15 @@ unsafe fn install_pet_window_subclass(
 ) -> LocalResult<()> {
     use windows_sys::Win32::UI::Shell::SetWindowSubclass;
 
+    let ref_data = Arc::into_raw(input_state.clone()) as usize;
     let subclassed = SetWindowSubclass(
         hwnd,
         Some(pet_window_subclass_proc),
         PET_WINDOW_SUBCLASS_ID,
-        Arc::as_ptr(input_state) as usize,
+        ref_data,
     );
     if subclassed == 0 {
+        drop(Arc::from_raw(ref_data as *const PetWindowInputState));
         return Err(format!(
             "安装 Windows 桌宠拖拽消息钩子失败，Win32 error={}",
             windows_sys::Win32::Foundation::GetLastError()
@@ -214,11 +218,10 @@ unsafe extern "system" fn enum_child_pet_window_proc(
     if lparam == 0 {
         return 1;
     }
-    let input_state = Arc::from_raw(lparam as *const PetWindowInputState);
+    let input_state = &*(lparam as *const Arc<PetWindowInputState>);
     if let Err(error) = install_pet_window_subclass(hwnd, &input_state) {
         input_state.log(format!("child subclass failed hwnd={hwnd:p} error={error}"));
     }
-    let _ = Arc::into_raw(input_state);
     1
 }
 
