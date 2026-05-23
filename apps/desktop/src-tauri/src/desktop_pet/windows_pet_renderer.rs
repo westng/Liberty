@@ -276,8 +276,7 @@ unsafe extern "system" fn pet_window_subclass_proc(
         }
         WM_CAPTURECHANGED => {
             if let Some(input_state) = input_state {
-                input_state.log("message WM_CAPTURECHANGED");
-                reset_drag_state(input_state);
+                handle_capture_changed(input_state);
             }
         }
         WM_DESTROY => {
@@ -294,6 +293,21 @@ unsafe extern "system" fn pet_window_subclass_proc(
     }
 
     DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+unsafe fn handle_capture_changed(input_state: &PetWindowInputState) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetCapture;
+
+    let root_hwnd = input_state.root_hwnd;
+    let active_capture = GetCapture();
+    let preserve_drag = active_capture == root_hwnd;
+    input_state.log(format!(
+        "message WM_CAPTURECHANGED active_capture={active_capture:p} root={root_hwnd:p} preserve={preserve_drag}"
+    ));
+
+    if !preserve_drag {
+        reset_drag_state(input_state);
+    }
 }
 
 unsafe fn record_mouse_down(input_state: &PetWindowInputState) {
@@ -524,6 +538,7 @@ mod tests {
 
             assert_ne!(SetCursorPos(100, 100), 0, "SetCursorPos start failed");
             record_mouse_down(&input_state);
+            handle_capture_changed(&input_state);
             assert_ne!(SetCursorPos(130, 125), 0, "SetCursorPos move failed");
             drag_window(&input_state);
 
