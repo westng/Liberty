@@ -79,18 +79,19 @@ body,
 }
 
 .nav-header {
-  gap: 4px;
-  padding: 14px 12px 10px;
+  gap: 6px;
+  padding: 16px 12px 12px;
   border-bottom: 0;
 }
 
 .nav-brand {
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
 
 .nav-brand-image {
-  width: 24px;
-  height: 24px;
+  width: 58px;
+  height: 58px;
 }
 
 .nav-header h1 {
@@ -100,7 +101,7 @@ body,
 }
 
 .nav-slogan {
-  padding-left: 32px;
+  padding-left: 70px;
   font-size: 12px;
   line-height: 1.35;
 }

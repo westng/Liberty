@@ -1,7 +1,9 @@
 import { getCurrentWindow, type Theme } from "@tauri-apps/api/window";
+import { applyLocalPetWorkflowEvent } from "@/shared/services/tauri/pet";
 import type { SettingsState, ThemeMode } from "@/shared/types/meeting";
 
 const systemThemeQuery = "(prefers-color-scheme: dark)";
+let lastRecordedDarkThemeDate = "";
 
 export function resolveTheme(mode: ThemeMode): "light" | "dark" {
   if (mode === "light" || mode === "dark") {
@@ -55,6 +57,7 @@ export function applyAppearance(settings: SettingsState): void {
   root.style.setProperty("--accent-contrast", resolveAccentContrast(settings.accentColor));
   root.lang = settings.locale;
   void syncWindowTheme(settings.themeMode === "auto" ? null : theme);
+  recordDarkThemeUsage(theme);
 }
 
 async function syncWindowTheme(theme: Theme | null): Promise<void> {
@@ -63,4 +66,21 @@ async function syncWindowTheme(theme: Theme | null): Promise<void> {
   } catch {
     // Ignore native theme sync failures and keep CSS theme as the source of truth.
   }
+}
+
+function recordDarkThemeUsage(theme: Theme): void {
+  if (theme !== "dark") {
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (lastRecordedDarkThemeDate === today) {
+    return;
+  }
+
+  lastRecordedDarkThemeDate = today;
+  void applyLocalPetWorkflowEvent({
+    eventType: "dark_theme_used",
+    metadata: today,
+  }).catch(() => undefined);
 }
