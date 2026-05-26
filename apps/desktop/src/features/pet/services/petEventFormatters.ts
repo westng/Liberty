@@ -16,6 +16,10 @@ const eventSourceLabels: Record<string, LocalizedLabel> = {
   blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
   blind_box_empty: { zh: "盲盒空奖", en: "Empty Blind Box" },
   daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
+  daily_check_in: { zh: "每日签到", en: "Daily Check-in" },
+  gift_box_reward: { zh: "惊喜礼盒", en: "Gift Box Reward" },
+  gift_box_duplicate: { zh: "礼盒重复补偿", en: "Gift Box Duplicate" },
+  daily_free_store: { zh: "每日免费领取", en: "Daily Free Claim" },
   tap: { zh: "点击", en: "Tap" },
   pet: { zh: "抚摸", en: "Pet" },
   feed: { zh: "投喂", en: "Feed" },
@@ -114,6 +118,12 @@ export function formatPetEventTitle(entry: PetEventLedgerEntry, locale: LocaleCo
   if (isBlindBoxEvent(entry)) {
     return locale === "en-US" ? "Blind Box Event" : "盲盒事件";
   }
+  if (isDailyCheckInEvent(entry)) {
+    return locale === "en-US" ? "Daily Check-in" : "每日签到";
+  }
+  if (isGiftBoxEvent(entry)) {
+    return locale === "en-US" ? "Gift Box" : "惊喜礼盒";
+  }
 
   return locale === "en-US" ? "Pet Event" : "宠物事件";
 }
@@ -191,6 +201,12 @@ function formatJsonMetadata(entry: PetEventLedgerEntry, metadata: string, locale
     if (isBlindBoxEvent(entry)) {
       return blindBoxEventDetail(entry, locale);
     }
+    if (isDailyCheckInEvent(entry)) {
+      return dailyCheckInEventDetail(entry, locale);
+    }
+    if (isGiftBoxEvent(entry)) {
+      return giftBoxEventDetail(entry, locale);
+    }
   } catch {
     if (entry.eventType === "interaction") {
       return interactionEventDetail(entry, locale);
@@ -200,6 +216,12 @@ function formatJsonMetadata(entry: PetEventLedgerEntry, metadata: string, locale
     }
     if (isBlindBoxEvent(entry)) {
       return blindBoxEventDetail(entry, locale);
+    }
+    if (isDailyCheckInEvent(entry)) {
+      return dailyCheckInEventDetail(entry, locale);
+    }
+    if (isGiftBoxEvent(entry)) {
+      return giftBoxEventDetail(entry, locale);
     }
   }
 
@@ -289,6 +311,14 @@ function isBlindBoxEvent(entry: PetEventLedgerEntry) {
   return entry.eventType.startsWith("blind_box_") || entry.eventSource === "daily_blind_box";
 }
 
+function isDailyCheckInEvent(entry: PetEventLedgerEntry) {
+  return entry.eventType === "daily_check_in" || entry.eventSource === "daily_check_in";
+}
+
+function isGiftBoxEvent(entry: PetEventLedgerEntry) {
+  return entry.eventType.startsWith("gift_box_") || entry.eventSource === "gift-box-tool";
+}
+
 function interactionEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
   const details: Record<string, LocalizedLabel> = {
     tap: { zh: "你轻轻叫了它一下，伙伴回应了这次互动。", en: "You checked in with your companion and it responded." },
@@ -313,6 +343,21 @@ function blindBoxEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
   return locale === "en-US"
     ? "Blind box reward recorded."
     : "盲盒奖励已记录。";
+}
+
+function dailyCheckInEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
+  return locale === "en-US"
+    ? `Daily check-in recorded. Growth +${entry.eventValue}.`
+    : `每日签到已记录，成长值 +${entry.eventValue}。`;
+}
+
+function giftBoxEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
+  if (entry.eventType === "gift_box_duplicate") {
+    return locale === "en-US"
+      ? "Duplicate gift-box item converted into LP compensation."
+      : "礼盒重复物品已转换为 LP 补偿。";
+  }
+  return locale === "en-US" ? "Gift box reward recorded." : "惊喜礼盒奖励已记录。";
 }
 
 function eventDefaultDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {

@@ -117,11 +117,7 @@ export default function PetStoreView() {
   async function purchaseItem(item: PetStoreCatalogItemState, quantity: number) {
     await runStoreAction(item.item.itemKey, async () => {
       setStoreState(await petService.purchaseStoreItem(item.item.itemKey, quantity));
-      setToastMessage(
-        isEnglish
-          ? `${itemName(item)} x${quantity} added to your inventory.`
-          : `「${itemName(item)}」×${quantity} 已加入你的个人仓库。`,
-      );
+      setToastMessage(itemPurchaseToast(item, quantity));
     });
   }
 
@@ -161,6 +157,11 @@ export default function PetStoreView() {
   }
 
   async function useItem(item: PetInventoryItem, quantity = 1) {
+    if (item.itemKey === "gift-box-tool") {
+      await openGiftBox(item);
+      return;
+    }
+
     const confirmed = await ask(
       isEnglish
         ? `Use ${quantity} x ${itemName(item)}? You currently own ${item.quantity}.`
@@ -187,12 +188,34 @@ export default function PetStoreView() {
     if (!useDraft) {
       return;
     }
+    if (useDraft.itemKey === "gift-box-tool") {
+      await openGiftBox(useDraft);
+      closeUseDialog();
+      return;
+    }
     const quantity = normalizedUseQuantity(useDraft);
     await runStoreAction(useDraft.itemKey, async () => {
       setStoreState(await petService.useInventoryItem(useDraft.itemKey, quantity));
       setToastMessage(itemUseToastMessage(useDraft, quantity));
     });
     closeUseDialog();
+  }
+
+  async function openGiftBox(item: PetInventoryItem) {
+    await runStoreAction(item.itemKey, async () => {
+      const result = await petService.openGiftBox();
+      setStoreState(result.state);
+      const prizeName = locale === "en-US" ? result.prize.nameEn : result.prize.nameZh;
+      setToastMessage(
+        result.duplicate
+          ? isEnglish
+            ? `${prizeName} already owned, converted to ${result.duplicateCompensationLp} LP.`
+            : `开出重复「${prizeName}」，已转为 ${result.duplicateCompensationLp} LP。`
+          : isEnglish
+            ? `Gift box opened: ${prizeName}.`
+            : `惊喜礼盒开出「${prizeName}」。`,
+      );
+    });
   }
 
   async function runStoreAction(key: string, action: () => Promise<void>) {
@@ -257,6 +280,30 @@ export default function PetStoreView() {
       : `「${name}」已使用，伙伴收到这份小小心意了。`;
   }
 
+  function giftBoxClaimLabel(item: PetStoreCatalogItemState) {
+    if (item.item.itemKey !== "gift-box-tool" || item.dailyFreeLimit <= 0) {
+      return "";
+    }
+    return isEnglish
+      ? `${item.dailyFreeRemaining}/${item.dailyFreeLimit} free left`
+      : `今日免费剩余 ${item.dailyFreeRemaining}/${item.dailyFreeLimit}`;
+  }
+
+  function purchasePriceText(item: PetStoreCatalogItemState) {
+    return giftBoxClaimLabel(item) || priceLabel(item.item.priceLp);
+  }
+
+  function itemPurchaseToast(item: PetStoreCatalogItemState, quantity: number) {
+    if (item.item.itemKey === "gift-box-tool") {
+      return isEnglish
+        ? `Gift Box x${quantity} claimed for free today.`
+        : `今日免费「${itemName(item)}」×${quantity} 已加入个人仓库。`;
+    }
+    return isEnglish
+      ? `${itemName(item)} x${quantity} added to your inventory.`
+      : `「${itemName(item)}」×${quantity} 已加入你的个人仓库。`;
+  }
+
   function itemAssetKey(item: PetStoreCatalogItemState | PetInventoryItem) {
     return resolveItemAssetKey(storeState, item);
   }
@@ -272,6 +319,9 @@ export default function PetStoreView() {
       purchase: { zh: "购买获得", en: "Purchased" },
       achievement: { zh: "成就获得", en: "Achievement" },
       daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
+      daily_check_in: { zh: "每日签到", en: "Daily Check-in" },
+      daily_free_store: { zh: "每日免费领取", en: "Daily Free Claim" },
+      gift_box_reward: { zh: "惊喜礼盒", en: "Gift Box" },
       blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
       blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
     };
@@ -318,6 +368,12 @@ export default function PetStoreView() {
     }
     if (item.status === "insufficient") {
       return isEnglish ? "Need LP" : "LP 不足";
+    }
+    if (item.status === "daily_limit") {
+      return isEnglish ? "Claimed" : "今日已领完";
+    }
+    if (item.item.itemKey === "gift-box-tool" && item.dailyFreeRemaining > 0) {
+      return isEnglish ? "Free Claim" : "免费领取";
     }
     if (item.item.slot === "consumable" && item.purchasable) {
       return isEnglish ? "Purchase" : "购买";
@@ -391,6 +447,9 @@ export default function PetStoreView() {
     if (item.item.slot !== "consumable") {
       return 1;
     }
+    if (item.item.itemKey === "gift-box-tool") {
+      return Math.max(1, item.dailyFreeRemaining);
+    }
     if (!wallet || item.item.priceLp <= 0) {
       return 99;
     }
@@ -461,7 +520,7 @@ export default function PetStoreView() {
               <img src={shopImageUrl(itemAssetKey(purchaseDraft))} alt={itemName(purchaseDraft)} />
               <div>
                 <strong>{itemName(purchaseDraft)}</strong>
-                <span>{priceLabel(purchaseDraft.item.priceLp)}</span>
+                <span>{purchasePriceText(purchaseDraft)}</span>
               </div>
             </div>
             <label className="pet-store-quantity-field">
@@ -479,7 +538,7 @@ export default function PetStoreView() {
             </label>
             <div className="pet-store-purchase-total">
               <span>{isEnglish ? "Total" : "合计"}</span>
-              <strong>{purchaseTotalPrice} LP</strong>
+              <strong>{purchaseDraft.item.itemKey === "gift-box-tool" ? (isEnglish ? "Free" : "免费") : `${purchaseTotalPrice} LP`}</strong>
             </div>
             <button className="primary-button" type="button" disabled={actionKey === purchaseDraft.item.itemKey} onClick={confirmPurchaseDraft}>
               {isEnglish ? "Purchase" : "购买"}
@@ -613,7 +672,7 @@ export default function PetStoreView() {
                     <p>{lockReason(item) || itemDescription(item)}</p>
                   </div>
                   <div className="pet-store-card-footer">
-                    <span>{priceLabel(item.item.priceLp)}</span>
+                    <span>{purchasePriceText(item)}</span>
                     <button className="text-button" type="button" disabled={storeActionDisabled(item)} onClick={() => handleStoreAction(item)}>
                       {storeActionLabel(item)}
                     </button>

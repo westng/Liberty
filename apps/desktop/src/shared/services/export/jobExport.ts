@@ -2,12 +2,11 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentMessages } from "@/shared/i18n";
-import { createLocalPetService } from "@/shared/services/tauri/pet";
+import { applyLocalPetWorkflowEvent } from "@/shared/services/tauri/pet";
 import type { MeetingJob } from "@/shared/types/meeting";
 import { getPrimaryTranscriptSegments } from "@/shared/services/meeting/transcript";
 
 export type ExportKind = "transcript" | "notes" | "bundle" | "word";
-const petService = createLocalPetService();
 
 function timestamp(ms: number): string {
   const date = new Date(ms);
@@ -112,13 +111,13 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
       jobId: job.id,
       filePath,
     });
-    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
+    void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
   }
 
   try {
     await writeTextFile(filePath, payload.content);
-    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
+    void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
   } catch {
     const blob = new Blob([payload.content], { type: "text/plain;charset=utf-8" });
@@ -128,7 +127,7 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
     anchor.download = payload.fileName;
     anchor.click();
     URL.revokeObjectURL(url);
-    void petService.applyWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
+    void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
   }
 }

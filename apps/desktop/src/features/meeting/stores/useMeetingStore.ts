@@ -13,7 +13,7 @@ import { applyAppearance } from "@/shared/services/ui/appearance";
 import { createEmptyMeetingSummary, summaryResultToMeetingSummary } from "@/shared/services/ai/storage";
 import { createLocalAiService } from "@/shared/services/tauri/ai";
 import { createLocalMeetingService } from "@/shared/services/tauri/meeting";
-import { createLocalPetService } from "@/shared/services/tauri/pet";
+import { applyLocalPetWorkflowEvent } from "@/shared/services/tauri/pet";
 import { createLocalRuntimeService } from "@/shared/services/tauri/runtime";
 import { createLocalSettingsService } from "@/shared/services/tauri/settings";
 import { createMeetingApi } from "@/shared/services/remote/meetingApi";
@@ -51,7 +51,6 @@ let state: MeetingState = {
 
 const listeners = new Set<() => void>();
 const localAiService = createLocalAiService();
-const localPetService = createLocalPetService();
 const localRuntimeService = createLocalRuntimeService();
 const localSettingsService = createLocalSettingsService();
 let settingsLoadPromise: Promise<void> | null = null;
@@ -294,7 +293,7 @@ async function createJob(input: NewMeetingJobInput) {
       files: [firstFile],
     });
 
-    void localPetService.applyWorkflowEvent({
+    void applyLocalPetWorkflowEvent({
       eventType: "job_created",
       metadata: created.id,
     }).catch(() => undefined);
@@ -307,7 +306,7 @@ async function createJob(input: NewMeetingJobInput) {
   const api = getApi();
   if (api) {
     const created = await api.createJob(input);
-    void localPetService.applyWorkflowEvent({
+    void applyLocalPetWorkflowEvent({
       eventType: "job_created",
       metadata: created.id,
     }).catch(() => undefined);
@@ -451,7 +450,7 @@ function getJobById(id: string) {
 async function saveSummaryRun(run: AiSummaryRun) {
   await localAiService.saveSummaryRun(run);
   if (run.status === "completed") {
-    void localPetService.applyWorkflowEvent({
+    void applyLocalPetWorkflowEvent({
       eventType: "ai_summary_completed",
       metadata: run.jobId,
     }).catch(() => undefined);

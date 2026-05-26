@@ -1,5 +1,9 @@
 import { useSyncExternalStore } from "react";
-import { createLocalPetService } from "@/shared/services/tauri/pet";
+import {
+  applyLocalPetWorkflowEvent,
+  createLocalPetService,
+  PET_STATE_CHANGED_EVENT,
+} from "@/shared/services/tauri/pet";
 import type {
   PetCosmeticUnlock,
   PetEventLedgerEntry,
@@ -32,6 +36,7 @@ let state: PetState = {
 
 const petService = createLocalPetService();
 const listeners = new Set<() => void>();
+let didBindPetStateChangedEvent = false;
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -50,6 +55,7 @@ function setState(patch: Partial<PetState>) {
 }
 
 async function loadPetState(force = false) {
+  bindPetStateChangedEvent();
   if (state.loaded && !force) {
     return;
   }
@@ -103,8 +109,8 @@ async function applyInteraction(action: PetInteractionAction) {
   return profile;
 }
 
-async function applyWorkflowEvent(input: PetWorkflowEventInput) {
-  const profile = await petService.applyWorkflowEvent(input);
+export async function applyPetWorkflowEvent(input: PetWorkflowEventInput) {
+  const profile = await applyLocalPetWorkflowEvent(input);
   const [storeState, events] = await Promise.all([
     petService.getStoreState(),
     petService.listEventLedger(20),
@@ -119,10 +125,24 @@ const actions = {
   saveProfile,
   saveSettings,
   applyInteraction,
-  applyWorkflowEvent,
+  applyWorkflowEvent: applyPetWorkflowEvent,
 };
 
+function bindPetStateChangedEvent() {
+  if (didBindPetStateChangedEvent || typeof window === "undefined") {
+    return;
+  }
+
+  didBindPetStateChangedEvent = true;
+  window.addEventListener(PET_STATE_CHANGED_EVENT, () => {
+    if (state.loaded) {
+      void refresh();
+    }
+  });
+}
+
 export function usePetStore() {
+  bindPetStateChangedEvent();
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const levelSnapshot = snapshot.profile?.levelSnapshot;
 
