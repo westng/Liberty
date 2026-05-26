@@ -379,7 +379,6 @@ fn item_weight(item: &PetStoreCatalogItem) -> i64 {
         "familiar" => 14,
         "grow_together" => 10,
         "deep_bond" => 6,
-        "forever_partner" => 3,
         "bond_forever" => 1,
         _ => 8,
     };
@@ -401,7 +400,6 @@ fn duplicate_compensation_lp(item: &PetStoreCatalogItem) -> i64 {
         "familiar" => 16,
         "grow_together" => 24,
         "deep_bond" => 36,
-        "forever_partner" => 48,
         "bond_forever" => 64,
         _ => 12,
     }

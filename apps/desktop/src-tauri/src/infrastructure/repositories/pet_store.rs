@@ -1,8 +1,9 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde_json::json;
+use std::collections::HashMap;
 
 use crate::{
-    infrastructure::ids,
+    infrastructure::{ids, time::unix_timestamp_millis},
     local_db::{
         pet_leveling, LocalResult, PetEconomyEntry, PetEquipmentState, PetEventLedgerEntry,
         PetInventoryItem, PetMilestoneCounter, PetProfile, PetStoreCatalogItem,
@@ -12,6 +13,8 @@ use crate::{
 
 const PET_ID: &str = "default-pet";
 const LP: &str = "lp";
+pub const GIFT_BOX_ITEM_KEY: &str = "gift-box-tool";
+pub const GIFT_BOX_DAILY_FREE_LIMIT: i64 = 3;
 
 pub fn catalog_items() -> Vec<PetStoreCatalogItem> {
     CATALOG_SEEDS
@@ -251,16 +254,16 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         300,
     ),
     seed(
-        "gift-box-tool",
+        GIFT_BOX_ITEM_KEY,
         "tool",
         "consumable",
         "惊喜礼盒",
         "Gift Box",
-        "下一次完成任务时触发庆祝反馈。",
-        "Triggers a celebration on the next completed job.",
+        "每日可免费领取 3 个，使用后随机开出商店道具、食物、装扮或场景。",
+        "Claim up to 3 free boxes daily. Use one to open a random store item, excluding pets and badges.",
         "grow_together",
-        120,
-        4,
+        0,
+        1,
         "",
         "",
         "gift_box",
@@ -354,7 +357,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "Heart Rings",
         "强化一次深度羁绊互动反馈。",
         "Enhances one deep-bond interaction feedback.",
-        "forever_partner",
+        "bond_forever",
         180,
         7,
         "",
@@ -418,7 +421,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "Rainbow Crystal",
         "用于触发一次高光陪伴反馈。",
         "Triggers one highlight companion feedback.",
-        "forever_partner",
+        "bond_forever",
         200,
         8,
         "deep_bond",
@@ -800,13 +803,13 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "badge",
         "幸运草勋章",
         "Clover Badge",
-        "连续活跃 3 天后自动获得。",
-        "Auto-unlocked after 3 active days.",
+        "连续签到 7 天后获得。",
+        "Earned after a 7-day check-in streak.",
         "familiar",
         0,
         1,
         "",
-        "active_days:3",
+        "check_in_streak:7",
         "clover_badge",
         730,
     ),
@@ -818,7 +821,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "Crystal Summary Badge",
         "完成 20 次 AI 总结后自动获得。",
         "Auto-unlocked after 20 AI summaries.",
-        "forever_partner",
+        "bond_forever",
         0,
         1,
         "",
@@ -832,8 +835,8 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "badge",
         "深深羁绊勋章",
         "Deep Bond Badge",
-        "连续活跃 14 天后自动获得。",
-        "Auto-unlocked after 14 active days.",
+        "累计活跃 14 天后自动获得。",
+        "Auto-unlocked after 14 total active days.",
         "deep_bond",
         0,
         1,
@@ -864,8 +867,8 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "badge",
         "夜灯陪伴勋章",
         "Lantern Badge",
-        "连续使用深色主题 3 天后自动获得。",
-        "Auto-unlocked after 3 dark-theme days.",
+        "累计使用深色主题 3 天后自动获得。",
+        "Auto-unlocked after 3 total dark-theme days.",
         "grow_together",
         0,
         1,
@@ -882,7 +885,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "Laurel Sprout Badge",
         "完成 20 次转写后自动获得。",
         "Auto-unlocked after 20 transcriptions.",
-        "forever_partner",
+        "bond_forever",
         0,
         1,
         "",
@@ -896,8 +899,8 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "badge",
         "月光陪伴勋章",
         "Moon Badge",
-        "连续使用深色主题 7 天后自动获得。",
-        "Auto-unlocked after 7 dark-theme days.",
+        "累计使用深色主题 7 天后自动获得。",
+        "Auto-unlocked after 7 total dark-theme days.",
         "deep_bond",
         0,
         1,
@@ -946,7 +949,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "Companion Center Badge",
         "创建 20 个任务后自动获得。",
         "Auto-unlocked after creating 20 tasks.",
-        "forever_partner",
+        "bond_forever",
         0,
         1,
         "",
@@ -976,13 +979,13 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "badge",
         "一起成长勋章",
         "Growing Together Badge",
-        "连续活跃 7 天后自动获得。",
-        "Auto-unlocked after 7 active days.",
+        "连续签到 14 天后获得。",
+        "Earned after a 14-day check-in streak.",
         "grow_together",
         0,
         1,
         "",
-        "active_days:7",
+        "check_in_streak:14",
         "sprout_badge",
         840,
     ),
@@ -994,7 +997,7 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         "Sun Delivery Badge",
         "导出 30 次结果后自动获得。",
         "Auto-unlocked after 30 exports.",
-        "forever_partner",
+        "bond_forever",
         0,
         1,
         "",
@@ -1124,9 +1127,19 @@ pub fn store_state(conn: &Connection, profile: PetProfile) -> LocalResult<PetSto
     let inventory = list_inventory(conn)?;
     let counters = list_counters(conn)?;
     let economy = list_economy(conn, 20)?;
+    let daily_limits = list_today_daily_limits(conn)?;
     let catalog = catalog_items()
         .into_iter()
-        .map(|item| item_state(item, &profile, &inventory, &counters, &wallet))
+        .map(|item| {
+            item_state(
+                item,
+                &profile,
+                &inventory,
+                &counters,
+                &wallet,
+                &daily_limits,
+            )
+        })
         .collect();
     let equipment = equipment_state(&inventory);
     Ok(PetStoreState {
@@ -1166,6 +1179,10 @@ pub fn purchase_item_tx(
     let counters = list_counters_tx(tx)?;
     if let Some((zh, _en)) = lock_reason(&item, profile, &counters) {
         return Err(zh);
+    }
+    if item.item_key == GIFT_BOX_ITEM_KEY {
+        claim_daily_free_item_tx(tx, &item, quantity, now)?;
+        return Ok(());
     }
     let wallet = load_wallet_tx(tx)?;
     let total_price = item.price_lp * quantity;
@@ -1251,6 +1268,75 @@ pub fn grant_catalog_item_tx(
     Ok(())
 }
 
+pub fn duplicate_compensation_lp_for_item(item: &PetStoreCatalogItem) -> i64 {
+    duplicate_compensation_lp_for_store_item(item)
+}
+
+pub fn find_catalog_item_by_key(item_key: &str) -> Option<PetStoreCatalogItem> {
+    find_catalog_item(item_key)
+}
+
+pub fn current_store_limit_date() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+pub fn load_daily_free_claimed_tx(
+    tx: &Transaction<'_>,
+    item_key: &str,
+    limit_date: &str,
+) -> LocalResult<i64> {
+    tx.query_row(
+        "SELECT free_claimed
+         FROM pet_store_daily_limits
+         WHERE pet_id = ?1 AND item_key = ?2 AND limit_date = ?3",
+        params![PET_ID, item_key, limit_date],
+        |row| row.get(0),
+    )
+    .optional()
+    .map(|value| value.unwrap_or(0))
+    .map_err(|err| err.to_string())
+}
+
+fn claim_daily_free_item_tx(
+    tx: &Transaction<'_>,
+    item: &PetStoreCatalogItem,
+    quantity: i64,
+    now: &str,
+) -> LocalResult<()> {
+    let quantity = quantity.clamp(1, GIFT_BOX_DAILY_FREE_LIMIT);
+    let limit_date = current_store_limit_date();
+    let claimed = load_daily_free_claimed_tx(tx, &item.item_key, &limit_date)?;
+    let remaining = (GIFT_BOX_DAILY_FREE_LIMIT - claimed).max(0);
+    if remaining <= 0 {
+        return Err("今日免费惊喜礼盒已领取完。".into());
+    }
+    if quantity > remaining {
+        return Err(format!("今日免费惊喜礼盒仅剩 {remaining} 个。"));
+    }
+    tx.execute(
+        "INSERT INTO pet_store_daily_limits (
+            pet_id, item_key, limit_date, free_claimed, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(pet_id, item_key, limit_date) DO UPDATE SET
+            free_claimed = pet_store_daily_limits.free_claimed + excluded.free_claimed,
+            updated_at = excluded.updated_at",
+        params![PET_ID, item.item_key, limit_date, quantity, now],
+    )
+    .map_err(|err| err.to_string())?;
+    grant_catalog_item_tx(tx, item, quantity, "daily_free_store", now)?;
+    insert_pet_speech_event_tx(
+        tx,
+        "store_daily_free",
+        &item.item_key,
+        quantity,
+        item,
+        format!("今日免费惊喜礼盒 ×{quantity} 已收好，记得打开看看。"),
+        format!("Free gift box x{quantity} claimed for today. Open it when you are ready."),
+        now,
+    )?;
+    Ok(())
+}
+
 pub fn equip_item_tx(tx: &Transaction<'_>, item_key: &str, now: &str) -> LocalResult<()> {
     let item = load_inventory_item_tx(tx, item_key)?
         .ok_or_else(|| "该商品还不在个人仓库中。".to_string())?;
@@ -1312,6 +1398,10 @@ pub fn use_item_tx(
     if item.quantity < quantity {
         return Err("该道具数量不足。".into());
     }
+    if item.item_key == GIFT_BOX_ITEM_KEY {
+        open_gift_box_tx(tx, now)?;
+        return Ok(());
+    }
     tx.execute(
         "UPDATE pet_inventory
          SET quantity = quantity - ?3, updated_at = ?4
@@ -1357,6 +1447,80 @@ pub fn use_item_tx(
             now,
         )?;
     }
+    Ok(())
+}
+
+pub fn open_gift_box_tx(
+    tx: &Transaction<'_>,
+    now: &str,
+) -> LocalResult<(PetStoreCatalogItem, bool, i64)> {
+    let item = load_inventory_item_tx(tx, GIFT_BOX_ITEM_KEY)?
+        .ok_or_else(|| "惊喜礼盒还不在个人仓库中。".to_string())?;
+    if item.quantity < 1 {
+        return Err("惊喜礼盒数量不足。".into());
+    }
+
+    let pool = gift_box_pool_items_tx(tx)?;
+    if pool.is_empty() {
+        return Err("惊喜礼盒奖池暂时为空。".into());
+    }
+
+    let prize = pick_gift_box_prize(&pool);
+    let duplicate = prize.owned && prize.item.slot != "consumable";
+    let duplicate_compensation_lp = if duplicate {
+        duplicate_compensation_lp_for_store_item(&prize.item)
+    } else {
+        grant_catalog_item_tx(tx, &prize.item, 1, "gift_box_reward", now)?;
+        0
+    };
+
+    if duplicate_compensation_lp > 0 {
+        pet_store_reward_for_duplicate_tx(
+            tx,
+            &format!(
+                "gift-box:{}:{}",
+                prize.item.item_key,
+                ids::timestamped_id("gift-box")
+            ),
+            duplicate_compensation_lp,
+            &prize.item.item_key,
+            now,
+        )?;
+    }
+
+    tx.execute(
+        "UPDATE pet_inventory
+         SET quantity = quantity - 1, updated_at = ?3
+         WHERE pet_id = ?1 AND item_key = ?2 AND quantity >= 1",
+        params![PET_ID, GIFT_BOX_ITEM_KEY, now],
+    )
+    .map_err(|err| err.to_string())?;
+    tx.execute(
+        "DELETE FROM pet_inventory
+         WHERE pet_id = ?1 AND item_key = ?2 AND quantity <= 0",
+        params![PET_ID, GIFT_BOX_ITEM_KEY],
+    )
+    .map_err(|err| err.to_string())?;
+
+    insert_gift_box_event_tx(tx, &prize.item, duplicate, duplicate_compensation_lp, now)?;
+    Ok((prize.item, duplicate, duplicate_compensation_lp))
+}
+
+fn pet_store_reward_for_duplicate_tx(
+    tx: &Transaction<'_>,
+    source_key: &str,
+    lp_amount: i64,
+    item_key: &str,
+    now: &str,
+) -> LocalResult<()> {
+    grant_reward_tx(
+        tx,
+        "gift_box_duplicate",
+        source_key,
+        lp_amount,
+        Some(item_key),
+        now,
+    )?;
     Ok(())
 }
 
@@ -1489,6 +1653,132 @@ fn select_food_dialogue(
 
     lines[dialogue_index_with_time(&item.item_key, growth_value + quantity, now, lines.len())]
         .clone()
+}
+
+#[derive(Clone)]
+struct GiftBoxPrize {
+    item: PetStoreCatalogItem,
+    owned: bool,
+    weight: i64,
+}
+
+fn gift_box_pool_items_tx(tx: &Transaction<'_>) -> LocalResult<Vec<GiftBoxPrize>> {
+    let profile = crate::infrastructure::repositories::pet::load_profile_tx(tx)?;
+    let counters = list_counters_tx(tx)?;
+    let inventory = list_inventory_tx(tx)?;
+    Ok(catalog_items()
+        .into_iter()
+        .filter(|item| {
+            item.enabled
+                && item.item_type != "pet"
+                && item.item_type != "badge"
+                && item.item_key != GIFT_BOX_ITEM_KEY
+                && lock_reason(item, &profile, &counters).is_none()
+        })
+        .map(|item| {
+            let owned = inventory
+                .iter()
+                .any(|inventory_item| inventory_item.item_key == item.item_key);
+            GiftBoxPrize {
+                weight: gift_box_item_weight(&item),
+                item,
+                owned,
+            }
+        })
+        .collect())
+}
+
+fn pick_gift_box_prize(pool: &[GiftBoxPrize]) -> GiftBoxPrize {
+    let total_weight: i64 = pool.iter().map(|item| item.weight.max(1)).sum();
+    let seed = unix_timestamp_millis() as i64 + (pool.len() as i64).saturating_mul(137);
+    let mut cursor = seed.rem_euclid(total_weight.max(1));
+    for item in pool {
+        let weight = item.weight.max(1);
+        if cursor < weight {
+            return item.clone();
+        }
+        cursor -= weight;
+    }
+    pool[0].clone()
+}
+
+fn gift_box_item_weight(item: &PetStoreCatalogItem) -> i64 {
+    let type_weight = match item.item_type.as_str() {
+        "food" => 42,
+        "tool" => 34,
+        "cosmetic" => 16,
+        "theme" => 10,
+        _ => 1,
+    };
+    let rarity_weight = match item.rarity.as_str() {
+        "first_meet" => 18,
+        "familiar" => 14,
+        "grow_together" => 10,
+        "deep_bond" => 6,
+        "bond_forever" => 1,
+        _ => 8,
+    };
+    type_weight * rarity_weight
+}
+
+fn duplicate_compensation_lp_for_store_item(item: &PetStoreCatalogItem) -> i64 {
+    if item.slot == "consumable" {
+        return 0;
+    }
+    if item.price_lp > 0 {
+        return (item.price_lp / 4).clamp(10, 160);
+    }
+    match item.rarity.as_str() {
+        "first_meet" => 10,
+        "familiar" => 16,
+        "grow_together" => 24,
+        "deep_bond" => 36,
+        "bond_forever" => 64,
+        _ => 12,
+    }
+}
+
+fn insert_gift_box_event_tx(
+    tx: &Transaction<'_>,
+    item: &PetStoreCatalogItem,
+    duplicate: bool,
+    compensation_lp: i64,
+    now: &str,
+) -> LocalResult<()> {
+    let event_type = if duplicate {
+        "gift_box_duplicate"
+    } else {
+        "gift_box_reward"
+    };
+    let line_zh = if duplicate {
+        format!(
+            "惊喜礼盒开出了熟悉的「{}」，已转为 {} LP 补偿。",
+            item.name_zh, compensation_lp
+        )
+    } else {
+        format!("惊喜礼盒开出了「{}」，我已经帮你收进仓库。", item.name_zh)
+    };
+    let line_en = if duplicate {
+        format!(
+            "The gift box opened another {}, converted into {} LP.",
+            item.name_en, compensation_lp
+        )
+    } else {
+        format!(
+            "The gift box opened {}. It is now in your inventory.",
+            item.name_en
+        )
+    };
+    insert_pet_speech_event_tx(
+        tx,
+        event_type,
+        GIFT_BOX_ITEM_KEY,
+        if duplicate { compensation_lp } else { 1 },
+        item,
+        line_zh,
+        line_en,
+        now,
+    )
 }
 
 fn is_sweet_food(item_key: &str) -> bool {
@@ -1748,7 +2038,10 @@ fn item_state(
     inventory: &[PetInventoryItem],
     counters: &[PetMilestoneCounter],
     wallet: &PetWallet,
+    daily_limits: &HashMap<String, i64>,
 ) -> PetStoreCatalogItemState {
+    let (daily_free_limit, daily_free_claimed) = daily_free_state_for_item(&item, daily_limits);
+    let daily_free_remaining = (daily_free_limit - daily_free_claimed).max(0);
     let inventory_item = inventory
         .iter()
         .find(|inventory_item| inventory_item.item_key == item.item_key);
@@ -1761,18 +2054,24 @@ fn item_state(
         && (!owned || can_repeat_purchase)
         && locked.is_none()
         && item.item_type != "badge"
-        && wallet.balance >= item.price_lp;
+        && if item.item_key == GIFT_BOX_ITEM_KEY {
+            daily_free_remaining > 0
+        } else {
+            wallet.balance >= item.price_lp
+        };
     let status = if !item.enabled {
         "coming_soon"
     } else if equipped {
         "equipped"
+    } else if item.item_key == GIFT_BOX_ITEM_KEY && daily_free_remaining <= 0 {
+        "daily_limit"
     } else if owned {
         "owned"
     } else if item.item_type == "badge" {
         "achievement"
     } else if locked.is_some() {
         "locked"
-    } else if wallet.balance < item.price_lp {
+    } else if item.item_key != GIFT_BOX_ITEM_KEY && wallet.balance < item.price_lp {
         "insufficient"
     } else {
         "available"
@@ -1785,11 +2084,27 @@ fn item_state(
         equipped,
         quantity,
         growth_value,
+        daily_free_limit,
+        daily_free_claimed,
+        daily_free_remaining,
         purchasable,
         locked_reason_zh,
         locked_reason_en,
         status: status.into(),
     }
+}
+
+fn daily_free_state_for_item(
+    item: &PetStoreCatalogItem,
+    daily_limits: &HashMap<String, i64>,
+) -> (i64, i64) {
+    if item.item_key != GIFT_BOX_ITEM_KEY {
+        return (0, 0);
+    }
+    (
+        GIFT_BOX_DAILY_FREE_LIMIT,
+        daily_limits.get(&item.item_key).copied().unwrap_or(0),
+    )
 }
 
 fn lock_reason(
@@ -1860,6 +2175,7 @@ fn counter_label_zh(counter_key: &str) -> &'static str {
         "summaries_completed" => "完成 AI 总结",
         "exports_completed" => "导出结果",
         "active_days" => "活跃天数",
+        "check_in_streak" => "连续签到",
         "dark_theme_days" => "深色主题使用天数",
         _ => "里程碑",
     }
@@ -1872,6 +2188,7 @@ fn counter_label_en(counter_key: &str) -> &'static str {
         "summaries_completed" => "AI summaries completed",
         "exports_completed" => "Exports completed",
         "active_days" => "Active days",
+        "check_in_streak" => "Check-in streak",
         "dark_theme_days" => "Dark-theme days",
         _ => "Milestone",
     }
@@ -2040,6 +2357,22 @@ fn list_inventory(conn: &Connection) -> LocalResult<Vec<PetInventoryItem>> {
         .map_err(|err| err.to_string())
 }
 
+fn list_inventory_tx(tx: &Transaction<'_>) -> LocalResult<Vec<PetInventoryItem>> {
+    let mut stmt = tx
+        .prepare(
+            "SELECT id, pet_id, item_key, item_type, slot, quantity, equipped, source, purchased_at, updated_at
+             FROM pet_inventory
+             WHERE pet_id = ?1 AND quantity > 0
+             ORDER BY datetime(updated_at) DESC, updated_at DESC",
+        )
+        .map_err(|err| err.to_string())?;
+    let rows = stmt
+        .query_map(params![PET_ID], map_inventory_item)
+        .map_err(|err| err.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())
+}
+
 fn map_inventory_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetInventoryItem> {
     Ok(PetInventoryItem {
         id: row.get(0)?,
@@ -2136,6 +2469,28 @@ fn list_economy(conn: &Connection, limit: usize) -> LocalResult<Vec<PetEconomyEn
         .map_err(|err| err.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|err| err.to_string())
+}
+
+fn list_today_daily_limits(conn: &Connection) -> LocalResult<HashMap<String, i64>> {
+    let limit_date = current_store_limit_date();
+    let mut stmt = conn
+        .prepare(
+            "SELECT item_key, free_claimed
+             FROM pet_store_daily_limits
+             WHERE pet_id = ?1 AND limit_date = ?2",
+        )
+        .map_err(|err| err.to_string())?;
+    let rows = stmt
+        .query_map(params![PET_ID, limit_date], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(|err| err.to_string())?;
+    let mut values = HashMap::new();
+    for row in rows {
+        let (item_key, free_claimed) = row.map_err(|err| err.to_string())?;
+        values.insert(item_key, free_claimed);
+    }
+    Ok(values)
 }
 
 fn map_economy_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetEconomyEntry> {
@@ -2255,6 +2610,7 @@ mod tests {
                 lifetime_spent: 0,
                 updated_at: "".into(),
             },
+            &HashMap::new(),
         );
         assert_eq!(state.status, "achievement");
     }

@@ -268,6 +268,9 @@ pub struct PetStoreCatalogItemState {
     pub equipped: bool,
     pub quantity: i64,
     pub growth_value: i64,
+    pub daily_free_limit: i64,
+    pub daily_free_claimed: i64,
+    pub daily_free_remaining: i64,
     pub purchasable: bool,
     pub locked_reason_zh: String,
     pub locked_reason_en: String,
@@ -336,6 +339,70 @@ pub struct PetBlindBoxDrawResult {
     pub draw: PetBlindBoxDrawEntry,
     pub prize: PetStoreCatalogItem,
     pub duplicate: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetRewardItem {
+    pub item_key: String,
+    pub item_type: String,
+    pub quantity: i64,
+    #[serde(default)]
+    pub duplicate_compensation_lp: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetDailyCheckInEntry {
+    pub id: String,
+    pub pet_id: String,
+    pub check_in_date: String,
+    pub streak_count: i64,
+    pub cycle_day: i64,
+    pub reward_lp: i64,
+    pub growth_value: i64,
+    pub reward_items: Vec<PetRewardItem>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetDailyCheckInRewardPreview {
+    pub cycle_day: i64,
+    pub reward_lp: i64,
+    pub growth_value: i64,
+    pub items: Vec<PetRewardItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetDailyCheckInState {
+    pub check_in_date: String,
+    pub checked_in_today: bool,
+    pub current_streak: i64,
+    pub next_cycle_day: i64,
+    pub cycle_length: i64,
+    pub today_reward: PetDailyCheckInRewardPreview,
+    pub rewards: Vec<PetDailyCheckInRewardPreview>,
+    pub history: Vec<PetDailyCheckInEntry>,
+    pub store_state: PetStoreState,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetDailyCheckInClaimResult {
+    pub state: PetDailyCheckInState,
+    pub entry: PetDailyCheckInEntry,
+    pub duplicate: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetGiftBoxOpenResult {
+    pub state: PetStoreState,
+    pub prize: PetStoreCatalogItem,
+    pub duplicate: bool,
+    pub duplicate_compensation_lp: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

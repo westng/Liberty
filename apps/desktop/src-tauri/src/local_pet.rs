@@ -1,6 +1,7 @@
 use crate::local_db::{
     self, LocalResult, PetBlindBoxDrawResult, PetBlindBoxState, PetCosmeticUnlock,
-    PetEventLedgerEntry, PetProfile, PetSettings, PetStoreState,
+    PetDailyCheckInClaimResult, PetDailyCheckInState, PetEventLedgerEntry, PetGiftBoxOpenResult,
+    PetProfile, PetSettings, PetStoreState,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -125,6 +126,16 @@ pub fn draw_pet_blind_box(app: AppHandle) -> LocalResult<PetBlindBoxDrawResult> 
 }
 
 #[tauri::command]
+pub fn get_pet_daily_check_in_state(app: AppHandle) -> LocalResult<PetDailyCheckInState> {
+    local_db::get_pet_daily_check_in_state(&app)
+}
+
+#[tauri::command]
+pub fn claim_pet_daily_check_in(app: AppHandle) -> LocalResult<PetDailyCheckInClaimResult> {
+    local_db::claim_pet_daily_check_in(&app)
+}
+
+#[tauri::command]
 pub fn purchase_pet_store_item(
     app: AppHandle,
     input: PetStoreItemInput,
@@ -154,6 +165,11 @@ pub fn use_pet_inventory_item(
     input: PetStoreItemInput,
 ) -> LocalResult<PetStoreState> {
     local_db::use_pet_inventory_item(&app, input.item_key.trim(), input.quantity)
+}
+
+#[tauri::command]
+pub fn open_pet_gift_box(app: AppHandle) -> LocalResult<PetGiftBoxOpenResult> {
+    local_db::open_pet_gift_box(&app)
 }
 
 #[tauri::command]
@@ -197,6 +213,7 @@ pub fn apply_pet_workflow_event(
         "ai_summary_completed" => (10, "proud"),
         "export_completed" => (6, "proud"),
         "daily_open" => (2, "idle"),
+        "dark_theme_used" => (0, "idle"),
         _ => (1, "idle"),
     };
 

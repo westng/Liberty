@@ -5,6 +5,7 @@ pub mod job_events;
 pub mod members;
 pub mod pet;
 pub mod pet_blind_box;
+pub mod pet_check_in;
 pub mod pet_store;
 pub mod runtime_state;
 pub mod settings;

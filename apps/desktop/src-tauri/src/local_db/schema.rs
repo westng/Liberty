@@ -255,6 +255,30 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS pet_daily_check_ins (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          check_in_date TEXT NOT NULL,
+          streak_count INTEGER NOT NULL DEFAULT 1,
+          cycle_day INTEGER NOT NULL DEFAULT 1,
+          reward_lp INTEGER NOT NULL DEFAULT 0,
+          growth_value INTEGER NOT NULL DEFAULT 0,
+          reward_items_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          UNIQUE(pet_id, check_in_date),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_store_daily_limits (
+          pet_id TEXT NOT NULL,
+          item_key TEXT NOT NULL,
+          limit_date TEXT NOT NULL,
+          free_claimed INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(pet_id, item_key, limit_date),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS pet_milestone_counters (
           pet_id TEXT NOT NULL,
           counter_key TEXT NOT NULL,
@@ -276,6 +300,8 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         CREATE INDEX IF NOT EXISTS idx_pet_inventory_pet_id ON pet_inventory(pet_id, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_economy_pet_id ON pet_economy_ledger(pet_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_blind_box_draws_pet_date ON pet_blind_box_draws(pet_id, draw_date, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_daily_check_ins_pet_date ON pet_daily_check_ins(pet_id, check_in_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_store_daily_limits_pet_date ON pet_store_daily_limits(pet_id, limit_date DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_milestones_pet_id ON pet_milestone_counters(pet_id, counter_key);
         CREATE INDEX IF NOT EXISTS idx_runtime_state_status ON runtime_state(status);
         ",
@@ -307,6 +333,11 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
     migrate_pet_leveling_255(conn)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn apply_test_schema(conn: &Connection) -> LocalResult<()> {
+    apply_schema(conn)
 }
 
 fn migrate_pet_leveling_255(conn: &Connection) -> LocalResult<()> {

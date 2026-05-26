@@ -40,7 +40,8 @@ export type PetWorkflowEventType =
   | "transcription_completed"
   | "ai_summary_completed"
   | "export_completed"
-  | "daily_open";
+  | "daily_open"
+  | "dark_theme_used";
 
 export interface TranscriptSegment {
   id: string;
@@ -240,10 +241,13 @@ export interface PetStoreCatalogItemState {
   equipped: boolean;
   quantity: number;
   growthValue: number;
+  dailyFreeLimit: number;
+  dailyFreeClaimed: number;
+  dailyFreeRemaining: number;
   purchasable: boolean;
   lockedReasonZh: string;
   lockedReasonEn: string;
-  status: "equipped" | "owned" | "coming_soon" | "locked" | "achievement" | "insufficient" | "available";
+  status: "equipped" | "owned" | "coming_soon" | "locked" | "achievement" | "insufficient" | "daily_limit" | "available";
 }
 
 export interface PetEquipmentState {
@@ -296,6 +300,57 @@ export interface PetBlindBoxDrawResult {
   draw: PetBlindBoxDrawEntry;
   prize: PetStoreCatalogItem;
   duplicate: boolean;
+}
+
+export interface PetRewardItem {
+  itemKey: string;
+  itemType: PetStoreCatalogItem["itemType"];
+  quantity: number;
+  duplicateCompensationLp: number;
+}
+
+export interface PetDailyCheckInEntry {
+  id: string;
+  petId: string;
+  checkInDate: string;
+  streakCount: number;
+  cycleDay: number;
+  rewardLp: number;
+  growthValue: number;
+  rewardItems: PetRewardItem[];
+  createdAt: string;
+}
+
+export interface PetDailyCheckInRewardPreview {
+  cycleDay: number;
+  rewardLp: number;
+  growthValue: number;
+  items: PetRewardItem[];
+}
+
+export interface PetDailyCheckInState {
+  checkInDate: string;
+  checkedInToday: boolean;
+  currentStreak: number;
+  nextCycleDay: number;
+  cycleLength: number;
+  todayReward: PetDailyCheckInRewardPreview;
+  rewards: PetDailyCheckInRewardPreview[];
+  history: PetDailyCheckInEntry[];
+  storeState: PetStoreState;
+}
+
+export interface PetDailyCheckInClaimResult {
+  state: PetDailyCheckInState;
+  entry: PetDailyCheckInEntry;
+  duplicate: boolean;
+}
+
+export interface PetGiftBoxOpenResult {
+  state: PetStoreState;
+  prize: PetStoreCatalogItem;
+  duplicate: boolean;
+  duplicateCompensationLp: number;
 }
 
 export interface PetWorkflowEventInput {

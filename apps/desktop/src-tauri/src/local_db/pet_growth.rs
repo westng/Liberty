@@ -120,6 +120,7 @@ fn reward_rule(event_type: &str, event_source: &str) -> PetRewardRule {
             "transcription_completed" => 18,
             "ai_summary_completed" => 15,
             "export_completed" => 10,
+            "dark_theme_used" => 0,
             _ => 0,
         }
     };
@@ -156,6 +157,7 @@ fn counter_key_for_event(event_source: &str) -> Option<&'static str> {
         "transcription_completed" => Some("transcriptions_completed"),
         "ai_summary_completed" => Some("summaries_completed"),
         "export_completed" => Some("exports_completed"),
+        "dark_theme_used" => Some("dark_theme_days"),
         _ => None,
     }
 }
@@ -220,6 +222,9 @@ fn reward_metadata(
 
 #[cfg(test)]
 mod tests {
+    use crate::infrastructure::repositories::{pet, pet_store};
+    use rusqlite::Connection;
+
     use super::*;
 
     #[test]
@@ -231,5 +236,70 @@ mod tests {
     fn rounds_scaled_rewards() {
         assert_eq!(scaled_amount(12, 1.6), 19);
         assert_eq!(scaled_amount(18, 1.3), 23);
+    }
+
+    #[test]
+    fn first_created_job_unlocks_first_task_badge() {
+        let mut conn = Connection::open_in_memory().expect("in-memory sqlite");
+        crate::local_db::schema::apply_test_schema(&conn).expect("schema");
+
+        let profile = apply_pet_growth_event(
+            &mut conn,
+            "workflow",
+            "job_created",
+            5,
+            "cheerful",
+            Some("job-1"),
+        )
+        .expect("job-created growth event");
+        let state = pet_store::store_state(&conn, profile).expect("store state");
+
+        assert!(state
+            .inventory
+            .iter()
+            .any(|item| item.item_key == "baby-bottle-badge" && item.source == "achievement"));
+        assert_eq!(
+            state
+                .counters
+                .iter()
+                .find(|counter| counter.counter_key == "tasks_created")
+                .map(|counter| counter.counter_value),
+            Some(1)
+        );
+        assert!(pet::list_event_ledger(&conn, 10)
+            .expect("event ledger")
+            .iter()
+            .any(|entry| entry.event_source == "job_created"));
+    }
+
+    #[test]
+    fn dark_theme_usage_counts_once_per_day_without_lp_reward() {
+        let mut conn = Connection::open_in_memory().expect("in-memory sqlite");
+        crate::local_db::schema::apply_test_schema(&conn).expect("schema");
+
+        for _ in 0..2 {
+            apply_pet_growth_event(
+                &mut conn,
+                "workflow",
+                "dark_theme_used",
+                0,
+                "idle",
+                Some("2026-05-22"),
+            )
+            .expect("dark-theme usage event");
+        }
+
+        let profile = pet::load_profile(&conn).expect("profile");
+        let state = pet_store::store_state(&conn, profile).expect("store state");
+
+        assert_eq!(
+            state
+                .counters
+                .iter()
+                .find(|counter| counter.counter_key == "dark_theme_days")
+                .map(|counter| counter.counter_value),
+            Some(1)
+        );
+        assert_eq!(state.wallet.lifetime_earned, 0);
     }
 }

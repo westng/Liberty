@@ -2,7 +2,7 @@ use crate::infrastructure::{
     ids, migrations,
     repositories::{
         ai_models, ai_summary_runs, ai_templates, job_events, members, pet, pet_blind_box,
-        pet_store, runtime_state, settings,
+        pet_check_in, pet_store, runtime_state, settings,
     },
 };
 use rusqlite::{params, Connection};
@@ -505,6 +505,34 @@ pub fn draw_pet_blind_box(app: &AppHandle) -> LocalResult<PetBlindBoxDrawResult>
     pet_blind_box::draw_result(&conn, profile, draw)
 }
 
+pub fn get_pet_daily_check_in_state(app: &AppHandle) -> LocalResult<PetDailyCheckInState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    pet::reconcile_profile_leveling(&conn)?;
+    let profile = pet::load_profile(&conn)?;
+    pet_check_in::daily_check_in_state(&conn, profile)
+}
+
+pub fn claim_pet_daily_check_in(app: &AppHandle) -> LocalResult<PetDailyCheckInClaimResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    let profile = pet::load_profile_tx(&tx)?;
+    let (entry, duplicate) = pet_check_in::claim_daily_check_in_tx(&tx, &profile, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    pet::reconcile_profile_leveling(&conn)?;
+    let profile = pet::load_profile(&conn)?;
+    pet_check_in::claim_result(&conn, profile, entry, duplicate)
+}
+
 pub fn save_pet_profile(app: &AppHandle, profile: &PetProfile) -> LocalResult<PetProfile> {
     init_database(app)?;
     let conn = open_connection(app)?;
@@ -628,6 +656,24 @@ pub fn use_pet_inventory_item(
     tx.commit().map_err(|err| err.to_string())?;
     let profile = pet::load_profile(&conn)?;
     pet_store::store_state(&conn, profile)
+}
+
+pub fn open_pet_gift_box(app: &AppHandle) -> LocalResult<PetGiftBoxOpenResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    let (prize, duplicate, duplicate_compensation_lp) = pet_store::open_gift_box_tx(&tx, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    let profile = pet::load_profile(&conn)?;
+    Ok(PetGiftBoxOpenResult {
+        state: pet_store::store_state(&conn, profile)?,
+        prize,
+        duplicate,
+        duplicate_compensation_lp,
+    })
 }
 
 pub fn save_meeting_member(app: &AppHandle, member: &MeetingMember) -> LocalResult<()> {
