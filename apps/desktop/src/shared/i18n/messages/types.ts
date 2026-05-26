@@ -9,6 +9,7 @@ export type MessageTree = {
     members: string;
     pet: string;
     petStore: string;
+    dailyCheckIn: string;
     dailyBlindBox: string;
     settings: string;
   };
