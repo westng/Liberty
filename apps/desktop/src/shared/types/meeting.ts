@@ -76,6 +76,51 @@ export interface AiSummaryResult {
   followUps: string[];
 }
 
+export interface MeetingMinutesInfo {
+  meetingName: string;
+  meetingTime: string;
+  meetingLocation: string;
+  recorder: string;
+  attendees: string;
+  absentees: string;
+  host: string;
+  reviewer: string;
+}
+
+export interface MeetingMinutesParticipant {
+  speakerLabel: string;
+  memberId: string;
+  resolvedName: string;
+  department: string;
+  sortOrder: number;
+  originalIndex: number;
+  matchStatus: string;
+}
+
+export interface MeetingMinutesSpeakerReport {
+  speakerLabel: string;
+  memberId: string;
+  resolvedName: string;
+  department: string;
+  sortOrder: number;
+  originalIndex: number;
+  matchStatus: string;
+  weeklySummary: string[];
+  nextWeekPlan: string[];
+  summary: string[];
+}
+
+export interface MeetingMinutesPayload {
+  schemaVersion: number;
+  templateId: string;
+  sourceSummaryRunId?: string;
+  meetingInfo: MeetingMinutesInfo;
+  participants: MeetingMinutesParticipant[];
+  speakerReports: MeetingMinutesSpeakerReport[];
+  topics: string[];
+  globalSummary: string[];
+}
+
 export interface AiModelConfig {
   id: string;
   name: string;
@@ -371,6 +416,7 @@ export interface AiSummaryRun {
   promptPreview?: string;
   rawResponse?: string;
   result?: AiSummaryResult;
+  minutesPayload?: MeetingMinutesPayload;
   createdAt: string;
   updatedAt: string;
 }

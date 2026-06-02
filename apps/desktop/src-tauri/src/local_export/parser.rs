@@ -34,23 +34,23 @@ pub fn parse_overview_to_export_data(overview: &str) -> ExportDocData {
         }
 
         if !in_speech {
-            if let Some(value) = line.strip_prefix("会议名称：") {
+            if let Some(value) = strip_labeled_value(line, "会议名称") {
                 data.meeting_name = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("会议时间：") {
+            } else if let Some(value) = strip_labeled_value(line, "会议时间") {
                 data.meeting_time = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("会议地点：") {
+            } else if let Some(value) = strip_labeled_value(line, "会议地点") {
                 data.meeting_location = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("记录人：") {
+            } else if let Some(value) = strip_labeled_value(line, "记录人") {
                 data.recorder = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("出席人员：") {
+            } else if let Some(value) = strip_labeled_value(line, "出席人员") {
                 data.attendees = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("缺席人员：") {
+            } else if let Some(value) = strip_labeled_value(line, "缺席人员") {
                 data.absentees = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("主要议题：") {
+            } else if let Some(value) = strip_labeled_value(line, "主要议题") {
                 data.topics = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("会议主持人：") {
+            } else if let Some(value) = strip_labeled_value(line, "会议主持人") {
                 data.host = value.trim().to_string();
-            } else if let Some(value) = line.strip_prefix("审阅：") {
+            } else if let Some(value) = strip_labeled_value(line, "审阅") {
                 data.reviewer = value.trim().to_string();
             }
             continue;
@@ -71,7 +71,7 @@ pub fn parse_overview_to_export_data(overview: &str) -> ExportDocData {
             continue;
         }
 
-        match line.trim_end_matches('：') {
+        match trim_section_label(line) {
             "上周总结" => {
                 current_section = Some(SpeechSection::WeeklySummary);
                 continue;
@@ -129,9 +129,25 @@ pub fn parse_overview_to_export_data(overview: &str) -> ExportDocData {
     data
 }
 
+fn strip_labeled_value<'a>(line: &'a str, label: &str) -> Option<&'a str> {
+    line.trim()
+        .strip_prefix(label)
+        .and_then(|value| value.trim_start().strip_prefix(['：', ':']))
+}
+
+fn trim_section_label(line: &str) -> &str {
+    line.trim().trim_end_matches(['：', ':']).trim()
+}
+
 pub fn parse_speaker_header(line: &str) -> Option<(String, String)> {
-    let normalized = line.trim().replace('：', ":");
+    let original = line.trim();
+    if starts_with_numbered_item(original) {
+        return None;
+    }
+
+    let normalized = original.replace('：', ":");
     let (left, right) = normalized.split_once(':')?;
+    let raw_department = left.trim();
     let department = left
         .trim()
         .trim_start_matches('【')
@@ -147,7 +163,24 @@ pub fn parse_speaker_header(line: &str) -> Option<(String, String)> {
         return None;
     }
 
+    if !is_bracketed_label(raw_department) && !looks_like_department_label(department) {
+        return None;
+    }
+
     Some((department.to_string(), name.to_string()))
+}
+
+fn is_bracketed_label(value: &str) -> bool {
+    value.starts_with('【') && value.ends_with('】')
+}
+
+fn looks_like_department_label(value: &str) -> bool {
+    [
+        "部", "办", "室", "中心", "组", "科", "处", "局", "院", "园", "厅", "店", "前台",
+        "客房", "温泉", "营销", "财务", "行政", "人事", "工程", "保安", "餐饮",
+    ]
+    .iter()
+    .any(|keyword| value.contains(keyword))
 }
 
 pub fn is_missing_value(value: &str) -> bool {

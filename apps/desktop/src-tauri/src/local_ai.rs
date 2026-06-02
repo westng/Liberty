@@ -4,7 +4,7 @@ mod response;
 
 use crate::local_db::{
     self, AiModelConfig, AiSummaryResult, AiSummaryRun, AiSummaryTemplate, LocalResult, MeetingJob,
-    MeetingMember,
+    MeetingMember, MeetingMinutesPayload,
 };
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -51,6 +51,7 @@ pub struct GenerateAiSummaryOutput {
     pub prompt_preview: String,
     pub raw_response: String,
     pub result: AiSummaryResult,
+    pub minutes_payload: MeetingMinutesPayload,
 }
 
 #[tauri::command]
@@ -128,12 +129,22 @@ pub async fn generate_ai_summary(
     })
     .await?;
 
+    let result = parse_ai_summary_result(&completion.raw_response, &input.job.title)?;
+    let minutes_payload = crate::local_export::derive_meeting_minutes_payload(
+        &input.job,
+        &result,
+        &input.members,
+        &input.template.id,
+        None,
+    );
+
     Ok(GenerateAiSummaryOutput {
         prompt_preview: format!(
             "{}\n\n---\n\n{}",
             prompt_preview.system, prompt_preview.user
         ),
-        result: parse_ai_summary_result(&completion.raw_response, &input.job.title)?,
+        result,
+        minutes_payload,
         raw_response: completion.raw_response,
     })
 }

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentMessages } from "@/shared/i18n";
 import type {
   AiModelConfig,
+  MeetingMinutesPayload,
   AiSummaryResult,
   AiSummaryTemplate,
   MeetingJob,
@@ -27,6 +28,7 @@ export async function generateAiSummary(input: GenerateAiSummaryInput) {
       promptPreview: string;
       rawResponse: string;
       result: AiSummaryResult;
+      minutesPayload: MeetingMinutesPayload;
     }>("generate_ai_summary", { input });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

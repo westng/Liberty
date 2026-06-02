@@ -71,6 +71,96 @@ pub struct AiSummaryResult {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct MeetingMinutesInfo {
+    #[serde(default)]
+    pub meeting_name: String,
+    #[serde(default)]
+    pub meeting_time: String,
+    #[serde(default)]
+    pub meeting_location: String,
+    #[serde(default)]
+    pub recorder: String,
+    #[serde(default)]
+    pub attendees: String,
+    #[serde(default)]
+    pub absentees: String,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub reviewer: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingMinutesParticipant {
+    #[serde(default)]
+    pub speaker_label: String,
+    #[serde(default)]
+    pub member_id: String,
+    #[serde(default)]
+    pub resolved_name: String,
+    #[serde(default)]
+    pub department: String,
+    #[serde(default)]
+    pub sort_order: i64,
+    #[serde(default)]
+    pub original_index: usize,
+    #[serde(default)]
+    pub match_status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingMinutesSpeakerReport {
+    #[serde(default)]
+    pub speaker_label: String,
+    #[serde(default)]
+    pub member_id: String,
+    #[serde(default)]
+    pub resolved_name: String,
+    #[serde(default)]
+    pub department: String,
+    #[serde(default)]
+    pub sort_order: i64,
+    #[serde(default)]
+    pub original_index: usize,
+    #[serde(default)]
+    pub match_status: String,
+    #[serde(default)]
+    pub weekly_summary: Vec<String>,
+    #[serde(default)]
+    pub next_week_plan: Vec<String>,
+    #[serde(default)]
+    pub summary: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingMinutesPayload {
+    #[serde(default = "default_minutes_schema_version")]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub template_id: String,
+    #[serde(default)]
+    pub source_summary_run_id: Option<String>,
+    #[serde(default)]
+    pub meeting_info: MeetingMinutesInfo,
+    #[serde(default)]
+    pub participants: Vec<MeetingMinutesParticipant>,
+    #[serde(default)]
+    pub speaker_reports: Vec<MeetingMinutesSpeakerReport>,
+    #[serde(default)]
+    pub topics: Vec<String>,
+    #[serde(default)]
+    pub global_summary: Vec<String>,
+}
+
+fn default_minutes_schema_version() -> u32 {
+    1
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct AiModelConfig {
     pub id: String,
     pub name: String,
@@ -430,6 +520,7 @@ pub struct AiSummaryRun {
     pub prompt_preview: Option<String>,
     pub raw_response: Option<String>,
     pub result: Option<AiSummaryResult>,
+    pub minutes_payload: Option<MeetingMinutesPayload>,
     pub created_at: String,
     pub updated_at: String,
 }

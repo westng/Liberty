@@ -9,9 +9,7 @@ use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::local_db::LocalResult;
 use crate::local_export::model::{ExportDocData, SpeechBlock};
-use crate::local_export::parser::{
-    is_missing_value, starts_with_numbered_item, trim_numbered_prefix,
-};
+use crate::local_export::parser::{is_missing_value, starts_with_numbered_item};
 use crate::local_export::xml::{
     child_elements, child_elements_count, child_elements_mut, clone_with_text, find_child_mut,
     local_name, remove_last_child_element, set_cell_value, set_first_text,
@@ -152,7 +150,6 @@ fn fill_speech_row(row: &mut Element, block: &SpeechBlock) -> LocalResult<()> {
 
     let heading_template = paragraphs[0].clone();
     let item_template = paragraphs[1].clone();
-    let summary_template = paragraphs[12].clone();
 
     content_cell.children.retain(
         |node| !matches!(node, XMLNode::Element(element) if local_name(&element.name) == "p"),
@@ -168,13 +165,6 @@ fn fill_speech_row(row: &mut Element, block: &SpeechBlock) -> LocalResult<()> {
         clone_with_text(&heading_template, "本周计划："),
     );
     append_section_items(content_cell, &block.next_week_plan, &item_template);
-    append_paragraph(content_cell, clone_with_text(&heading_template, "总结："));
-    let summary_items = if block.summary.is_empty() {
-        synthesize_summary(block)
-    } else {
-        block.summary.clone()
-    };
-    append_section_items(content_cell, &summary_items, &summary_template);
 
     Ok(())
 }
@@ -208,41 +198,4 @@ fn fallback_text(value: &str, fallback: &str) -> String {
     } else {
         value.trim().to_string()
     }
-}
-
-fn synthesize_summary(block: &SpeechBlock) -> Vec<String> {
-    let mut items = Vec::new();
-
-    if !block.weekly_summary.is_empty() {
-        items.push(format!(
-            "已完成{}项上周工作：{}",
-            block.weekly_summary.len(),
-            join_summary_items(&block.weekly_summary)
-        ));
-    }
-
-    if !block.next_week_plan.is_empty() {
-        items.push(format!(
-            "本周重点推进{}项事项：{}",
-            block.next_week_plan.len(),
-            join_summary_items(&block.next_week_plan)
-        ));
-    }
-
-    items
-}
-
-fn join_summary_items(items: &[String]) -> String {
-    items
-        .iter()
-        .map(|item| {
-            trim_numbered_prefix(item)
-                .trim_end_matches('。')
-                .trim_end_matches('；')
-                .trim()
-                .to_string()
-        })
-        .filter(|item| !item.is_empty())
-        .collect::<Vec<_>>()
-        .join("；")
 }

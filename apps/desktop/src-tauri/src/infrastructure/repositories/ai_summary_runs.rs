@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, Transaction};
 
-use crate::local_db::{AiSummaryResult, AiSummaryRun, LocalResult};
+use crate::local_db::{AiSummaryResult, AiSummaryRun, LocalResult, MeetingMinutesPayload};
 
 pub fn list_summary_runs(conn: &Connection, job_id: &str) -> LocalResult<Vec<AiSummaryRun>> {
     let mut stmt = conn
@@ -8,6 +8,7 @@ pub fn list_summary_runs(conn: &Connection, job_id: &str) -> LocalResult<Vec<AiS
             "SELECT id, job_id, COALESCE(model_config_id, ''), COALESCE(template_id, ''),
                     include_speaker, include_timestamp, extra_instructions, status,
                     error_message, prompt_preview, raw_response, result_json,
+                    minutes_payload_json,
                     created_at, updated_at
              FROM ai_summary_runs
              WHERE job_id = ?1
@@ -21,6 +22,10 @@ pub fn list_summary_runs(conn: &Connection, job_id: &str) -> LocalResult<Vec<AiS
             let result = result_json
                 .as_deref()
                 .and_then(|value| serde_json::from_str::<AiSummaryResult>(value).ok());
+            let minutes_payload_json: Option<String> = row.get(12)?;
+            let minutes_payload = minutes_payload_json
+                .as_deref()
+                .and_then(|value| serde_json::from_str::<MeetingMinutesPayload>(value).ok());
 
             Ok(AiSummaryRun {
                 id: row.get(0)?,
@@ -35,8 +40,9 @@ pub fn list_summary_runs(conn: &Connection, job_id: &str) -> LocalResult<Vec<AiS
                 prompt_preview: row.get(9)?,
                 raw_response: row.get(10)?,
                 result,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
+                minutes_payload,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
             })
         })
         .map_err(|err| err.to_string())?;
@@ -51,13 +57,18 @@ pub fn save_summary_run(conn: &Connection, run: &AiSummaryRun) -> LocalResult<()
         .as_ref()
         .map(|value| serde_json::to_string(value).map_err(|err| err.to_string()))
         .transpose()?;
+    let minutes_payload_json = run
+        .minutes_payload
+        .as_ref()
+        .map(|value| serde_json::to_string(value).map_err(|err| err.to_string()))
+        .transpose()?;
 
     conn.execute(
         "INSERT INTO ai_summary_runs (
             id, job_id, model_config_id, template_id, include_speaker, include_timestamp,
             extra_instructions, status, error_message, prompt_preview, raw_response,
-            result_json, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            result_json, minutes_payload_json, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT(id) DO UPDATE SET
             job_id = excluded.job_id,
             model_config_id = excluded.model_config_id,
@@ -70,6 +81,7 @@ pub fn save_summary_run(conn: &Connection, run: &AiSummaryRun) -> LocalResult<()
             prompt_preview = excluded.prompt_preview,
             raw_response = excluded.raw_response,
             result_json = excluded.result_json,
+            minutes_payload_json = excluded.minutes_payload_json,
             created_at = excluded.created_at,
             updated_at = excluded.updated_at",
         params![
@@ -85,6 +97,7 @@ pub fn save_summary_run(conn: &Connection, run: &AiSummaryRun) -> LocalResult<()
             run.prompt_preview,
             run.raw_response,
             result_json,
+            minutes_payload_json,
             run.created_at,
             run.updated_at
         ],
@@ -100,13 +113,18 @@ pub fn save_summary_run_tx(tx: &Transaction<'_>, run: &AiSummaryRun) -> LocalRes
         .as_ref()
         .map(|value| serde_json::to_string(value).map_err(|err| err.to_string()))
         .transpose()?;
+    let minutes_payload_json = run
+        .minutes_payload
+        .as_ref()
+        .map(|value| serde_json::to_string(value).map_err(|err| err.to_string()))
+        .transpose()?;
 
     tx.execute(
         "INSERT OR REPLACE INTO ai_summary_runs (
             id, job_id, model_config_id, template_id, include_speaker, include_timestamp,
             extra_instructions, status, error_message, prompt_preview, raw_response,
-            result_json, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            result_json, minutes_payload_json, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             run.id,
             run.job_id,
@@ -120,6 +138,7 @@ pub fn save_summary_run_tx(tx: &Transaction<'_>, run: &AiSummaryRun) -> LocalRes
             run.prompt_preview,
             run.raw_response,
             result_json,
+            minutes_payload_json,
             run.created_at,
             run.updated_at
         ],

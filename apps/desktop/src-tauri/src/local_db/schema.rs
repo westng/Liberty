@@ -132,6 +132,7 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           prompt_preview TEXT,
           raw_response TEXT,
           result_json TEXT,
+          minutes_payload_json TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
@@ -326,6 +327,7 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         "ALTER TABLE app_settings ADD COLUMN local_asr_threads INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE app_settings ADD COLUMN local_asr_batch_size_seconds INTEGER NOT NULL DEFAULT 300",
         "ALTER TABLE ai_model_configs ADD COLUMN api_key_ref TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE ai_summary_runs ADD COLUMN minutes_payload_json TEXT",
     ] {
         migrations::add_column_if_missing(conn, statement)?;
     }

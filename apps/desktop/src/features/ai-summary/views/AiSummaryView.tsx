@@ -182,6 +182,7 @@ export default function AiSummaryView() {
       status: "running",
       promptPreview: undefined,
       result: undefined,
+      minutesPayload: undefined,
     });
 
     await meetingStore.saveSummaryRun(pendingRun);
@@ -197,6 +198,9 @@ export default function AiSummaryView() {
         members,
         extraInstructions: extraInstructions.trim(),
       });
+      const minutesPayload = response.minutesPayload
+        ? { ...response.minutesPayload, sourceSummaryRunId: pendingRun.id }
+        : undefined;
 
       await meetingStore.saveSummaryRun({
         ...pendingRun,
@@ -204,6 +208,7 @@ export default function AiSummaryView() {
         promptPreview: response.promptPreview,
         rawResponse: response.rawResponse,
         result: response.result,
+        minutesPayload,
       });
       await meetingStore.setActiveSummaryRun(pendingRun.jobId, pendingRun.id);
       setSelectedRunId(pendingRun.id);

@@ -126,6 +126,7 @@ fn imported_summary_run(job: &MeetingJob) -> AiSummaryRun {
             risks: job.summary.risks.clone(),
             follow_ups: job.summary.follow_ups.clone(),
         }),
+        minutes_payload: None,
         created_at: job.created_at.clone(),
         updated_at: job.created_at.clone(),
     }
