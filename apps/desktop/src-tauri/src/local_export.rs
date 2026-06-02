@@ -109,7 +109,8 @@ fn build_export_doc_data_from_source(
         .minutes_payload
         .as_ref()
         .filter(|payload| {
-            minutes_payload_content_score(payload) >= minutes_payload_content_score(&derived_payload)
+            minutes_payload_content_score(payload)
+                >= minutes_payload_content_score(&derived_payload)
         })
         .cloned()
         .unwrap_or(derived_payload);
@@ -345,7 +346,9 @@ fn resolve_speech_blocks(
 }
 
 fn speech_block_has_content(block: &SpeechBlock) -> bool {
-    !block.weekly_summary.is_empty() || !block.next_week_plan.is_empty() || !block.summary.is_empty()
+    !block.weekly_summary.is_empty()
+        || !block.next_week_plan.is_empty()
+        || !block.summary.is_empty()
 }
 
 fn minutes_payload_content_score(payload: &MeetingMinutesPayload) -> usize {
@@ -450,10 +453,7 @@ fn find_member_for_report<'a>(
         .or_else(|| find_member_for_name(members, &report.speaker_label))
 }
 
-fn find_member_for_name<'a>(
-    members: &'a [MeetingMember],
-    name: &str,
-) -> Option<&'a MeetingMember> {
+fn find_member_for_name<'a>(members: &'a [MeetingMember], name: &str) -> Option<&'a MeetingMember> {
     let normalized_name = normalize_member_name(name);
     members
         .iter()
