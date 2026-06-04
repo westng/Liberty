@@ -1,4 +1,5 @@
 use flate2::read::GzDecoder;
+use reqwest::blocking::Client;
 use sevenz_rust2::decompress_file;
 use sha2::{Digest, Sha256};
 use std::{
@@ -38,36 +39,57 @@ pub fn reset_runtime_workspace(
     fs::write(runtime_root.join("install.log"), []).map_err(|err| err.to_string())
 }
 
-pub fn stage_bundled_asset(
-    source_path: &Path,
+pub fn download_remote_asset(
+    download_url: &str,
     target_path: &Path,
     log_path: &Path,
     description: &str,
 ) -> LocalResult<()> {
-    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
-    let total_bytes = source_path.metadata().map_err(|err| err.to_string())?.len();
-    append_install_log_line(
-        log_path,
-        &format!(
-            "[runtime] bundled asset size {} MB from {}",
-            bytes_to_mb(total_bytes),
-            source_path.display()
-        ),
-    )?;
+    let trimmed_url = download_url.trim();
+    if trimmed_url.is_empty() {
+        return Err(format!("{description} 缺少下载地址。"));
+    }
 
-    let temp_path = target_path.with_extension("copying");
+    append_install_log_line(log_path, &format!("[runtime] {description}"))?;
+    append_install_log_line(log_path, &format!("[runtime] download url {trimmed_url}"))?;
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    let temp_path = target_path.with_extension("download");
     let _ = fs::remove_file(&temp_path);
     let _ = fs::remove_file(target_path);
 
-    let mut source = File::open(source_path).map_err(|err| err.to_string())?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(60 * 30))
+        .build()
+        .map_err(|err| err.to_string())?;
+    let mut response = client
+        .get(trimmed_url)
+        .send()
+        .map_err(|err| err.to_string())?
+        .error_for_status()
+        .map_err(|err| err.to_string())?;
+    let total_bytes = response.content_length().unwrap_or(0);
+    if total_bytes > 0 {
+        append_install_log_line(
+            log_path,
+            &format!(
+                "[runtime] remote asset size {} MB",
+                bytes_to_mb(total_bytes)
+            ),
+        )?;
+    }
+
     let mut target = File::create(&temp_path).map_err(|err| err.to_string())?;
     let mut buffer = vec![0u8; 1024 * 1024];
-    let mut copied_bytes: u64 = 0;
+    let mut downloaded_bytes: u64 = 0;
     let mut last_logged_bytes: u64 = 0;
     let mut last_log_at = Instant::now();
 
     loop {
-        let read = source.read(&mut buffer).map_err(|err| err.to_string())?;
+        let read = response.read(&mut buffer).map_err(|err| err.to_string())?;
         if read == 0 {
             break;
         }
@@ -75,21 +97,31 @@ pub fn stage_bundled_asset(
         target
             .write_all(&buffer[..read])
             .map_err(|err| err.to_string())?;
-        copied_bytes += read as u64;
+        downloaded_bytes += read as u64;
 
-        let should_log = copied_bytes.saturating_sub(last_logged_bytes) >= 64 * 1024 * 1024
+        let should_log = downloaded_bytes.saturating_sub(last_logged_bytes) >= 64 * 1024 * 1024
             || last_log_at.elapsed() >= Duration::from_secs(5);
-        if should_log && total_bytes > 0 {
-            append_install_log_line(
-                log_path,
-                &format!(
-                    "[runtime] staging progress {} / {} MB ({:.1}%)",
-                    bytes_to_mb(copied_bytes),
-                    bytes_to_mb(total_bytes),
-                    copied_bytes as f64 / total_bytes as f64 * 100.0
-                ),
-            )?;
-            last_logged_bytes = copied_bytes;
+        if should_log {
+            if total_bytes > 0 {
+                append_install_log_line(
+                    log_path,
+                    &format!(
+                        "[runtime] download progress {} / {} MB ({:.1}%)",
+                        bytes_to_mb(downloaded_bytes),
+                        bytes_to_mb(total_bytes),
+                        downloaded_bytes as f64 / total_bytes as f64 * 100.0
+                    ),
+                )?;
+            } else {
+                append_install_log_line(
+                    log_path,
+                    &format!(
+                        "[runtime] download progress {} MB",
+                        bytes_to_mb(downloaded_bytes)
+                    ),
+                )?;
+            }
+            last_logged_bytes = downloaded_bytes;
             last_log_at = Instant::now();
         }
     }
@@ -112,7 +144,7 @@ pub fn verify_bundled_asset_sha256(
         return Ok(());
     }
 
-    append_install_log_line(log_path, "[runtime] verifying bundled asset checksum")?;
+    append_install_log_line(log_path, "[runtime] verifying runtime asset checksum")?;
     let mut file = File::open(path).map_err(|err| err.to_string())?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];

@@ -17,7 +17,7 @@ calamine = "0.24"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 docx-rs = "0.4"
 flate2 = "1.1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rust_xlsxwriter = "0.79"
 rusqlite = { version = "0.31", features = ["bundled"] }
 semver = "1.0"

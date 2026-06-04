@@ -14,8 +14,7 @@
     "targets": "all",
     "resources": {
       "../src/assets/images/action/": "pet",
-      "../../../python/funasr-runner/": "scripts",
-      "../../../runtime-bundles/": "runtime-bundles"
+      "../../../python/funasr-runner/": "scripts"
     },
     "icon": [
       "icons/32x32.png",

@@ -216,7 +216,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-      LIBERTY_RUNTIME_BUNDLE_READY: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -298,11 +297,6 @@ jobs:
           );
           NODE
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -318,13 +312,6 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
 
-      - name: Prepare Bundled Runtime
-        shell: bash
-        run: |
-          python scripts/prepare_runtime_bundle.py \
-            --platform-id "${{ matrix.platform_id }}" \
-            --output-dir "runtime-bundles/${{ matrix.platform_id }}"
-
       - name: Build Tauri Bundle
         shell: bash
         run: pnpm --dir apps/desktop tauri build --target ${{ matrix.rust_target }}
@@ -333,7 +320,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          find runtime-bundles -maxdepth 3 -type f -print || true
           find target -maxdepth 6 -type d -name bundle -print || true
           find target -maxdepth 8 -type f \( -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.msi" -o -name "*.zip" \) -print || true
 

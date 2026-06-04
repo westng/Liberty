@@ -117,26 +117,27 @@ function runtimeProgress(status: ManagedRuntimeStatus, log: string, messages: Me
   let percent = status.status === "installing" ? 4 : 0;
   let label = messages.runtimeInstallPreparing;
   const lastStageProgress = Array.from(
-    log.matchAll(/\[runtime\] staging progress .*?\(([\d.]+)%\)/g),
+    log.matchAll(/\[runtime\] (?:staging|download) progress .*?\(([\d.]+)%\)/g),
   ).at(-1)?.[1];
 
   if (lastStageProgress) {
     percent = Math.max(percent, Math.min(52, Math.round(Number(lastStageProgress) * 0.52)));
     label = messages.runtimeInstallDownload;
-  } else if (normalized.includes("[runtime] staging bundled ")) {
+  } else if (normalized.includes("[runtime] downloading ")) {
     percent = Math.max(percent, 16);
     label = messages.runtimeInstallDownload;
   }
 
   const stageWeights = [
-    ["[runtime] locating bundled runtime resources", 8, messages.runtimeInstallPreparing],
-    ["[runtime] staging bundled Python runtime", 22, messages.runtimeInstallDownload],
-    ["[runtime] verifying bundled asset checksum", 32, messages.runtimeInstallVerify],
+    ["[runtime] locating remote runtime resources", 8, messages.runtimeInstallPreparing],
+    ["[runtime] downloading Python runtime", 22, messages.runtimeInstallDownload],
+    ["[runtime] verifying runtime asset checksum", 32, messages.runtimeInstallVerify],
     ["[runtime] extracting python runtime archive", 44, messages.runtimeInstallExtract],
     ["[runtime] resolved python=", 54, messages.runtimeInstallResolvePython],
-    ["Validating bundled Python runtime", 66, messages.runtimeInstallBootstrapPip],
-    ["[runtime] staging bundled FFmpeg runtime", 76, messages.runtimeInstallUpgradePip],
+    ["Validating Python runtime", 66, messages.runtimeInstallBootstrapPip],
+    ["[runtime] downloading FFmpeg runtime", 76, messages.runtimeInstallUpgradePip],
     ["Validating ffmpeg runtime", 84, messages.runtimeInstallPytorch],
+    ["[runtime] downloading ASR models bundle", 90, messages.runtimeInstallModels],
     ["Downloading default ASR models", 94, messages.runtimeInstallModels],
     ["Downloading default Sherpa-ONNX model", 94, messages.runtimeInstallModels],
   ] as const;

@@ -1,0 +1,137 @@
+name: Build Runtime Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_tag:
+        description: "Runtime Release tag, for example runtime-2026.06.04-remote.1"
+        required: true
+        type: string
+        default: "runtime-2026.06.04-remote.1"
+      publish_release:
+        description: "Upload assets to the runtime GitHub Release"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build_runtime:
+    name: Build Runtime (${{ matrix.platform_id }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform_id: darwin-aarch64
+            os: macos-latest
+          - platform_id: darwin-x64
+            os: macos-15-intel
+          - platform_id: windows-x64
+            os: windows-2022
+          - platform_id: windows-x86
+            os: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Prepare Runtime Bundle
+        shell: bash
+        env:
+          PLATFORM_ID: ${{ matrix.platform_id }}
+        run: |
+          python scripts/prepare_runtime_bundle.py \
+            --platform-id "${PLATFORM_ID}" \
+            --output-dir "runtime-bundles/${PLATFORM_ID}"
+
+      - name: Stage Runtime Assets
+        shell: bash
+        env:
+          PLATFORM_ID: ${{ matrix.platform_id }}
+          RUNTIME_TAG: ${{ inputs.runtime_tag }}
+        run: |
+          runtime_version="${RUNTIME_TAG#runtime-}"
+          source_dir="runtime-bundles/${PLATFORM_ID}"
+          upload_dir="runtime-upload"
+          mkdir -p "${upload_dir}"
+
+          cp "${source_dir}/python-runtime.tar.gz" \
+            "${upload_dir}/liberty-runtime-${runtime_version}-${PLATFORM_ID}-python-runtime.tar.gz"
+          cp "${source_dir}/ffmpeg-runtime.tar.gz" \
+            "${upload_dir}/liberty-runtime-${runtime_version}-${PLATFORM_ID}-ffmpeg-runtime.tar.gz"
+
+          if [[ -f "${source_dir}/models-runtime.tar.gz" ]]; then
+            cp "${source_dir}/models-runtime.tar.gz" \
+              "${upload_dir}/liberty-runtime-${runtime_version}-${PLATFORM_ID}-models-runtime.tar.gz"
+          fi
+
+          python <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          lines = []
+          for path in sorted(Path("runtime-upload").glob("*")):
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              lines.append(f"{digest}  {path.name}")
+          platform_id = "${{ matrix.platform_id }}"
+          Path(f"runtime-upload/SHA256SUMS-{platform_id}.txt").write_text(
+              "\n".join(lines) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          find "${upload_dir}" -maxdepth 1 -type f -print | sort
+
+      - name: Upload Runtime Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-${{ matrix.platform_id }}
+          path: runtime-upload/*
+          if-no-files-found: error
+
+  publish_runtime:
+    name: Publish Runtime Release
+    needs: build_runtime
+    runs-on: ubuntu-latest
+    if: ${{ inputs.publish_release == true }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Runtime Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: runtime-assets
+
+      - name: Publish Runtime Assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_TAG: ${{ inputs.runtime_tag }}
+        run: |
+          mapfile -t assets < <(find runtime-assets -type f | sort)
+          if [[ "${#assets[@]}" == "0" ]]; then
+            echo "::error::未找到可上传的运行时资源。"
+            exit 1
+          fi
+
+          if ! gh release view "${RUNTIME_TAG}" >/dev/null 2>&1; then
+            gh release create "${RUNTIME_TAG}" \
+              --title "Liberty Runtime ${RUNTIME_TAG#runtime-}" \
+              --notes "外置 Python、FFmpeg 与模型运行环境资源。"
+          fi
+
+          printf "%s\0" "${assets[@]}" | xargs -0 -n 1 -P 4 bash -c '
+            asset="$1"
+            echo "::group::Upload $(basename "$asset")"
+            gh release upload "$RUNTIME_TAG" "$asset" --clobber
+            echo "::endgroup::"
+          ' _

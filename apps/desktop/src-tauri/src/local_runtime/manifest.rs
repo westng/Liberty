@@ -32,6 +32,7 @@ pub struct PlatformRuntime {
 #[serde(rename_all = "camelCase")]
 pub struct BundledAsset {
     pub file_name: String,
+    pub download_url: String,
     #[serde(default)]
     pub sha256: String,
 }

@@ -8,11 +8,9 @@
     "dev:web": "vite",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "check": "pnpm run typecheck && pnpm run build:web",
-    "prepare:runtime-bundle:if-missing": "node ../../scripts/prepare-runtime-bundle.mjs --if-missing",
-    "dev": "pnpm run prepare:runtime-bundle:if-missing && pnpm run dev:web",
+    "dev": "pnpm run dev:web",
     "build:web": "tsc -p tsconfig.app.json --noEmit && vite build",
-    "prepare:runtime-bundle": "node ../../scripts/prepare-runtime-bundle.mjs",
-    "build": "pnpm run prepare:runtime-bundle && pnpm run build:web",
+    "build": "pnpm run build:web",
     "preview": "vite preview",
     "tauri": "node ../../scripts/run-tauri.mjs"
   },

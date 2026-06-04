@@ -14,15 +14,15 @@ use std::{
 use tauri::AppHandle;
 
 use archive::{
-    extract_archive, reset_runtime_workspace, stage_bundled_asset, verify_bundled_asset_sha256,
+    download_remote_asset, extract_archive, reset_runtime_workspace, verify_bundled_asset_sha256,
 };
 use logging::{
     append_install_log_line, runtime_log_path, runtime_platform_root, unix_timestamp_millis,
 };
 use manifest::{current_platform_id, current_platform_manifest, load_manifest, RuntimeManifest};
 use paths::{
-    ensure_unix_executable, resolve_bundled_runtime_resource_path, resolve_ffmpeg_executable,
-    resolve_managed_ffmpeg_path, resolve_python_executable, resolve_script_resource_path,
+    ensure_unix_executable, resolve_ffmpeg_executable, resolve_managed_ffmpeg_path,
+    resolve_python_executable, resolve_script_resource_path,
 };
 use process::{run_command_with_log, validate_ffmpeg_runtime, warmup_default_models};
 
@@ -133,7 +133,7 @@ pub fn resolve_python_runtime(
         return Err("手动配置的 Python 路径不存在，请检查系统设置。".into());
     }
 
-    Err("本地运行环境未安装，请前往系统设置安装内置环境。".into())
+    Err("本地运行环境未安装，请前往系统设置下载运行环境。".into())
 }
 
 fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
@@ -248,18 +248,10 @@ fn perform_runtime_install(app: &AppHandle) -> LocalResult<()> {
         &downloads_root,
         &log_path,
     )?;
-    install_ffmpeg_runtime(
-        app,
-        &platform,
-        &platform_id,
-        &runtime_root,
-        &downloads_root,
-        &log_path,
-    )?;
+    install_ffmpeg_runtime(&platform, &runtime_root, &downloads_root, &log_path)?;
     install_or_reuse_models(ModelInstallContext {
         app,
         platform: &platform,
-        platform_id: &platform_id,
         runtime_root: &runtime_root,
         downloads_root: &downloads_root,
         models_root: &models_root,
@@ -302,7 +294,7 @@ fn append_runtime_header(
             platform_id, manifest.runtime_version, manifest.python_version
         ),
     )?;
-    append_install_log_line(log_path, "[runtime] locating bundled runtime resources")
+    append_install_log_line(log_path, "[runtime] locating remote runtime resources")
 }
 
 fn install_python_runtime(
@@ -316,15 +308,13 @@ fn install_python_runtime(
     let python_bundle = platform
         .python_bundle
         .as_ref()
-        .ok_or_else(|| format!("当前平台缺少内置 Python 运行时配置：{platform_id}"))?;
-    let python_bundle_resource =
-        resolve_bundled_runtime_resource_path(app, platform_id, &python_bundle.file_name)?;
+        .ok_or_else(|| format!("当前平台缺少远程 Python 运行时配置：{platform_id}"))?;
     let python_bundle_path = downloads_root.join(&python_bundle.file_name);
-    stage_bundled_asset(
-        &python_bundle_resource,
+    download_remote_asset(
+        &python_bundle.download_url,
         &python_bundle_path,
         log_path,
-        "staging bundled Python runtime",
+        "downloading Python runtime",
     )?;
     verify_bundled_asset_sha256(&python_bundle_path, &python_bundle.sha256, log_path)?;
     extract_archive(
@@ -351,16 +341,14 @@ fn install_python_runtime(
             )
             .arg(&validate_path),
         log_path,
-        "Validating bundled Python runtime",
+        "Validating Python runtime",
     )?;
 
     Ok(python_executable)
 }
 
 fn install_ffmpeg_runtime(
-    app: &AppHandle,
     platform: &manifest::PlatformRuntime,
-    platform_id: &str,
     runtime_root: &Path,
     downloads_root: &Path,
     log_path: &Path,
@@ -369,14 +357,12 @@ fn install_ffmpeg_runtime(
         return Ok(());
     };
 
-    let ffmpeg_bundle_resource =
-        resolve_bundled_runtime_resource_path(app, platform_id, &ffmpeg_bundle.file_name)?;
     let ffmpeg_bundle_path = downloads_root.join(&ffmpeg_bundle.file_name);
-    stage_bundled_asset(
-        &ffmpeg_bundle_resource,
+    download_remote_asset(
+        &ffmpeg_bundle.download_url,
         &ffmpeg_bundle_path,
         log_path,
-        "staging bundled FFmpeg runtime",
+        "downloading FFmpeg runtime",
     )?;
     verify_bundled_asset_sha256(&ffmpeg_bundle_path, &ffmpeg_bundle.sha256, log_path)?;
     extract_archive(
@@ -399,7 +385,6 @@ fn install_ffmpeg_runtime(
 struct ModelInstallContext<'a> {
     app: &'a AppHandle,
     platform: &'a manifest::PlatformRuntime,
-    platform_id: &'a str,
     runtime_root: &'a Path,
     downloads_root: &'a Path,
     models_root: &'a Path,
@@ -410,17 +395,12 @@ struct ModelInstallContext<'a> {
 
 fn install_or_reuse_models(context: ModelInstallContext<'_>) -> LocalResult<()> {
     if let Some(models_bundle) = &context.platform.models_bundle {
-        let models_bundle_resource = resolve_bundled_runtime_resource_path(
-            context.app,
-            context.platform_id,
-            &models_bundle.file_name,
-        )?;
         let models_bundle_path = context.downloads_root.join(&models_bundle.file_name);
-        stage_bundled_asset(
-            &models_bundle_resource,
+        download_remote_asset(
+            &models_bundle.download_url,
             &models_bundle_path,
             context.log_path,
-            "staging bundled ASR models",
+            "downloading ASR models bundle",
         )?;
         verify_bundled_asset_sha256(&models_bundle_path, &models_bundle.sha256, context.log_path)?;
         extract_archive(
@@ -431,7 +411,7 @@ fn install_or_reuse_models(context: ModelInstallContext<'_>) -> LocalResult<()> 
         )?;
         return append_install_log_line(
             context.log_path,
-            "[runtime] validating bundled models root",
+            "[runtime] validating remote models root",
         );
     }
 
