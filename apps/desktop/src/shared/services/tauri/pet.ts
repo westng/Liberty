@@ -4,6 +4,7 @@ import type {
   PetBlindBoxState,
   PetCosmeticUnlock,
   PetDailyCheckInClaimResult,
+  PetDailyCheckInMakeupResult,
   PetDailyCheckInState,
   PetEventLedgerEntry,
   PetGiftBoxOpenResult,
@@ -48,6 +49,11 @@ export function createLocalPetService() {
     claimDailyCheckIn: async () => {
       const result = await invoke<PetDailyCheckInClaimResult>("claim_pet_daily_check_in");
       notifyPetStateChanged("daily-check-in");
+      return result;
+    },
+    repairDailyCheckIn: async () => {
+      const result = await invoke<PetDailyCheckInMakeupResult>("repair_pet_daily_check_in");
+      notifyPetStateChanged("daily-check-in-makeup");
       return result;
     },
     purchaseStoreItem: (itemKey: string, quantity = 1) =>

@@ -1,3 +1,4 @@
+use chrono::{Duration, NaiveDate};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde_json::json;
 
@@ -8,15 +9,16 @@ use crate::{
     },
     local_db::{
         pet_leveling, LocalResult, PetDailyCheckInClaimResult, PetDailyCheckInEntry,
-        PetDailyCheckInRewardPreview, PetDailyCheckInState, PetEventLedgerEntry, PetProfile,
-        PetRewardItem, PetStoreCatalogItem,
+        PetDailyCheckInMakeupResult, PetDailyCheckInRewardPreview, PetDailyCheckInState,
+        PetEventLedgerEntry, PetProfile, PetRewardItem, PetStoreCatalogItem,
     },
 };
 
 const PET_ID: &str = "default-pet";
 const SOURCE_TYPE: &str = "daily_check_in";
+const MAKEUP_SOURCE_TYPE: &str = "daily_check_in_makeup";
 const MILESTONE_TRACK_LENGTH: i64 = 14;
-const BASE_REWARD_LP: i64 = 10;
+const BASE_REWARD_LP: i64 = 20;
 const BASE_GROWTH_VALUE: i64 = 5;
 
 #[derive(Clone)]
@@ -27,21 +29,30 @@ struct RewardRule {
     items: &'static [(&'static str, i64)],
 }
 
+#[derive(Default)]
+struct MakeupWindow {
+    missed_days: i64,
+    makeup_available: bool,
+    makeup_date: Option<String>,
+    previous_streak: i64,
+    blocked_reason: Option<String>,
+}
+
 const REWARD_RULES: &[RewardRule] = &[
-    reward_rule(1, 10, 5, &[]),
-    reward_rule(2, 10, 5, &[]),
-    reward_rule(3, 15, 5, &[("gift-box-tool", 1)]),
-    reward_rule(4, 10, 5, &[]),
-    reward_rule(5, 15, 5, &[("cupcake-food", 1)]),
-    reward_rule(6, 10, 5, &[]),
-    reward_rule(7, 20, 5, &[("clover-badge", 1)]),
-    reward_rule(8, 10, 5, &[]),
-    reward_rule(9, 10, 5, &[]),
-    reward_rule(10, 20, 5, &[("gift-box-tool", 1)]),
-    reward_rule(11, 10, 5, &[]),
-    reward_rule(12, 15, 5, &[("ice-cream-cone-food", 1)]),
-    reward_rule(13, 10, 5, &[]),
-    reward_rule(14, 30, 5, &[("sprout-badge", 1)]),
+    reward_rule(1, 20, 5, &[]),
+    reward_rule(2, 20, 5, &[]),
+    reward_rule(3, 30, 5, &[("gift-box-tool", 1)]),
+    reward_rule(4, 20, 5, &[]),
+    reward_rule(5, 30, 5, &[("cupcake-food", 1)]),
+    reward_rule(6, 20, 5, &[]),
+    reward_rule(7, 40, 5, &[("clover-badge", 1)]),
+    reward_rule(8, 20, 5, &[]),
+    reward_rule(9, 20, 5, &[]),
+    reward_rule(10, 40, 5, &[("gift-box-tool", 1)]),
+    reward_rule(11, 20, 5, &[]),
+    reward_rule(12, 30, 5, &[("ice-cream-cone-food", 1)]),
+    reward_rule(13, 20, 5, &[]),
+    reward_rule(14, 60, 5, &[("sprout-badge", 1)]),
 ];
 
 const fn reward_rule(
@@ -67,25 +78,44 @@ pub fn daily_check_in_state(
     let checked_in_today = history
         .iter()
         .any(|entry| entry.check_in_date == check_in_date);
+    let makeup_window = makeup_window_from_history(&history, &check_in_date, checked_in_today);
     let current_streak = if checked_in_today {
         history
             .iter()
             .find(|entry| entry.check_in_date == check_in_date)
             .map(|entry| entry.streak_count)
             .unwrap_or(0)
+    } else if makeup_window.makeup_available {
+        makeup_window.previous_streak
     } else {
         next_streak_from_history(&history, &check_in_date)
     };
-    let next_cycle_day = current_streak.max(1);
+    let next_cycle_day = if makeup_window.makeup_available {
+        makeup_window.previous_streak.saturating_add(1).max(1)
+    } else {
+        current_streak.max(1)
+    };
     let today_reward = preview_for_streak_day(next_cycle_day);
     let rewards = REWARD_RULES.iter().map(preview_from_rule).collect();
     let store_state = pet_store::store_state(conn, profile)?;
+    let makeup_ticket_quantity = store_state
+        .inventory
+        .iter()
+        .find(|item| item.item_key == pet_store::MAKEUP_TICKET_ITEM_KEY)
+        .map(|item| item.quantity)
+        .unwrap_or(0);
     Ok(PetDailyCheckInState {
         check_in_date,
         checked_in_today,
         current_streak,
         next_cycle_day,
         cycle_length: MILESTONE_TRACK_LENGTH,
+        missed_days: makeup_window.missed_days,
+        makeup_available: makeup_window.makeup_available,
+        makeup_date: makeup_window.makeup_date,
+        makeup_ticket_item_key: pet_store::MAKEUP_TICKET_ITEM_KEY.into(),
+        makeup_ticket_quantity,
+        makeup_blocked_reason: makeup_window.blocked_reason,
         today_reward,
         rewards,
         history,
@@ -105,10 +135,91 @@ pub fn claim_daily_check_in_tx(
 
     let recent_history = list_history_tx(tx, 30)?;
     let streak_count = next_streak_from_history(&recent_history, &check_in_date).max(1);
+    let entry =
+        create_check_in_entry_tx(tx, profile, &check_in_date, streak_count, SOURCE_TYPE, now)?;
+    Ok((entry, false))
+}
+
+pub fn repair_daily_check_in_tx(
+    tx: &Transaction<'_>,
+    profile: &PetProfile,
+    now: &str,
+) -> LocalResult<PetDailyCheckInEntry> {
+    let check_in_date = current_check_in_date();
+    let recent_history = list_history_tx(tx, 30)?;
+    let checked_in_today = recent_history
+        .iter()
+        .any(|entry| entry.check_in_date == check_in_date);
+    let makeup_window =
+        makeup_window_from_history(&recent_history, &check_in_date, checked_in_today);
+    if !makeup_window.makeup_available {
+        return Err(makeup_window
+            .blocked_reason
+            .unwrap_or_else(|| "当前没有可补签的断签记录。".into()));
+    }
+    let makeup_date = makeup_window
+        .makeup_date
+        .ok_or_else(|| "当前没有可补签的断签日期。".to_string())?;
+    if load_entry_for_date_tx(tx, &makeup_date)?.is_some() {
+        return Err("该日期已经签到过了。".into());
+    }
+    pet_store::consume_inventory_item_tx(tx, pet_store::MAKEUP_TICKET_ITEM_KEY, 1, now).map_err(
+        |err| {
+            if err == "该道具数量不足。" || err == "该道具还不在个人仓库中。" {
+                "补签票券数量不足。".to_string()
+            } else {
+                err
+            }
+        },
+    )?;
+    let streak_count = makeup_window.previous_streak.saturating_add(1).max(1);
+    create_check_in_entry_tx(
+        tx,
+        profile,
+        &makeup_date,
+        streak_count,
+        MAKEUP_SOURCE_TYPE,
+        now,
+    )
+}
+
+pub fn makeup_result(
+    conn: &Connection,
+    profile: PetProfile,
+    entry: PetDailyCheckInEntry,
+) -> LocalResult<PetDailyCheckInMakeupResult> {
+    let state = daily_check_in_state(conn, profile)?;
+    let ticket_quantity_after = state
+        .store_state
+        .inventory
+        .iter()
+        .find(|item| item.item_key == pet_store::MAKEUP_TICKET_ITEM_KEY)
+        .map(|item| item.quantity)
+        .unwrap_or(0);
+    Ok(PetDailyCheckInMakeupResult {
+        state,
+        entry,
+        ticket_item_key: pet_store::MAKEUP_TICKET_ITEM_KEY.into(),
+        ticket_quantity_after,
+    })
+}
+
+fn create_check_in_entry_tx(
+    tx: &Transaction<'_>,
+    profile: &PetProfile,
+    check_in_date: &str,
+    streak_count: i64,
+    source_type: &str,
+    now: &str,
+) -> LocalResult<PetDailyCheckInEntry> {
     let cycle_day = streak_count.max(1);
     let rule = reward_for_streak_day(cycle_day);
-    let reward_items = grant_rule_items_tx(tx, &rule, now)?;
-    let source_key = format!("daily-check-in:{check_in_date}");
+    let reward_items = grant_rule_items_tx(tx, &rule, source_type, check_in_date, now)?;
+    let source_key = if source_type == MAKEUP_SOURCE_TYPE {
+        format!("daily-check-in-makeup:{check_in_date}")
+    } else {
+        format!("daily-check-in:{check_in_date}")
+    };
     let metadata = json!({
         "date": check_in_date,
         "streakCount": streak_count,
@@ -116,11 +227,12 @@ pub fn claim_daily_check_in_tx(
         "rewardLp": rule.reward_lp,
         "growthValue": rule.growth_value,
         "items": reward_items,
+        "source": source_type,
     })
     .to_string();
     pet_store::grant_reward_tx(
         tx,
-        SOURCE_TYPE,
+        source_type,
         &source_key,
         rule.reward_lp,
         Some(&metadata),
@@ -131,7 +243,7 @@ pub fn claim_daily_check_in_tx(
     let entry = PetDailyCheckInEntry {
         id: ids::timestamped_id("pet-check-in"),
         pet_id: PET_ID.into(),
-        check_in_date: check_in_date.clone(),
+        check_in_date: check_in_date.into(),
         streak_count,
         cycle_day,
         reward_lp: rule.reward_lp,
@@ -140,8 +252,8 @@ pub fn claim_daily_check_in_tx(
         created_at: now.into(),
     };
     insert_entry_tx(tx, &entry)?;
-    insert_check_in_event_tx(tx, &entry, now)?;
-    Ok((entry, false))
+    insert_check_in_event_tx(tx, &entry, source_type, now)?;
+    Ok(entry)
 }
 
 pub fn claim_result(
@@ -160,6 +272,8 @@ pub fn claim_result(
 fn grant_rule_items_tx(
     tx: &Transaction<'_>,
     rule: &RewardRule,
+    source_type: &str,
+    source_date: &str,
     now: &str,
 ) -> LocalResult<Vec<PetRewardItem>> {
     let mut granted = Vec::new();
@@ -171,16 +285,15 @@ fn grant_rule_items_tx(
             if item.slot != "consumable" && inventory_exists_tx(tx, &item.item_key)? {
                 pet_store::duplicate_compensation_lp_for_item(&item)
             } else {
-                pet_store::grant_catalog_item_tx(tx, &item, *quantity, SOURCE_TYPE, now)?;
+                pet_store::grant_catalog_item_tx(tx, &item, *quantity, source_type, now)?;
                 0
             };
         if duplicate_compensation_lp > 0 {
             pet_store::grant_reward_tx(
                 tx,
-                "daily_check_in_duplicate",
+                &format!("{source_type}_duplicate"),
                 &format!(
-                    "daily-check-in-duplicate:{}:{}",
-                    current_check_in_date(),
+                    "daily-check-in-duplicate:{source_type}:{source_date}:{}",
                     item.item_key
                 ),
                 duplicate_compensation_lp,
@@ -223,32 +336,45 @@ fn grant_growth_tx(
 fn insert_check_in_event_tx(
     tx: &Transaction<'_>,
     entry: &PetDailyCheckInEntry,
+    source_type: &str,
     now: &str,
 ) -> LocalResult<()> {
+    let is_makeup = source_type == MAKEUP_SOURCE_TYPE;
+    let action_zh = if is_makeup {
+        "补签完成"
+    } else {
+        "今日签到完成"
+    };
+    let action_en = if is_makeup {
+        "Make-up check-in complete"
+    } else {
+        "Daily check-in complete"
+    };
     let line_zh = if entry.reward_items.is_empty() {
         format!(
-            "今日签到完成，连续 {} 天。LP +{}，成长值 +{}。",
-            entry.streak_count, entry.reward_lp, entry.growth_value
+            "{}，连续 {} 天。LP +{}，成长值 +{}。",
+            action_zh, entry.streak_count, entry.reward_lp, entry.growth_value
         )
     } else {
         format!(
-            "今日签到完成，连续 {} 天。奖励和商店物品都已收好。",
-            entry.streak_count
+            "{}，连续 {} 天。奖励和商店物品都已收好。",
+            action_zh, entry.streak_count
         )
     };
     let line_en = if entry.reward_items.is_empty() {
         format!(
-            "Daily check-in complete. Streak {} days. LP +{}, growth +{}.",
-            entry.streak_count, entry.reward_lp, entry.growth_value
+            "{}. Streak {} days. LP +{}, growth +{}.",
+            action_en, entry.streak_count, entry.reward_lp, entry.growth_value
         )
     } else {
         format!(
-            "Daily check-in complete. Streak {} days. Rewards and store items are saved.",
-            entry.streak_count
+            "{}. Streak {} days. Rewards and store items are saved.",
+            action_en, entry.streak_count
         )
     };
     let metadata = json!({
-        "source": SOURCE_TYPE,
+        "source": source_type,
+        "makeup": is_makeup,
         "date": entry.check_in_date,
         "streakCount": entry.streak_count,
         "cycleDay": entry.cycle_day,
@@ -265,7 +391,7 @@ fn insert_check_in_event_tx(
             id: ids::timestamped_id("pet-check-in-event"),
             pet_id: PET_ID.into(),
             event_type: "daily_check_in".into(),
-            event_source: SOURCE_TYPE.into(),
+            event_source: source_type.into(),
             event_value: entry.growth_value,
             event_time: now.into(),
             metadata: Some(metadata),
@@ -322,16 +448,86 @@ fn next_streak_from_history(history: &[PetDailyCheckInEntry], check_in_date: &st
     1
 }
 
+fn makeup_window_from_history(
+    history: &[PetDailyCheckInEntry],
+    check_in_date: &str,
+    checked_in_today: bool,
+) -> MakeupWindow {
+    if checked_in_today {
+        return MakeupWindow {
+            blocked_reason: Some("今日已经签到过了。".into()),
+            ..MakeupWindow::default()
+        };
+    }
+    let Some(previous) = history.first() else {
+        return MakeupWindow {
+            blocked_reason: Some("暂无可补签的历史记录。".into()),
+            ..MakeupWindow::default()
+        };
+    };
+    let Some(previous_date) = parse_check_in_date(&previous.check_in_date) else {
+        return MakeupWindow {
+            blocked_reason: Some("最近签到日期异常，暂时不能补签。".into()),
+            ..MakeupWindow::default()
+        };
+    };
+    let Some(current_date) = parse_check_in_date(check_in_date) else {
+        return MakeupWindow {
+            blocked_reason: Some("当前签到日期异常，暂时不能补签。".into()),
+            ..MakeupWindow::default()
+        };
+    };
+    if previous_date >= current_date {
+        return MakeupWindow {
+            blocked_reason: Some("当前没有可补签的断签记录。".into()),
+            previous_streak: previous.streak_count,
+            ..MakeupWindow::default()
+        };
+    }
+    let days_since_previous = current_date.signed_duration_since(previous_date).num_days();
+    let missed_days = days_since_previous.saturating_sub(1);
+    if missed_days <= 0 {
+        return MakeupWindow {
+            previous_streak: previous.streak_count,
+            blocked_reason: Some("当前没有可补签的断签记录。".into()),
+            ..MakeupWindow::default()
+        };
+    }
+    if missed_days >= 7 {
+        return MakeupWindow {
+            missed_days,
+            previous_streak: previous.streak_count,
+            blocked_reason: Some("连续断签已达到 7 天，不能补签。".into()),
+            ..MakeupWindow::default()
+        };
+    }
+    MakeupWindow {
+        missed_days,
+        makeup_available: true,
+        makeup_date: Some(
+            (previous_date + Duration::days(1))
+                .format("%Y-%m-%d")
+                .to_string(),
+        ),
+        previous_streak: previous.streak_count,
+        blocked_reason: None,
+    }
+}
+
 fn is_previous_local_date(previous: &str, current: &str) -> bool {
-    let Ok(previous_date) = chrono::NaiveDate::parse_from_str(previous, "%Y-%m-%d") else {
+    let Some(previous_date) = parse_check_in_date(previous) else {
         return false;
     };
-    let Ok(current_date) = chrono::NaiveDate::parse_from_str(current, "%Y-%m-%d") else {
+    let Some(current_date) = parse_check_in_date(current) else {
         return false;
     };
     previous_date
         .succ_opt()
         .is_some_and(|date| date == current_date)
+}
+
+fn parse_check_in_date(value: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()
 }
 
 fn current_check_in_date() -> String {

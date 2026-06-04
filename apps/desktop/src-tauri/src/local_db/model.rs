@@ -472,6 +472,18 @@ pub struct PetDailyCheckInState {
     pub current_streak: i64,
     pub next_cycle_day: i64,
     pub cycle_length: i64,
+    #[serde(default)]
+    pub missed_days: i64,
+    #[serde(default)]
+    pub makeup_available: bool,
+    #[serde(default)]
+    pub makeup_date: Option<String>,
+    #[serde(default)]
+    pub makeup_ticket_item_key: String,
+    #[serde(default)]
+    pub makeup_ticket_quantity: i64,
+    #[serde(default)]
+    pub makeup_blocked_reason: Option<String>,
     pub today_reward: PetDailyCheckInRewardPreview,
     pub rewards: Vec<PetDailyCheckInRewardPreview>,
     pub history: Vec<PetDailyCheckInEntry>,
@@ -484,6 +496,15 @@ pub struct PetDailyCheckInClaimResult {
     pub state: PetDailyCheckInState,
     pub entry: PetDailyCheckInEntry,
     pub duplicate: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetDailyCheckInMakeupResult {
+    pub state: PetDailyCheckInState,
+    pub entry: PetDailyCheckInEntry,
+    pub ticket_item_key: String,
+    pub ticket_quantity_after: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

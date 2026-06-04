@@ -1,7 +1,7 @@
 use crate::local_db::{
     self, LocalResult, PetBlindBoxDrawResult, PetBlindBoxState, PetCosmeticUnlock,
-    PetDailyCheckInClaimResult, PetDailyCheckInState, PetEventLedgerEntry, PetGiftBoxOpenResult,
-    PetProfile, PetSettings, PetStoreState,
+    PetDailyCheckInClaimResult, PetDailyCheckInMakeupResult, PetDailyCheckInState,
+    PetEventLedgerEntry, PetGiftBoxOpenResult, PetProfile, PetSettings, PetStoreState,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -133,6 +133,11 @@ pub fn get_pet_daily_check_in_state(app: AppHandle) -> LocalResult<PetDailyCheck
 #[tauri::command]
 pub fn claim_pet_daily_check_in(app: AppHandle) -> LocalResult<PetDailyCheckInClaimResult> {
     local_db::claim_pet_daily_check_in(&app)
+}
+
+#[tauri::command]
+pub fn repair_pet_daily_check_in(app: AppHandle) -> LocalResult<PetDailyCheckInMakeupResult> {
+    local_db::repair_pet_daily_check_in(&app)
 }
 
 #[tauri::command]

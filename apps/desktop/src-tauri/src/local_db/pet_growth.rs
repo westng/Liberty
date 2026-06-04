@@ -114,12 +114,12 @@ fn reward_rule(event_type: &str, event_source: &str) -> PetRewardRule {
         1
     } else {
         match event_source {
-            "daily_open" => 5,
-            "job_created" => 8,
-            "transcription_started" => 3,
-            "transcription_completed" => 18,
-            "ai_summary_completed" => 15,
-            "export_completed" => 10,
+            "daily_open" => 10,
+            "job_created" => 15,
+            "transcription_started" => 5,
+            "transcription_completed" => 40,
+            "ai_summary_completed" => 30,
+            "export_completed" => 20,
             "dark_theme_used" => 0,
             _ => 0,
         }

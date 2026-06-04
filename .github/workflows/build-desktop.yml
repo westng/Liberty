@@ -403,12 +403,24 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
           TARGET_COMMIT: ${{ needs.prepare_release.outputs.target_commit }}
         run: |
+          if [[ ! -s CHANGELOG.zh-CN.md ]]; then
+            echo "::error::CHANGELOG.zh-CN.md 不存在或内容为空。"
+            exit 1
+          fi
+
           gh api \
             --method POST \
             "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
             -f tag_name="${RELEASE_TAG}" \
             -f target_commitish="${TARGET_COMMIT}" \
-            --jq ".body" > release-notes.md
+            --jq ".body" > github-release-notes.md
+
+          {
+            cat CHANGELOG.zh-CN.md
+            printf "\n\n---\n\n"
+            printf "## GitHub 自动生成记录\n\n"
+            cat github-release-notes.md
+          } > release-notes.md
 
       - name: Publish Release
         shell: bash

@@ -1,38 +1,11 @@
 import type { LocaleCode, PetEventLedgerEntry } from "@/shared/types/meeting";
+import {
+  localizedPetLabel,
+  petSourceLabels,
+  type LocalizedPetLabel,
+} from "@/shared/services/petSourceLabels";
 
-type LocalizedLabel = {
-  zh: string;
-  en: string;
-};
-
-const eventSourceLabels: Record<string, LocalizedLabel> = {
-  interaction: { zh: "互动", en: "Interaction" },
-  workflow: { zh: "工作流", en: "Workflow" },
-  store_pet: { zh: "切换伙伴", en: "Changed Companion" },
-  store_equip: { zh: "装备物品", en: "Equipped Item" },
-  store_food: { zh: "投喂食物", en: "Fed Food" },
-  store_tool: { zh: "使用道具", en: "Used Item" },
-  blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
-  blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
-  blind_box_empty: { zh: "盲盒空奖", en: "Empty Blind Box" },
-  daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
-  daily_check_in: { zh: "每日签到", en: "Daily Check-in" },
-  gift_box_reward: { zh: "惊喜礼盒", en: "Gift Box Reward" },
-  gift_box_duplicate: { zh: "礼盒重复补偿", en: "Gift Box Duplicate" },
-  daily_free_store: { zh: "每日免费领取", en: "Daily Free Claim" },
-  tap: { zh: "点击", en: "Tap" },
-  pet: { zh: "抚摸", en: "Pet" },
-  feed: { zh: "投喂", en: "Feed" },
-  encourage: { zh: "鼓励", en: "Encourage" },
-  job_created: { zh: "创建任务", en: "Job Created" },
-  daily_open: { zh: "每日上线", en: "Daily Open" },
-  transcription_started: { zh: "开始转写", en: "Transcription Started" },
-  transcription_completed: { zh: "转写完成", en: "Transcription Completed" },
-  ai_summary_completed: { zh: "AI 总结完成", en: "AI Summary Completed" },
-  export_completed: { zh: "导出完成", en: "Export Completed" },
-};
-
-const itemLabels: Record<string, LocalizedLabel> = {
+const itemLabels: Record<string, LocalizedPetLabel> = {
   "libby-default": { zh: "Libby 初始伙伴", en: "Libby Starter" },
   "bell-accessory": { zh: "陪伴铃铛", en: "Companion Bell" },
   "clover-bow": { zh: "幸运草蝴蝶结", en: "Clover Bow" },
@@ -48,7 +21,7 @@ const itemLabels: Record<string, LocalizedLabel> = {
   "gift-box-tool": { zh: "惊喜礼盒", en: "Gift Box" },
   "energy-capsule-tool": { zh: "能量胶囊", en: "Energy Capsule" },
   "energy-drink-tool": { zh: "能量饮料", en: "Energy Drink" },
-  "gem-ticket-tool": { zh: "宝石票券", en: "Gem Ticket" },
+  "gem-ticket-tool": { zh: "补签票券", en: "Make-up Check-in Ticket" },
   "golden-bell-tool": { zh: "金色铃铛", en: "Golden Bell" },
   "heart-charm-tool": { zh: "爱心护符", en: "Heart Charm" },
   "heart-rings-tool": { zh: "羁绊双环", en: "Heart Rings" },
@@ -96,12 +69,12 @@ const itemLabels: Record<string, LocalizedLabel> = {
   "sun-badge": { zh: "阳光交付勋章", en: "Sun Delivery Badge" },
 };
 
-function localized(label: LocalizedLabel, locale: LocaleCode) {
-  return locale === "en-US" ? label.en : label.zh;
+function localized(label: LocalizedPetLabel, locale: LocaleCode) {
+  return localizedPetLabel(label, locale);
 }
 
 export function formatPetEventTitle(entry: PetEventLedgerEntry, locale: LocaleCode) {
-  const sourceLabel = eventSourceLabels[entry.eventSource] ?? eventSourceLabels[entry.eventType];
+  const sourceLabel = petSourceLabels[entry.eventSource] ?? petSourceLabels[entry.eventType];
   if (sourceLabel) {
     return localized(sourceLabel, locale);
   }
@@ -243,7 +216,7 @@ function itemEventDetail(
   itemKey: string,
   locale: LocaleCode,
   itemType = "",
-  itemName?: Partial<LocalizedLabel>,
+  itemName?: Partial<LocalizedPetLabel>,
 ) {
   const itemNameLabel = itemLabels[itemKey] ?? {
     zh: itemName?.zh || itemKey,
@@ -312,7 +285,7 @@ function isBlindBoxEvent(entry: PetEventLedgerEntry) {
 }
 
 function isDailyCheckInEvent(entry: PetEventLedgerEntry) {
-  return entry.eventType === "daily_check_in" || entry.eventSource === "daily_check_in";
+  return entry.eventType === "daily_check_in" || entry.eventSource.startsWith("daily_check_in");
 }
 
 function isGiftBoxEvent(entry: PetEventLedgerEntry) {
@@ -320,7 +293,7 @@ function isGiftBoxEvent(entry: PetEventLedgerEntry) {
 }
 
 function interactionEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
-  const details: Record<string, LocalizedLabel> = {
+  const details: Record<string, LocalizedPetLabel> = {
     tap: { zh: "你轻轻叫了它一下，伙伴回应了这次互动。", en: "You checked in with your companion and it responded." },
     pet: { zh: "你安抚了伙伴，它的心情变得更轻松。", en: "You comforted your companion and it feels calmer." },
     feed: { zh: "你投喂了伙伴，这次照顾已记录。", en: "You fed your companion and this care was recorded." },
@@ -346,6 +319,11 @@ function blindBoxEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
 }
 
 function dailyCheckInEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
+  if (entry.eventSource === "daily_check_in_makeup") {
+    return locale === "en-US"
+      ? `Make-up check-in recorded. Growth +${entry.eventValue}.`
+      : `补签已记录，成长值 +${entry.eventValue}。`;
+  }
   return locale === "en-US"
     ? `Daily check-in recorded. Growth +${entry.eventValue}.`
     : `每日签到已记录，成长值 +${entry.eventValue}。`;
@@ -367,7 +345,7 @@ function eventDefaultDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
 }
 
 function workflowEventDetail(entry: PetEventLedgerEntry, locale: LocaleCode) {
-  const details: Record<string, LocalizedLabel> = {
+  const details: Record<string, LocalizedPetLabel> = {
     daily_open: { zh: "Liberty 已启动，今日陪伴已记录。", en: "Liberty opened and today's companionship was recorded." },
     job_created: { zh: "新任务已创建，伙伴成长已记录。", en: "A new job was created and companion growth was recorded." },
     transcription_started: { zh: "转写任务已开始，伙伴进入陪伴状态。", en: "Transcription started and the companion is standing by." },

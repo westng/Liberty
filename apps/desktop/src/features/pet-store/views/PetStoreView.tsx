@@ -1,6 +1,7 @@
 import "./PetStoreView.css";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
+import { useRouter } from "@/app/router/RouterContext";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import {
   findCatalogItem as findCatalogItemInState,
@@ -18,6 +19,7 @@ import {
   shopImageUrl as resolveShopImageUrl,
 } from "@/features/pet-store/services/petStorePresentation";
 import { createLocalPetService } from "@/shared/services/tauri/pet";
+import { petSourceLabelOrUnknown } from "@/shared/services/petSourceLabels";
 import { openPetStoreItemWindow } from "@/shared/services/ui/windows";
 import type {
   PetInventoryItem,
@@ -29,8 +31,10 @@ type StoreSection = "store" | "inventory";
 type StoreCategory = "all" | "pet" | "cosmetic" | "theme" | "tool" | "food" | "badge";
 
 const petService = createLocalPetService();
+const MAKEUP_TICKET_ITEM_KEY = "gem-ticket-tool";
 
 export default function PetStoreView() {
+  const router = useRouter();
   const meetingStore = useMeetingStore();
   const [activeSection, setActiveSection] = useState<StoreSection>("store");
   const [activeCategory, setActiveCategory] = useState<StoreCategory>("all");
@@ -313,23 +317,7 @@ export default function PetStoreView() {
   }
 
   function inventorySourceLabel(source: string) {
-    const labels: Record<string, { zh: string; en: string }> = {
-      default: { zh: "默认解锁", en: "Default" },
-      growth: { zh: "成长解锁", en: "Growth" },
-      purchase: { zh: "购买获得", en: "Purchased" },
-      achievement: { zh: "成就获得", en: "Achievement" },
-      daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
-      daily_check_in: { zh: "每日签到", en: "Daily Check-in" },
-      daily_free_store: { zh: "每日免费领取", en: "Daily Free Claim" },
-      gift_box_reward: { zh: "惊喜礼盒", en: "Gift Box" },
-      blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
-      blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
-    };
-    const label = labels[source];
-    if (!label) {
-      return isEnglish ? "Unknown" : "未知";
-    }
-    return isEnglish ? label.en : label.zh;
+    return petSourceLabelOrUnknown(source, locale);
   }
 
   function itemTypeLabel(itemType: string) {
@@ -398,6 +386,9 @@ export default function PetStoreView() {
   }
 
   function inventoryActionLabel(item: PetInventoryItem) {
+    if (item.itemKey === MAKEUP_TICKET_ITEM_KEY) {
+      return isEnglish ? "Use in Check-in" : "去签到页使用";
+    }
     if (item.slot === "consumable") {
       return isEnglish ? "Use" : "使用";
     }
@@ -409,6 +400,10 @@ export default function PetStoreView() {
   }
 
   async function handleInventoryAction(item: PetInventoryItem) {
+    if (item.itemKey === MAKEUP_TICKET_ITEM_KEY) {
+      await router.push("/daily-check-in");
+      return;
+    }
     if (item.slot === "consumable") {
       if (item.itemType === "food" && item.quantity > 1) {
         openUseDialog(item);

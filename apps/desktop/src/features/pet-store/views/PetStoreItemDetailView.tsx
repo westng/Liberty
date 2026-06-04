@@ -17,6 +17,7 @@ import {
   shopImageUrl,
 } from "@/features/pet-store/services/petStorePresentation";
 import { createLocalPetService } from "@/shared/services/tauri/pet";
+import { petSourceLabelOrUnknown } from "@/shared/services/petSourceLabels";
 import type { PetStoreCatalogItemState, PetStoreState } from "@/shared/types/meeting";
 
 const petService = createLocalPetService();
@@ -96,20 +97,7 @@ export default function PetStoreItemDetailView() {
   }
 
   function sourceLabel(source: string) {
-    const labels: Record<string, { zh: string; en: string }> = {
-      default: { zh: "默认解锁", en: "Default" },
-      growth: { zh: "成长解锁", en: "Growth" },
-      purchase: { zh: "购买获得", en: "Purchased" },
-      achievement: { zh: "成就获得", en: "Achievement" },
-      daily_blind_box: { zh: "每日盲盒", en: "Daily Blind Box" },
-      blind_box_reward: { zh: "盲盒奖励", en: "Blind Box Reward" },
-      blind_box_duplicate: { zh: "盲盒重复补偿", en: "Blind Box Duplicate" },
-    };
-    const label = labels[source];
-    if (!label) {
-      return isEnglish ? "Unknown" : "未知";
-    }
-    return isEnglish ? label.en : label.zh;
+    return petSourceLabelOrUnknown(source, locale);
   }
 
   if (loading) {

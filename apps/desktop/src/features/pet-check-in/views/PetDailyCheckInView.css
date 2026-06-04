@@ -408,130 +408,155 @@
   gap: 12px;
 }
 
-.pet-check-in-cycle-grid {
+.pet-check-in-calendar {
   display: grid;
-  grid-template-columns: repeat(7, minmax(96px, 1fr));
   gap: 10px;
 }
 
-.pet-check-in-day-card {
-  position: relative;
-  overflow: hidden;
+.pet-check-in-calendar-head,
+.pet-check-in-calendar-weekdays,
+.pet-check-in-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(76px, 1fr));
+}
+
+.pet-check-in-calendar-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.pet-check-in-calendar-head strong {
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 760;
+}
+
+.pet-check-in-calendar-head span,
+.pet-check-in-calendar-weekdays span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.pet-check-in-calendar-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.pet-check-in-calendar-nav .text-button {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.pet-check-in-calendar-weekdays {
+  gap: 8px;
+  padding-inline: 2px;
+  text-align: center;
+}
+
+.pet-check-in-calendar-grid {
+  gap: 8px;
+}
+
+.pet-check-in-calendar-blank,
+.pet-check-in-calendar-day {
+  min-height: 112px;
+}
+
+.pet-check-in-calendar-day {
   min-width: 0;
   display: grid;
+  align-content: start;
   gap: 8px;
-  min-height: 132px;
-  padding: 10px;
+  padding: 9px;
   border: 1px solid var(--native-panel-border);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--native-control-bg) 76%, transparent);
+  background: color-mix(in srgb, var(--native-control-bg) 78%, transparent);
 }
 
-.pet-check-in-day-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(150deg, color-mix(in srgb, #ffffff 10%, transparent), transparent 38%);
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.pet-check-in-day-card:hover {
-  border-color: color-mix(in srgb, var(--check-in-blue) 24%, var(--native-panel-border));
-  background: var(--native-row-hover);
-}
-
-.pet-check-in-day-card.active {
-  border-color: color-mix(in srgb, var(--check-in-blue) 48%, var(--native-panel-border));
-  background: color-mix(in srgb, var(--check-in-blue) 9%, var(--native-control-bg));
-}
-
-.pet-check-in-day-card.completed {
+.pet-check-in-calendar-day.signed {
   border-color: color-mix(in srgb, var(--check-in-green) 38%, var(--native-panel-border));
   background: color-mix(in srgb, var(--check-in-green) 8%, var(--native-control-bg));
 }
 
-.pet-check-in-day-card.milestone:not(.active):not(.completed) {
+.pet-check-in-calendar-day.today {
+  border-color: color-mix(in srgb, var(--check-in-blue) 48%, var(--native-panel-border));
+  background: color-mix(in srgb, var(--check-in-blue) 9%, var(--native-control-bg));
+}
+
+.pet-check-in-calendar-day.makeup {
+  border-color: color-mix(in srgb, var(--check-in-gold) 52%, var(--native-panel-border));
+  background: color-mix(in srgb, var(--check-in-gold) 10%, var(--native-control-bg));
+}
+
+.pet-check-in-calendar-day.missed {
+  border-color: color-mix(in srgb, #dc6b5d 36%, var(--native-panel-border));
+  background: color-mix(in srgb, #dc6b5d 7%, var(--native-control-bg));
+}
+
+.pet-check-in-calendar-day.future {
+  opacity: 0.72;
+}
+
+.pet-check-in-calendar-day.milestone:not(.signed):not(.today):not(.makeup) {
   border-color: color-mix(in srgb, var(--check-in-gold) 36%, var(--native-panel-border));
-  background: color-mix(in srgb, var(--check-in-gold) 7%, var(--native-control-bg));
 }
 
-.pet-check-in-day-marker,
-.pet-check-in-day-body {
-  position: relative;
-  z-index: 1;
-}
-
-.pet-check-in-day-marker span {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
+.pet-check-in-calendar-day-head {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid var(--native-panel-border);
-  border-radius: 999px;
-  background: var(--native-control-bg);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 780;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.pet-check-in-calendar-day-head strong {
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
-.pet-check-in-day-card.active .pet-check-in-day-marker span {
-  border-color: color-mix(in srgb, var(--check-in-blue) 50%, var(--native-panel-border));
-  background: var(--check-in-blue);
-  color: #ffffff;
-}
-
-.pet-check-in-day-card.completed .pet-check-in-day-marker span {
-  border-color: color-mix(in srgb, var(--check-in-green) 50%, var(--native-panel-border));
-  background: var(--check-in-green);
-  color: #ffffff;
-}
-
-.pet-check-in-day-body {
+.pet-check-in-calendar-day-head span {
   min-width: 0;
-  display: grid;
-  gap: 7px;
-}
-
-.pet-check-in-day-head strong {
-  color: var(--text-main);
-  font-size: 13px;
-  font-weight: 720;
-}
-
-.pet-check-in-day-head span {
-  min-height: 18px;
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 650;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pet-check-in-day-card.active .pet-check-in-day-head span {
-  color: #2567b8;
+.pet-check-in-calendar-reward {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
-.pet-check-in-day-card.completed .pet-check-in-day-head span {
-  color: #277045;
+.pet-check-in-calendar-reward > span,
+.pet-check-in-calendar-reward small,
+.pet-check-in-calendar-reward em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-:root[data-theme="dark"] .pet-check-in-day-card.active .pet-check-in-day-head span {
-  color: #8abaff;
-}
-
-:root[data-theme="dark"] .pet-check-in-day-card.completed .pet-check-in-day-head span {
-  color: #85d6a5;
-}
-
-.pet-check-in-day-values {
+.pet-check-in-calendar-items {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px 8px;
+  gap: 5px;
+  align-items: center;
+  min-height: 34px;
 }
 
-.pet-check-in-day-items,
 .pet-check-in-milestone-items {
   display: flex;
   flex-wrap: wrap;
@@ -540,7 +565,6 @@
   min-height: 34px;
 }
 
-.pet-check-in-day-items > span:not(.pet-check-in-item-icon),
 .pet-check-in-milestone-items > span:not(.pet-check-in-item-icon) {
   color: var(--text-muted);
   font-size: 12px;
@@ -628,8 +652,15 @@
 }
 
 @media (max-width: 1180px) {
-  .pet-check-in-cycle-grid {
-    grid-template-columns: repeat(4, minmax(112px, 1fr));
+  .pet-check-in-calendar-head,
+  .pet-check-in-calendar-weekdays,
+  .pet-check-in-calendar-grid {
+    grid-template-columns: repeat(7, minmax(58px, 1fr));
+  }
+
+  .pet-check-in-calendar-day,
+  .pet-check-in-calendar-blank {
+    min-height: 98px;
   }
 }
 
@@ -658,7 +689,52 @@
     font-size: 24px;
   }
 
-  .pet-check-in-cycle-grid {
-    grid-template-columns: 1fr;
+  .pet-check-in-calendar-head,
+  .pet-check-in-calendar-weekdays,
+  .pet-check-in-calendar-grid {
+    grid-template-columns: repeat(7, minmax(36px, 1fr));
+    gap: 5px;
+  }
+
+  .pet-check-in-calendar-day,
+  .pet-check-in-calendar-blank {
+    min-height: 76px;
+  }
+
+  .pet-check-in-calendar-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pet-check-in-calendar-nav {
+    justify-content: flex-start;
+  }
+
+  .pet-check-in-calendar-day {
+    padding: 6px;
+  }
+
+  .pet-check-in-calendar-day-head {
+    display: grid;
+    gap: 2px;
+  }
+
+  .pet-check-in-calendar-day-head strong {
+    font-size: 13px;
+  }
+
+  .pet-check-in-calendar-day-head span,
+  .pet-check-in-calendar-reward > span,
+  .pet-check-in-calendar-reward small {
+    font-size: 10px;
+  }
+
+  .pet-check-in-calendar-items {
+    min-height: 0;
+  }
+
+  .pet-check-in-calendar-items .pet-check-in-item-icon,
+  .pet-check-in-calendar-reward em {
+    display: none;
   }
 }

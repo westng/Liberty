@@ -74,6 +74,7 @@ pub fn run() {
             desktop_pet::open_extra_desktop_pet,
             local_pet::open_pet_gift_box,
             local_pet::purchase_pet_store_item,
+            local_pet::repair_pet_daily_check_in,
             local_pet::save_pet_profile,
             desktop_pet::show_desktop_pet,
             desktop_pet::start_desktop_pet_drag,

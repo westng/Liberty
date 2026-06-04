@@ -14,6 +14,7 @@ use crate::{
 const PET_ID: &str = "default-pet";
 const LP: &str = "lp";
 pub const GIFT_BOX_ITEM_KEY: &str = "gift-box-tool";
+pub const MAKEUP_TICKET_ITEM_KEY: &str = "gem-ticket-tool";
 pub const GIFT_BOX_DAILY_FREE_LIMIT: i64 = 3;
 
 pub fn catalog_items() -> Vec<PetStoreCatalogItem> {
@@ -302,13 +303,13 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         330,
     ),
     seed(
-        "gem-ticket-tool",
+        MAKEUP_TICKET_ITEM_KEY,
         "tool",
         "consumable",
-        "宝石票券",
-        "Gem Ticket",
-        "用于触发一次高级奖励反馈。",
-        "Triggers a premium reward feedback moment.",
+        "补签票券",
+        "Make-up Check-in Ticket",
+        "用于补回 7 天内的断签记录。",
+        "Restores a missed check-in within the 7-day grace window.",
         "deep_bond",
         140,
         5,
@@ -2313,6 +2314,37 @@ fn upsert_inventory_tx(tx: &Transaction<'_>, item: &PetInventoryItem) -> LocalRe
     )
     .map_err(|err| err.to_string())?;
     Ok(())
+}
+
+pub fn consume_inventory_item_tx(
+    tx: &Transaction<'_>,
+    item_key: &str,
+    quantity: i64,
+    now: &str,
+) -> LocalResult<i64> {
+    let quantity = quantity.clamp(1, 99);
+    let item = load_inventory_item_tx(tx, item_key)?
+        .ok_or_else(|| "该道具还不在个人仓库中。".to_string())?;
+    if item.slot != "consumable" {
+        return Err("只有互动道具可以使用。".into());
+    }
+    if item.quantity < quantity {
+        return Err("该道具数量不足。".into());
+    }
+    tx.execute(
+        "UPDATE pet_inventory
+         SET quantity = quantity - ?3, updated_at = ?4
+         WHERE pet_id = ?1 AND item_key = ?2 AND quantity >= ?3",
+        params![PET_ID, item_key, quantity, now],
+    )
+    .map_err(|err| err.to_string())?;
+    tx.execute(
+        "DELETE FROM pet_inventory
+         WHERE pet_id = ?1 AND item_key = ?2 AND quantity <= 0",
+        params![PET_ID, item_key],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok((item.quantity - quantity).max(0))
 }
 
 fn inventory_exists_tx(tx: &Transaction<'_>, item_key: &str) -> LocalResult<bool> {

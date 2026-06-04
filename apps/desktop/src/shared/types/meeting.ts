@@ -379,6 +379,12 @@ export interface PetDailyCheckInState {
   currentStreak: number;
   nextCycleDay: number;
   cycleLength: number;
+  missedDays: number;
+  makeupAvailable: boolean;
+  makeupDate?: string | null;
+  makeupTicketItemKey: string;
+  makeupTicketQuantity: number;
+  makeupBlockedReason?: string | null;
   todayReward: PetDailyCheckInRewardPreview;
   rewards: PetDailyCheckInRewardPreview[];
   history: PetDailyCheckInEntry[];
@@ -389,6 +395,13 @@ export interface PetDailyCheckInClaimResult {
   state: PetDailyCheckInState;
   entry: PetDailyCheckInEntry;
   duplicate: boolean;
+}
+
+export interface PetDailyCheckInMakeupResult {
+  state: PetDailyCheckInState;
+  entry: PetDailyCheckInEntry;
+  ticketItemKey: string;
+  ticketQuantityAfter: number;
 }
 
 export interface PetGiftBoxOpenResult {

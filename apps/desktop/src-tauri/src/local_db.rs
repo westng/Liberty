@@ -533,6 +533,21 @@ pub fn claim_pet_daily_check_in(app: &AppHandle) -> LocalResult<PetDailyCheckInC
     pet_check_in::claim_result(&conn, profile, entry, duplicate)
 }
 
+pub fn repair_pet_daily_check_in(app: &AppHandle) -> LocalResult<PetDailyCheckInMakeupResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    let profile = pet::load_profile_tx(&tx)?;
+    let entry = pet_check_in::repair_daily_check_in_tx(&tx, &profile, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    pet::reconcile_profile_leveling(&conn)?;
+    let profile = pet::load_profile(&conn)?;
+    pet_check_in::makeup_result(&conn, profile, entry)
+}
+
 pub fn save_pet_profile(app: &AppHandle, profile: &PetProfile) -> LocalResult<PetProfile> {
     init_database(app)?;
     let conn = open_connection(app)?;
