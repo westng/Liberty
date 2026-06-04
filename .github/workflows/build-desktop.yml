@@ -195,6 +195,20 @@ jobs:
           echo "prerelease=false" >> "$GITHUB_OUTPUT"
           echo "publish_release=${INPUT_PUBLISH_RELEASE:-false}" >> "$GITHUB_OUTPUT"
 
+      - name: Preview Chinese Changelog
+        shell: bash
+        run: |
+          if [[ ! -s CHANGELOG.zh-CN.md ]]; then
+            echo "::error::CHANGELOG.zh-CN.md 不存在或内容为空。"
+            exit 1
+          fi
+
+          {
+            printf "## Release 正文预览\n\n"
+            printf "以下中文更新日志会显示在 GitHub Release 正文顶部：\n\n"
+            cat CHANGELOG.zh-CN.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build (${{ matrix.name }})
     needs: prepare_release
