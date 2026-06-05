@@ -13,6 +13,10 @@ export async function getDiagnostics() {
   return invoke<DiagnosticsReport>("get_diagnostics");
 }
 
+export async function exportDesktopPetDiagnosticLog(filePath: string) {
+  return invoke<void>("export_desktop_pet_diagnostic_log", { filePath });
+}
+
 export async function promptPetName(input: {
   title: string;
   message: string;

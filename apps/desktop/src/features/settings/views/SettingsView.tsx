@@ -1,9 +1,11 @@
 import { useEffect } from "react";
+import { message, save as saveFile } from "@tauri-apps/plugin-dialog";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { accentColors, useSettingsForm } from "@/features/settings/application/useSettingsForm";
 import { useRuntimePanel } from "@/features/settings/application/useRuntimePanel";
 import { useDiagnosticsPanel } from "@/shared/services/system/diagnostics";
+import { exportDesktopPetDiagnosticLog } from "@/shared/services/tauri/system";
 import { getMessages } from "@/shared/i18n";
 import type { LiquidGlassStyle, LocaleCode, LocalAsrDevice, ThemeMode } from "@/shared/types/meeting";
 import "./SettingsView.css";
@@ -65,6 +67,28 @@ export default function SettingsView() {
 
   async function updateRuntimeDownloadSource(sourceId: string) {
     await setRuntimeDownloadSource(sourceId);
+  }
+
+  async function exportPetDiagnosticLog() {
+    setSaveError("");
+    const filePath = await saveFile({
+      defaultPath: "桌宠拖拽诊断日志.log",
+      filters: [{ name: "Log", extensions: ["log", "txt"] }],
+    });
+
+    if (!filePath) {
+      return;
+    }
+
+    try {
+      await exportDesktopPetDiagnosticLog(filePath);
+      await message(`诊断日志已导出：${filePath}`, {
+        title: "工程诊断",
+        kind: "info",
+      });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return (
@@ -227,13 +251,20 @@ export default function SettingsView() {
             </div>
           )}
 
-          {diagnostics?.desktopPetDiagnosticLogTail && (
-            <div className="setting-row diagnostics-row diagnostics-log-row">
+          {diagnostics && (
+            <div className="setting-row diagnostics-row">
               <div className="settings-meta">
                 <span className="settings-label">桌宠拖拽诊断日志</span>
               </div>
-              <div className="setting-control diagnostics-log">
-                <pre>{diagnostics.desktopPetDiagnosticLogTail}</pre>
+              <div className="setting-control setting-control-inline">
+                <button
+                  className="text-button diagnostics-export"
+                  type="button"
+                  disabled={!diagnostics.desktopPetDiagnosticLogPath}
+                  onClick={exportPetDiagnosticLog}
+                >
+                  导出诊断日志
+                </button>
               </div>
             </div>
           )}

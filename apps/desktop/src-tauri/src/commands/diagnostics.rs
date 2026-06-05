@@ -6,6 +6,7 @@ use crate::{
     local_runtime,
 };
 use serde::Serialize;
+use std::{fs, path::Path};
 use tauri::AppHandle;
 
 #[derive(Debug, Serialize)]
@@ -59,4 +60,28 @@ pub fn get_diagnostics(app: AppHandle) -> LocalResult<DiagnosticsReport> {
             credential_store_required: true,
         },
     })
+}
+
+#[tauri::command]
+pub fn export_desktop_pet_diagnostic_log(app: AppHandle, file_path: String) -> LocalResult<()> {
+    let trimmed_path = file_path.trim();
+    if trimmed_path.is_empty() {
+        return Err("导出路径不能为空。".into());
+    }
+
+    let source_path = desktop_pet::diagnostic_log_path(&app)?;
+    if !source_path.is_file() {
+        return Err("桌宠诊断日志尚未生成。".into());
+    }
+
+    let target_path = Path::new(trimmed_path);
+    if let Some(parent) = target_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    fs::copy(&source_path, target_path).map_err(|err| err.to_string())?;
+    Ok(())
 }

@@ -32,6 +32,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::diagnostics::export_desktop_pet_diagnostic_log,
             commands::diagnostics::get_diagnostics,
             local_ai::delete_ai_model,
             local_ai::delete_ai_summary_run,

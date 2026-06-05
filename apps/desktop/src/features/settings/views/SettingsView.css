@@ -74,6 +74,17 @@
   white-space: nowrap;
 }
 
+.diagnostics-export {
+  min-width: 120px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.diagnostics-export.text-button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .diagnostics-value {
   min-width: 0;
   display: flex;
