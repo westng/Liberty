@@ -13,6 +13,10 @@ const SHORT_MAC_BYTES = 12;
 const SHORT_TOKEN_BYTES = SHORT_PAYLOAD_BYTES + SHORT_MAC_BYTES;
 const SHORT_TOKEN_CHUNK_SIZE = 13;
 const SHORT_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const ITEM_NAME_ZH = {
+  "gem-ticket-tool": "补签票券",
+  "gift-box-tool": "惊喜礼盒",
+};
 const COMPACT_PAYLOAD_BYTES = 28;
 const COMPACT_SIGNATURE_BYTES = 64;
 const COMPACT_KEY_LENGTH = 128;
@@ -53,7 +57,7 @@ function generateRedeemKeys(args) {
   const count = positiveInteger(args.count ?? "1", "--count");
   const rewards = parseRewards(args);
   const outPath = resolve(args.out ?? DEFAULT_OUT_PATH);
-  const rows = [["campaign_id", "key", "reward_summary"]];
+  const rows = [["活动ID", "兑换Key", "奖励明细"]];
 
   for (let index = 0; index < count; index += 1) {
     const key = encodeShortKey({ displayPrefix, rewards, expiresAt: args.expires ?? null });
@@ -290,11 +294,15 @@ function base64UrlEncode(buffer) {
 
 function rewardSummary(rewards) {
   const parts = [
-    rewards.lp > 0 ? `${rewards.lp}LP` : "",
-    rewards.growthValue > 0 ? `growth+${rewards.growthValue}` : "",
-    ...rewards.items.map((item) => `${item.itemKey}x${item.quantity}`),
+    rewards.lp > 0 ? `LP +${rewards.lp}` : "",
+    rewards.growthValue > 0 ? `成长值 +${rewards.growthValue}` : "",
+    ...rewards.items.map((item) => `${itemNameZh(item.itemKey)} x${item.quantity}`),
   ].filter(Boolean);
-  return parts.join(" + ");
+  return parts.join("、");
+}
+
+function itemNameZh(itemKey) {
+  return ITEM_NAME_ZH[itemKey] ?? itemKey;
 }
 
 function csvRow(values) {
