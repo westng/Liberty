@@ -159,7 +159,17 @@ function replaceJob(job: MeetingJob) {
 
 async function refreshRuntimeStatus() {
   try {
-    setState({ runtimeStatus: await localRuntimeService.getStatus() });
+    const managedStatus = await localRuntimeService.getStatus();
+    if (isManagedRuntimeReady(managedStatus) || managedStatus.status === "installing" || managedStatus.status === "unsupported") {
+      setState({ runtimeStatus: managedStatus });
+    } else {
+      try {
+        const systemStatus = await localRuntimeService.detectSystem();
+        setState({ runtimeStatus: isManagedRuntimeReady(systemStatus) ? systemStatus : managedStatus });
+      } catch {
+        setState({ runtimeStatus: managedStatus });
+      }
+    }
   } catch {
     setState({ runtimeStatus: initialRuntimeStatus });
   }
@@ -397,6 +407,7 @@ async function saveSettings(next: SettingsState) {
   setState({ settings: normalized });
   applyAppearance(normalized);
   await localSettingsService.saveSettings(normalized);
+  await refreshRuntimeStatus();
   syncLocalPolling();
   syncRuntimePolling();
   runtimeAutoInstallAttempted = hasManualPythonOverride(normalized) || Boolean(normalized.backendUrl.trim());

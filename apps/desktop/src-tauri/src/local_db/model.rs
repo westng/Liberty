@@ -617,6 +617,8 @@ pub struct ManagedRuntimeState {
     pub python_executable_path: Option<String>,
     pub models_root: Option<String>,
     pub install_root: Option<String>,
+    #[serde(default)]
+    pub ffmpeg_path: Option<String>,
     pub last_error: Option<String>,
     pub installed_at: Option<String>,
     pub updated_at: String,
@@ -633,6 +635,7 @@ impl ManagedRuntimeState {
             python_executable_path: None,
             models_root: None,
             install_root: None,
+            ffmpeg_path: None,
             last_error: None,
             installed_at: None,
             updated_at: unix_timestamp_millis().to_string(),

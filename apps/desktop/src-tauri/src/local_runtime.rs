@@ -5,9 +5,10 @@ mod paths;
 mod process;
 
 use crate::local_db::{self, LocalResult, ManagedRuntimeState};
+use crate::process_utils::configure_background_process;
 use std::{
-    fs,
-    path::Path,
+    env, fs,
+    path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -93,6 +94,11 @@ pub fn get_runtime_install_log(app: AppHandle) -> LocalResult<String> {
     Ok(fs::read_to_string(log_path).unwrap_or_default())
 }
 
+#[tauri::command]
+pub fn detect_system_runtime(app: AppHandle) -> LocalResult<ManagedRuntimeState> {
+    detect_system_runtime_state(&app)
+}
+
 pub fn resolve_python_runtime(
     app: &AppHandle,
     manual_python_path: Option<&str>,
@@ -115,7 +121,7 @@ pub fn resolve_python_runtime(
                 python_path: path,
                 source_label: "managed Liberty runtime".into(),
                 models_root: runtime_state.models_root.clone(),
-                ffmpeg_path,
+                ffmpeg_path: runtime_state.ffmpeg_path.clone().or(ffmpeg_path),
                 asr_backend: current_runtime_backend(app).unwrap_or_else(|_| "funasr".into()),
             });
         }
@@ -134,6 +140,24 @@ pub fn resolve_python_runtime(
         }
 
         return Err("手动配置的 Python 路径不存在，请检查系统设置。".into());
+    }
+
+    if let Ok(system_state) = detect_system_runtime_state(app) {
+        if system_state.status == "system_ready" {
+            if let Some(path) = system_state
+                .python_executable_path
+                .clone()
+                .filter(|value| Path::new(value).is_file())
+            {
+                return Ok(ResolvedPythonRuntime {
+                    python_path: path,
+                    source_label: "system runtime".into(),
+                    models_root: system_state.models_root.clone(),
+                    ffmpeg_path: system_state.ffmpeg_path.clone(),
+                    asr_backend: current_runtime_backend(app).unwrap_or_else(|_| "funasr".into()),
+                });
+            }
+        }
     }
 
     Err("本地运行环境未安装，请前往系统设置下载运行环境。".into())
@@ -188,6 +212,179 @@ fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
 
 pub fn detect_runtime_state_for_diagnostics(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
     detect_runtime_state(app)
+}
+
+fn detect_system_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
+    let manifest = load_manifest()?;
+    let platform_id = current_platform_id()?.to_string();
+    let mut state = ManagedRuntimeState::missing(
+        &platform_id,
+        &manifest.runtime_version,
+        &manifest.python_version,
+    );
+    let now = unix_timestamp_millis().to_string();
+    state.updated_at = now;
+
+    let validate_path = resolve_script_resource_path(app, "runtime_validate.py")?;
+    let backend = current_platform_manifest(&manifest)?
+        .asr_backend
+        .unwrap_or_else(|| "funasr".into());
+    let Some(python_path) = resolve_valid_system_python(&validate_path, &backend, &mut state)?
+    else {
+        if state.last_error.is_none() {
+            state.last_error = Some("未检测到本机 Python。".into());
+        }
+        return Ok(state);
+    };
+
+    let Some(ffmpeg_path) = resolve_system_executable(&["ffmpeg"]) else {
+        state.python_executable_path = Some(python_path.to_string_lossy().into_owned());
+        state.last_error = Some("未检测到本机 FFmpeg。".into());
+        return Ok(state);
+    };
+
+    let mut ffmpeg_command = Command::new(&ffmpeg_path);
+    ffmpeg_command.arg("-hide_banner").arg("-version");
+    configure_background_process(&mut ffmpeg_command);
+    let ffmpeg_output = ffmpeg_command.output().map_err(|err| err.to_string())?;
+    if !ffmpeg_output.status.success() {
+        state.python_executable_path = Some(python_path.to_string_lossy().into_owned());
+        state.ffmpeg_path = Some(ffmpeg_path.to_string_lossy().into_owned());
+        state.last_error = Some("本机 FFmpeg 不可用。".into());
+        return Ok(state);
+    }
+
+    state.status = "system_ready".into();
+    state.python_executable_path = Some(python_path.to_string_lossy().into_owned());
+    state.ffmpeg_path = Some(ffmpeg_path.to_string_lossy().into_owned());
+    state.models_root =
+        resolve_system_models_root().map(|path| path.to_string_lossy().into_owned());
+    state.last_error = None;
+    Ok(state)
+}
+
+fn resolve_valid_system_python(
+    validate_path: &Path,
+    backend: &str,
+    state: &mut ManagedRuntimeState,
+) -> LocalResult<Option<PathBuf>> {
+    let python_candidates = resolve_system_executables(&system_python_candidates());
+    if python_candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let mut last_error = String::new();
+    for python_path in python_candidates {
+        state.python_executable_path = Some(python_path.to_string_lossy().into_owned());
+        let mut validate_command = Command::new(&python_path);
+        validate_command
+            .env("PYTHONUTF8", "1")
+            .env("LIBERTY_ASR_BACKEND", backend)
+            .arg(validate_path);
+        configure_background_process(&mut validate_command);
+        let validate_output = match validate_command.output() {
+            Ok(output) => output,
+            Err(error) => {
+                last_error = format!("{} 启动失败：{error}", python_path.display());
+                continue;
+            }
+        };
+
+        if validate_output.status.success() {
+            return Ok(Some(python_path));
+        }
+
+        let error_text = String::from_utf8_lossy(&validate_output.stderr)
+            .trim()
+            .to_string();
+        last_error = if error_text.is_empty() {
+            format!("{} 验证未通过。", python_path.display())
+        } else {
+            format!("{}：{error_text}", python_path.display())
+        };
+    }
+
+    state.last_error = Some(if last_error.is_empty() {
+        "本机 Python 缺少本地转写依赖。".into()
+    } else {
+        format!("本机 Python 缺少本地转写依赖：{last_error}")
+    });
+    Ok(None)
+}
+
+fn system_python_candidates() -> [&'static str; 3] {
+    ["python3", "python", "py"]
+}
+
+fn resolve_system_executable(candidates: &[&str]) -> Option<PathBuf> {
+    resolve_system_executables(candidates).into_iter().next()
+}
+
+fn resolve_system_executables(candidates: &[&str]) -> Vec<PathBuf> {
+    let mut resolved = Vec::new();
+    for candidate in candidates {
+        let candidate_path = Path::new(candidate);
+        if candidate_path.is_file() {
+            push_unique_path(&mut resolved, candidate_path.to_path_buf());
+        }
+
+        for dir in system_search_paths() {
+            let path = dir.join(candidate);
+            if path.is_file() {
+                push_unique_path(&mut resolved, path);
+            }
+
+            #[cfg(windows)]
+            {
+                let exe_path = dir.join(format!("{candidate}.exe"));
+                if exe_path.is_file() {
+                    push_unique_path(&mut resolved, exe_path);
+                }
+            }
+        }
+    }
+
+    resolved
+}
+
+fn system_search_paths() -> Vec<PathBuf> {
+    let mut paths = env::var_os("PATH")
+        .map(|value| env::split_paths(&value).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    #[cfg(target_os = "macos")]
+    paths.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/opt/local/bin"),
+    ]);
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    paths.extend([
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+    ]);
+
+    let mut unique = Vec::new();
+    for path in paths {
+        push_unique_path(&mut unique, path);
+    }
+    unique
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, path: PathBuf) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
+}
+
+fn resolve_system_models_root() -> Option<PathBuf> {
+    env::var_os("LIBERTY_MODELS_ROOT")
+        .map(PathBuf::from)
+        .filter(|path| path.exists())
 }
 
 fn runtime_artifacts_missing(
@@ -495,6 +692,10 @@ fn build_ready_runtime_state(
         python_executable_path: Some(python_executable.to_string_lossy().into_owned()),
         models_root: Some(models_root.to_string_lossy().into_owned()),
         install_root: Some(runtime_root.to_string_lossy().into_owned()),
+        ffmpeg_path: resolve_managed_ffmpeg_path(runtime_root)
+            .ok()
+            .flatten()
+            .map(|path| path.to_string_lossy().into_owned()),
         last_error: None,
         installed_at: Some(now.clone()),
         updated_at: now,

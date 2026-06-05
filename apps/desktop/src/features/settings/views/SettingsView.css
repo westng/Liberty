@@ -125,7 +125,8 @@
   justify-self: end;
 }
 
-.runtime-status-ready {
+.runtime-status-ready,
+.runtime-status-system_ready {
   color: rgb(31, 140, 84);
   background: rgba(41, 171, 107, 0.14);
 }

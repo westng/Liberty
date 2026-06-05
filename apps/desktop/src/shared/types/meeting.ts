@@ -17,6 +17,7 @@ export type ManagedRuntimeInstallStatus =
   | "missing"
   | "installing"
   | "ready"
+  | "system_ready"
   | "failed"
   | "repair_required"
   | "unsupported";
@@ -507,6 +508,7 @@ export interface ManagedRuntimeStatus {
   pythonExecutablePath?: string;
   modelsRoot?: string;
   installRoot?: string;
+  ffmpegPath?: string;
   lastError?: string;
   installedAt?: string;
   updatedAt: string;

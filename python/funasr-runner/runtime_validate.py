@@ -24,6 +24,7 @@ def main():
     import torch
     import torchaudio
     import torchvision
+    from funasr import AutoModel
 
     if not hasattr(torch, "_utils"):
         raise RuntimeError("torch._utils 缺失，当前 PyTorch 安装不完整。")
@@ -43,6 +44,7 @@ def main():
     print(f"torch={torch.__version__}")
     print(f"torchvision={torchvision.__version__}")
     print(f"torchaudio={torchaudio.__version__}")
+    print(f"funasr={AutoModel.__module__}")
     print("torch runtime validation passed.")
 
 

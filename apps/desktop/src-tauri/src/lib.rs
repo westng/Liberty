@@ -82,6 +82,7 @@ pub fn run() {
             local_pet::equip_pet_inventory_item,
             local_pet::unequip_pet_inventory_slot,
             local_pet::use_pet_inventory_item,
+            local_runtime::detect_system_runtime,
             local_runtime::get_runtime_install_log,
             local_runtime::get_runtime_status,
             local_runtime::install_runtime,

@@ -98,6 +98,7 @@ export type MessageTree = {
     runtimeStatusMissing: string;
     runtimeStatusInstalling: string;
     runtimeStatusReady: string;
+    runtimeStatusSystemReady: string;
     runtimeStatusFailed: string;
     runtimeStatusRepair: string;
     runtimeStatusUnsupported: string;
@@ -134,6 +135,7 @@ export type MessageTree = {
     runtimeInstallLog: string;
     runtimeInstallLogEmpty: string;
     runtimeDescriptionReady: string;
+    runtimeDescriptionSystemReady: string;
     runtimeDescriptionInstalling: string;
     runtimeDescriptionFailed: string;
     runtimeDescriptionMissing: string;

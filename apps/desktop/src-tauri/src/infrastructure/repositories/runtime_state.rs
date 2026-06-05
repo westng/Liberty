@@ -25,6 +25,7 @@ pub fn load_runtime_state(
                     python_executable_path: row.get(4)?,
                     models_root: row.get(5)?,
                     install_root: row.get(6)?,
+                    ffmpeg_path: None,
                     last_error: row.get(7)?,
                     installed_at: row.get(8)?,
                     updated_at: row.get(9)?,

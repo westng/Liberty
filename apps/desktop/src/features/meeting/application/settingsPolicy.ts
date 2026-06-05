@@ -64,7 +64,10 @@ export function shouldUseLocalDataSource(settings: SettingsState) {
 }
 
 export function isManagedRuntimeReady(runtimeStatus: ManagedRuntimeStatus) {
-  return runtimeStatus.status === "ready" && Boolean(runtimeStatus.pythonExecutablePath?.trim());
+  return (
+    (runtimeStatus.status === "ready" || runtimeStatus.status === "system_ready") &&
+    Boolean(runtimeStatus.pythonExecutablePath?.trim())
+  );
 }
 
 export function shouldAutoInstallManagedRuntime(
@@ -80,6 +83,10 @@ export function shouldAutoInstallManagedRuntime(
   }
 
   if (!settings.runtimeDownloadSource.trim()) {
+    return false;
+  }
+
+  if (runtimeStatus.status === "system_ready") {
     return false;
   }
 

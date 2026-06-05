@@ -43,7 +43,7 @@ export function useRuntimePanel(
   }, [runtimeInstallLog]);
   const runtimeActionLabel = runtimeStatus.status === "unsupported"
     ? messages.runtimeStatusUnsupported
-    : runtimeStatus.status === "ready"
+    : runtimeStatus.status === "ready" || runtimeStatus.status === "system_ready"
       ? messages.runtimeReinstallAction
       : runtimeStatus.status === "installing"
         ? messages.runtimeStatusInstalling
@@ -93,6 +93,8 @@ function labelForRuntimeStatus(status: ManagedRuntimeStatus, messages: MessageTr
       return messages.runtimeStatusInstalling;
     case "ready":
       return messages.runtimeStatusReady;
+    case "system_ready":
+      return messages.runtimeStatusSystemReady;
     case "failed":
       return messages.runtimeStatusFailed;
     case "repair_required":
@@ -112,6 +114,8 @@ function runtimeDescription(status: ManagedRuntimeStatus, messages: MessageTree[
   switch (status.status) {
     case "ready":
       return messages.runtimeDescriptionReady;
+    case "system_ready":
+      return messages.runtimeDescriptionSystemReady;
     case "installing":
       return messages.runtimeDescriptionInstalling;
     case "failed":
@@ -150,7 +154,7 @@ function runtimeResource(
   const active = isResourceActive(id, status, log);
   const progress = active ? activeResourceProgress(log) : 0;
   const percent = completed ? 100 : progress;
-  const disabled = sourceRequired || runtimeBusy;
+  const disabled = status.status === "system_ready" || sourceRequired || runtimeBusy;
 
   return {
     id,
@@ -169,12 +173,16 @@ function resourceStatusLabel(
   completed: boolean,
   active: boolean,
 ) {
-  if (sourceRequired) {
-    return messages.runtimeDownloadSourceRequired;
+  if (status.status === "system_ready") {
+    return messages.runtimeStatusSystemReady;
   }
 
   if (completed) {
     return messages.runtimeResourceReady;
+  }
+
+  if (sourceRequired) {
+    return messages.runtimeDownloadSourceRequired;
   }
 
   if (status.status === "unsupported") {
@@ -205,7 +213,7 @@ function activeResourceProgress(log: string) {
 }
 
 function isResourceCompleted(id: RuntimeResourceId, status: ManagedRuntimeStatus, log: string) {
-  if (status.status === "ready" || log.includes("[runtime] install completed.")) {
+  if (status.status === "ready" || status.status === "system_ready" || log.includes("[runtime] install completed.")) {
     return true;
   }
 
