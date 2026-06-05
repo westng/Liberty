@@ -1,11 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use tauri::{AppHandle, Manager};
 
 use crate::local_db::LocalResult;
 use crate::local_runtime::manifest::{current_platform_manifest, load_manifest, PlatformRuntime};
 
-#[cfg(unix)]
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -23,6 +24,15 @@ pub fn resolve_python_executable(
     Err("未找到托管运行环境中的 Python 可执行文件。".into())
 }
 
+pub fn find_python_executable(root: &Path) -> Option<PathBuf> {
+    let candidates = if cfg!(windows) {
+        ["python.exe", "python3.exe"]
+    } else {
+        ["python3", "python"]
+    };
+    find_named_executable(root, &candidates)
+}
+
 pub fn resolve_ffmpeg_executable(
     runtime_root: &Path,
     platform: &PlatformRuntime,
@@ -31,6 +41,50 @@ pub fn resolve_ffmpeg_executable(
         let path = runtime_root.join(candidate);
         if path.is_file() {
             return Some(path);
+        }
+    }
+
+    None
+}
+
+pub fn find_ffmpeg_executable(root: &Path) -> Option<PathBuf> {
+    let candidates = if cfg!(windows) {
+        ["ffmpeg.exe", "ffmpeg.exe"]
+    } else {
+        ["ffmpeg", "ffmpeg"]
+    };
+    find_named_executable(root, &candidates)
+}
+
+fn find_named_executable(root: &Path, names: &[&str; 2]) -> Option<PathBuf> {
+    if !root.is_dir() {
+        return None;
+    }
+
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("");
+            if names
+                .iter()
+                .any(|candidate| name.eq_ignore_ascii_case(candidate))
+            {
+                return Some(path);
+            }
         }
     }
 

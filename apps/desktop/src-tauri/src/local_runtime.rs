@@ -25,8 +25,9 @@ use manifest::{
     RuntimeDownloadSource, RuntimeManifest,
 };
 use paths::{
-    ensure_unix_executable, resolve_ffmpeg_executable, resolve_managed_ffmpeg_path,
-    resolve_python_executable, resolve_script_resource_path,
+    ensure_unix_executable, find_ffmpeg_executable, find_python_executable,
+    resolve_ffmpeg_executable, resolve_managed_ffmpeg_path, resolve_python_executable,
+    resolve_script_resource_path,
 };
 use process::{run_command_with_log, validate_ffmpeg_runtime, warmup_default_models};
 
@@ -41,9 +42,29 @@ pub struct ResolvedPythonRuntime {
     pub asr_backend: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDownloadSourceOption {
+    pub id: String,
+    pub label: String,
+}
+
 #[tauri::command]
 pub fn get_runtime_status(app: AppHandle) -> LocalResult<ManagedRuntimeState> {
     detect_runtime_state(&app)
+}
+
+#[tauri::command]
+pub fn list_runtime_download_sources() -> LocalResult<Vec<RuntimeDownloadSourceOption>> {
+    let manifest = load_manifest()?;
+    Ok(manifest
+        .download_sources
+        .into_iter()
+        .map(|source| RuntimeDownloadSourceOption {
+            id: source.source_id,
+            label: source.name_zh,
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -516,12 +537,21 @@ fn selected_runtime_download_source(
         .ok_or_else(|| format!("下载源配置不存在，请重新选择下载源：{source_id}"))
 }
 
-fn asset_download_url(source: &RuntimeDownloadSource, asset: &BundledAsset) -> String {
-    format!(
-        "{}/{}",
-        source.base_url.trim().trim_end_matches('/'),
-        asset.file_name.trim_start_matches('/')
-    )
+fn asset_download_url(source: &RuntimeDownloadSource, asset: &BundledAsset) -> LocalResult<String> {
+    if let Some(url) = asset
+        .urls
+        .get(&source.source_id)
+        .or_else(|| asset.urls.get("official"))
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(url.to_string());
+    }
+
+    Err(format!(
+        "运行资源缺少可用下载地址：{} / {}",
+        source.name_zh, asset.file_name
+    ))
 }
 
 fn append_runtime_header(
@@ -553,7 +583,7 @@ fn install_python_runtime(
         .as_ref()
         .ok_or_else(|| format!("当前平台缺少远程 Python 运行时配置：{platform_id}"))?;
     let python_bundle_path = downloads_root.join(&python_bundle.file_name);
-    let python_download_url = asset_download_url(download_source, python_bundle);
+    let python_download_url = asset_download_url(download_source, python_bundle)?;
     download_remote_asset(
         &python_download_url,
         &python_bundle_path,
@@ -561,11 +591,13 @@ fn install_python_runtime(
         "downloading Python runtime",
     )?;
     verify_bundled_asset_sha256(&python_bundle_path, &python_bundle.sha256, log_path)?;
-    extract_archive(
+    extract_asset_to_runtime_dir(
         &python_bundle_path,
         runtime_root,
+        "python",
         log_path,
         "extracting python runtime archive",
+        find_python_executable,
     )?;
 
     let python_executable = resolve_python_executable(runtime_root, platform)?;
@@ -573,6 +605,14 @@ fn install_python_runtime(
     append_install_log_line(
         log_path,
         &format!("[runtime] resolved python={}", python_executable.display()),
+    )?;
+
+    install_python_dependencies(
+        app,
+        &python_executable,
+        download_source,
+        platform.asr_backend.as_deref().unwrap_or("funasr"),
+        log_path,
     )?;
 
     let validate_path = resolve_script_resource_path(app, "runtime_validate.py")?;
@@ -603,7 +643,7 @@ fn install_ffmpeg_runtime(
     };
 
     let ffmpeg_bundle_path = downloads_root.join(&ffmpeg_bundle.file_name);
-    let ffmpeg_download_url = asset_download_url(download_source, ffmpeg_bundle);
+    let ffmpeg_download_url = asset_download_url(download_source, ffmpeg_bundle)?;
     download_remote_asset(
         &ffmpeg_download_url,
         &ffmpeg_bundle_path,
@@ -611,11 +651,13 @@ fn install_ffmpeg_runtime(
         "downloading FFmpeg runtime",
     )?;
     verify_bundled_asset_sha256(&ffmpeg_bundle_path, &ffmpeg_bundle.sha256, log_path)?;
-    extract_archive(
+    extract_asset_to_runtime_dir(
         &ffmpeg_bundle_path,
         runtime_root,
+        "ffmpeg",
         log_path,
         "extracting ffmpeg archive",
+        find_ffmpeg_executable,
     )?;
 
     let ffmpeg_executable = resolve_ffmpeg_executable(runtime_root, platform)
@@ -626,6 +668,103 @@ fn install_ffmpeg_runtime(
         &format!("[runtime] resolved ffmpeg={}", ffmpeg_executable.display()),
     )?;
     validate_ffmpeg_runtime(&ffmpeg_executable, log_path)
+}
+
+fn extract_asset_to_runtime_dir(
+    archive_path: &Path,
+    runtime_root: &Path,
+    target_dir_name: &str,
+    log_path: &Path,
+    description: &str,
+    find_marker: fn(&Path) -> Option<PathBuf>,
+) -> LocalResult<()> {
+    let stage_dir = runtime_root.join(format!("{target_dir_name}.stage"));
+    let target_dir = runtime_root.join(target_dir_name);
+    if stage_dir.exists() {
+        fs::remove_dir_all(&stage_dir).map_err(|err| err.to_string())?;
+    }
+    if target_dir.exists() {
+        fs::remove_dir_all(&target_dir).map_err(|err| err.to_string())?;
+    }
+
+    extract_archive(archive_path, &stage_dir, log_path, description)?;
+    let marker = find_marker(&stage_dir).ok_or_else(|| {
+        format!(
+            "未在上游压缩包中找到 {} 可执行文件：{}",
+            target_dir_name,
+            archive_path.display()
+        )
+    })?;
+    let source_root = choose_asset_root(&stage_dir, &marker);
+    if fs::rename(&source_root, &target_dir).is_err() {
+        copy_dir_all(&source_root, &target_dir)?;
+        fs::remove_dir_all(&source_root).map_err(|err| err.to_string())?;
+    }
+    if stage_dir.exists() {
+        let _ = fs::remove_dir_all(&stage_dir);
+    }
+    Ok(())
+}
+
+fn choose_asset_root(stage_dir: &Path, marker: &Path) -> PathBuf {
+    let mut current = marker.parent().unwrap_or(stage_dir);
+    while current.parent().is_some_and(|parent| parent != stage_dir) {
+        current = current.parent().unwrap_or(current);
+    }
+
+    if current == stage_dir {
+        marker.parent().unwrap_or(stage_dir).to_path_buf()
+    } else {
+        current.to_path_buf()
+    }
+}
+
+fn copy_dir_all(source: &Path, target: &Path) -> LocalResult<()> {
+    fs::create_dir_all(target).map_err(|err| err.to_string())?;
+    for entry in fs::read_dir(source).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_all(&source_path, &target_path)?;
+        } else {
+            fs::copy(&source_path, &target_path).map_err(|err| err.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn install_python_dependencies(
+    app: &AppHandle,
+    python_executable: &Path,
+    download_source: &RuntimeDownloadSource,
+    backend: &str,
+    log_path: &Path,
+) -> LocalResult<()> {
+    let requirements_path = resolve_script_resource_path(app, "requirements.txt")?;
+    let mut command = Command::new(python_executable);
+    command
+        .env("PYTHONUTF8", "1")
+        .env("LIBERTY_ASR_BACKEND", backend)
+        .arg("-m")
+        .arg("pip")
+        .arg("install")
+        .arg("--disable-pip-version-check")
+        .arg("--no-input");
+    if let Some(index_url) = download_source
+        .pip_index_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        command.arg("-i").arg(index_url);
+    }
+    command.arg("-r").arg(requirements_path);
+    run_command_with_log(
+        &mut command,
+        log_path,
+        "Installing Python runtime dependencies",
+    )
 }
 
 struct ModelInstallContext<'a> {
@@ -643,7 +782,7 @@ struct ModelInstallContext<'a> {
 fn install_or_reuse_models(context: ModelInstallContext<'_>) -> LocalResult<()> {
     if let Some(models_bundle) = &context.platform.models_bundle {
         let models_bundle_path = context.downloads_root.join(&models_bundle.file_name);
-        let models_download_url = asset_download_url(context.download_source, models_bundle);
+        let models_download_url = asset_download_url(context.download_source, models_bundle)?;
         download_remote_asset(
             &models_download_url,
             &models_bundle_path,
@@ -674,6 +813,7 @@ fn install_or_reuse_models(context: ModelInstallContext<'_>) -> LocalResult<()> 
         &warmup_path,
         context.models_root,
         backend,
+        context.download_source.model_endpoint.as_deref(),
         context.log_path,
     )
 }

@@ -159,6 +159,7 @@ pub fn run() {
             local_runtime::get_runtime_install_log,
             local_runtime::get_runtime_status,
             local_runtime::install_runtime,
+            local_runtime::list_runtime_download_sources,
             local_pet::save_pet_settings,
             local_settings::get_settings,
             local_settings::save_settings,
