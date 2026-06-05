@@ -30,7 +30,8 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           runner_script_path TEXT NOT NULL,
           local_asr_device TEXT NOT NULL DEFAULT 'auto',
           local_asr_threads INTEGER NOT NULL DEFAULT 0,
-          local_asr_batch_size_seconds INTEGER NOT NULL DEFAULT 300
+          local_asr_batch_size_seconds INTEGER NOT NULL DEFAULT 300,
+          runtime_download_source TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS runtime_state (
@@ -326,6 +327,7 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         "ALTER TABLE app_settings ADD COLUMN local_asr_device TEXT NOT NULL DEFAULT 'auto'",
         "ALTER TABLE app_settings ADD COLUMN local_asr_threads INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE app_settings ADD COLUMN local_asr_batch_size_seconds INTEGER NOT NULL DEFAULT 300",
+        "ALTER TABLE app_settings ADD COLUMN runtime_download_source TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE ai_model_configs ADD COLUMN api_key_ref TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE ai_summary_runs ADD COLUMN minutes_payload_json TEXT",
     ] {

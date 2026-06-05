@@ -79,6 +79,24 @@
   gap: 20px;
 }
 
+.runtime-source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
+  align-items: center;
+  gap: 14px;
+}
+
+.runtime-source-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.runtime-source-row select {
+  justify-self: end;
+  width: min(360px, 100%);
+}
+
 .runtime-status-ready {
   color: rgb(31, 140, 84);
   background: rgba(41, 171, 107, 0.14);
@@ -199,6 +217,54 @@
   line-height: 1.5;
 }
 
+.runtime-resource-list {
+  display: grid;
+  gap: 10px;
+}
+
+.runtime-resource-row {
+  display: grid;
+  grid-template-columns: minmax(108px, 160px) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 58px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--native-subpanel-bg, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 88%, transparent);
+}
+
+.runtime-resource-name {
+  min-width: 0;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.runtime-resource-progress {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.runtime-resource-status {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.runtime-resource-action {
+  min-width: 76px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.runtime-resource-action.text-button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @keyframes runtime-progress-flow {
   from {
     background-position: 200% 0;
@@ -290,6 +356,15 @@
   .runtime-hero {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .runtime-source-row,
+  .runtime-resource-row {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-resource-action {
+    width: 100%;
   }
 
   .runtime-meta-grid {

@@ -3,11 +3,28 @@ import type { MessageTree } from "@/shared/i18n";
 import type { ManagedRuntimeStatus } from "@/shared/types/meeting";
 import type { MeetingStore } from "@/features/meeting/stores/useMeetingStore";
 
+const runtimeDownloadSources = [
+  { sourceId: "aliyun", nameZh: "阿里云镜像", nameEn: "Aliyun Mirror" },
+  { sourceId: "tencent", nameZh: "腾讯云镜像", nameEn: "Tencent Cloud Mirror" },
+  { sourceId: "huawei", nameZh: "华为云镜像", nameEn: "Huawei Cloud Mirror" },
+  { sourceId: "github", nameZh: "官方源", nameEn: "Official Source" },
+] as const;
+
+type RuntimeResourceId = "python" | "ffmpeg" | "model";
+
+export interface RuntimeResourceRow {
+  id: RuntimeResourceId;
+  name: string;
+  percent: number;
+  statusLabel: string;
+  actionLabel: string;
+  disabled: boolean;
+}
+
 export function useRuntimePanel(
   store: MeetingStore,
   messages: MessageTree["settings"],
   shellMessages: MessageTree["shell"],
-  commonMessages: MessageTree["common"],
 ) {
   const runtimeModeLabel = store.localMode
     ? shellMessages.localMode
@@ -34,23 +51,23 @@ export function useRuntimePanel(
   const runtimeStatusLabel = labelForRuntimeStatus(runtimeStatus, messages);
   const runtimeStatusDescription = runtimeDescription(runtimeStatus, messages);
   const runtimeBusy = runtimeStatus.status === "installing" || runtimeStatus.status === "unsupported";
-  const runtimeInstalledAtLabel = formatRuntimeDate(runtimeStatus.installedAt);
-  const runtimeInstallProgress = runtimeProgress(runtimeStatus, runtimeInstallLog, messages);
+  const runtimeSelectedSourceId = store.settings.runtimeDownloadSource.trim();
+  const runtimeDownloadSourceOptions = runtimeDownloadSources.map((source) => ({
+    id: source.sourceId,
+    label: store.settings.locale === "en-US" ? source.nameEn : source.nameZh,
+  }));
+  const runtimeSourceRequired = !runtimeSelectedSourceId;
+  const runtimeResourceRows = runtimeResources(
+    runtimeStatus,
+    runtimeInstallLog,
+    messages,
+    runtimeSourceRequired,
+    runtimeBusy,
+  );
 
   async function refreshRuntimePanel() {
     await store.refreshRuntimeStatus();
     await store.refreshRuntimeInstallLog();
-  }
-
-  function formatRuntimeDate(value?: string) {
-    const normalized = value?.trim();
-    if (!normalized) {
-      return commonMessages.dash;
-    }
-
-    const fromMillis = Number(normalized);
-    const date = Number.isFinite(fromMillis) && fromMillis > 0 ? new Date(fromMillis) : new Date(normalized);
-    return Number.isNaN(date.getTime()) ? normalized : date.toLocaleString(store.settings.locale);
   }
 
   return {
@@ -62,8 +79,10 @@ export function useRuntimePanel(
     runtimeStatusLabel,
     runtimeStatusDescription,
     runtimeBusy,
-    runtimeInstalledAtLabel,
-    runtimeInstallProgress,
+    runtimeSelectedSourceId,
+    runtimeDownloadSourceOptions,
+    runtimeSourceRequired,
+    runtimeResourceRows,
     refreshRuntimePanel,
   };
 }
@@ -104,53 +123,115 @@ function runtimeDescription(status: ManagedRuntimeStatus, messages: MessageTree[
   }
 }
 
-function runtimeProgress(status: ManagedRuntimeStatus, log: string, messages: MessageTree["settings"]) {
-  const normalized = log.trim();
+function runtimeResources(
+  status: ManagedRuntimeStatus,
+  log: string,
+  messages: MessageTree["settings"],
+  sourceRequired: boolean,
+  runtimeBusy: boolean,
+): RuntimeResourceRow[] {
+  return [
+    runtimeResource("python", messages.runtimeResourcePython, status, log, messages, sourceRequired, runtimeBusy),
+    runtimeResource("ffmpeg", messages.runtimeResourceFfmpeg, status, log, messages, sourceRequired, runtimeBusy),
+    runtimeResource("model", messages.runtimeResourceFunasr, status, log, messages, sourceRequired, runtimeBusy),
+  ];
+}
 
-  if (status.status === "ready" || normalized.includes("[runtime] install completed.")) {
-    return {
-      percent: 100,
-      label: messages.runtimeInstallCompleted,
-    };
+function runtimeResource(
+  id: RuntimeResourceId,
+  name: string,
+  status: ManagedRuntimeStatus,
+  log: string,
+  messages: MessageTree["settings"],
+  sourceRequired: boolean,
+  runtimeBusy: boolean,
+): RuntimeResourceRow {
+  const completed = isResourceCompleted(id, status, log);
+  const active = isResourceActive(id, status, log);
+  const progress = active ? activeResourceProgress(log) : 0;
+  const percent = completed ? 100 : progress;
+  const disabled = sourceRequired || runtimeBusy;
+
+  return {
+    id,
+    name,
+    percent,
+    statusLabel: resourceStatusLabel(status, messages, sourceRequired, completed, active),
+    actionLabel: completed ? messages.runtimeResourceRedownload : messages.runtimeResourceDownload,
+    disabled,
+  };
+}
+
+function resourceStatusLabel(
+  status: ManagedRuntimeStatus,
+  messages: MessageTree["settings"],
+  sourceRequired: boolean,
+  completed: boolean,
+  active: boolean,
+) {
+  if (sourceRequired) {
+    return messages.runtimeDownloadSourceRequired;
   }
 
-  let percent = status.status === "installing" ? 4 : 0;
-  let label = messages.runtimeInstallPreparing;
+  if (completed) {
+    return messages.runtimeResourceReady;
+  }
+
+  if (status.status === "unsupported") {
+    return messages.runtimeStatusUnsupported;
+  }
+
+  if (status.status === "failed" || status.status === "repair_required") {
+    return messages.runtimeResourceFailed;
+  }
+
+  if (active) {
+    return messages.runtimeResourceDownloading;
+  }
+
+  return messages.runtimeResourcePending;
+}
+
+function activeResourceProgress(log: string) {
   const lastStageProgress = Array.from(
     log.matchAll(/\[runtime\] (?:staging|download) progress .*?\(([\d.]+)%\)/g),
   ).at(-1)?.[1];
 
-  if (lastStageProgress) {
-    percent = Math.max(percent, Math.min(52, Math.round(Number(lastStageProgress) * 0.52)));
-    label = messages.runtimeInstallDownload;
-  } else if (normalized.includes("[runtime] downloading ")) {
-    percent = Math.max(percent, 16);
-    label = messages.runtimeInstallDownload;
+  if (!lastStageProgress) {
+    return 18;
   }
 
-  const stageWeights = [
-    ["[runtime] locating remote runtime resources", 8, messages.runtimeInstallPreparing],
-    ["[runtime] downloading Python runtime", 22, messages.runtimeInstallDownload],
-    ["[runtime] verifying runtime asset checksum", 32, messages.runtimeInstallVerify],
-    ["[runtime] extracting python runtime archive", 44, messages.runtimeInstallExtract],
-    ["[runtime] resolved python=", 54, messages.runtimeInstallResolvePython],
-    ["Validating Python runtime", 66, messages.runtimeInstallBootstrapPip],
-    ["[runtime] downloading FFmpeg runtime", 76, messages.runtimeInstallUpgradePip],
-    ["Validating ffmpeg runtime", 84, messages.runtimeInstallPytorch],
-    ["[runtime] downloading ASR models bundle", 90, messages.runtimeInstallModels],
-    ["Downloading default ASR models", 94, messages.runtimeInstallModels],
-    ["Downloading default Sherpa-ONNX model", 94, messages.runtimeInstallModels],
-  ] as const;
+  return Math.max(18, Math.min(96, Math.round(Number(lastStageProgress))));
+}
 
-  for (const [pattern, stagePercent, stageLabel] of stageWeights) {
-    if (normalized.includes(pattern)) {
-      percent = Math.max(percent, stagePercent);
-      label = stageLabel;
-    }
+function isResourceCompleted(id: RuntimeResourceId, status: ManagedRuntimeStatus, log: string) {
+  if (status.status === "ready" || log.includes("[runtime] install completed.")) {
+    return true;
   }
 
-  return {
-    percent: Math.max(0, Math.min(99, percent)),
-    label,
-  };
+  if (id === "python") {
+    return log.includes("[runtime] resolved python=") || log.includes("Validating Python runtime");
+  }
+
+  if (id === "ffmpeg") {
+    return log.includes("[runtime] resolved ffmpeg=") || log.includes("Validating ffmpeg runtime");
+  }
+
+  return false;
+}
+
+function isResourceActive(id: RuntimeResourceId, status: ManagedRuntimeStatus, log: string) {
+  if (status.status !== "installing") {
+    return false;
+  }
+
+  if (id === "python") {
+    return !isResourceCompleted("python", status, log);
+  }
+
+  if (id === "ffmpeg") {
+    return isResourceCompleted("python", status, log) && !isResourceCompleted("ffmpeg", status, log);
+  }
+
+  return isResourceCompleted("ffmpeg", status, log) && !isResourceCompleted("model", status, log);
 }

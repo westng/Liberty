@@ -496,6 +496,7 @@ export interface SettingsState {
   localAsrDevice: LocalAsrDevice;
   localAsrThreads: number;
   localAsrBatchSizeSeconds: number;
+  runtimeDownloadSource: string;
 }
 
 export interface ManagedRuntimeStatus {

@@ -121,6 +121,21 @@ export function useSettingsForm(store: MeetingStore) {
     await saveAppearance({ accentColor: color });
   }
 
+  async function setRuntimeDownloadSource(sourceId: string) {
+    const normalizedSourceId = sourceId.trim();
+    if (store.settings.runtimeDownloadSource === normalizedSourceId) {
+      return;
+    }
+
+    setSaveError("");
+
+    try {
+      await store.saveSettings(createNextSettings({ runtimeDownloadSource: normalizedSourceId }));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function save() {
     setSaveError("");
 
@@ -153,6 +168,7 @@ export function useSettingsForm(store: MeetingStore) {
     setGlassStyle,
     setLocale,
     setAccentColor,
+    setRuntimeDownloadSource,
     save,
   };
 }

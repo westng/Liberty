@@ -8,7 +8,7 @@ pub fn load_settings(conn: &Connection) -> LocalResult<AppSettings> {
             "SELECT theme_mode, liquid_glass_style, accent_color, locale, backend_url,
                     api_token, default_hotwords, summary_template, concurrency,
                     python_path, runner_script_path, local_asr_device,
-                    local_asr_threads, local_asr_batch_size_seconds
+                    local_asr_threads, local_asr_batch_size_seconds, runtime_download_source
              FROM app_settings
              WHERE id = 1",
             [],
@@ -28,6 +28,7 @@ pub fn load_settings(conn: &Connection) -> LocalResult<AppSettings> {
                     local_asr_device: row.get(11)?,
                     local_asr_threads: row.get::<_, i64>(12)? as u32,
                     local_asr_batch_size_seconds: row.get::<_, i64>(13)? as u32,
+                    runtime_download_source: row.get(14)?,
                 })
             },
         )
@@ -50,8 +51,9 @@ pub fn save_settings(conn: &Connection, settings: &AppSettings) -> LocalResult<(
         "INSERT INTO app_settings (
             id, theme_mode, liquid_glass_style, accent_color, locale, backend_url,
             api_token, default_hotwords, summary_template, concurrency, python_path,
-            runner_script_path, local_asr_device, local_asr_threads, local_asr_batch_size_seconds
-         ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            runner_script_path, local_asr_device, local_asr_threads, local_asr_batch_size_seconds,
+            runtime_download_source
+         ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
          ON CONFLICT(id) DO UPDATE SET
             theme_mode = excluded.theme_mode,
             liquid_glass_style = excluded.liquid_glass_style,
@@ -66,7 +68,8 @@ pub fn save_settings(conn: &Connection, settings: &AppSettings) -> LocalResult<(
             runner_script_path = excluded.runner_script_path,
             local_asr_device = excluded.local_asr_device,
             local_asr_threads = excluded.local_asr_threads,
-            local_asr_batch_size_seconds = excluded.local_asr_batch_size_seconds",
+            local_asr_batch_size_seconds = excluded.local_asr_batch_size_seconds,
+            runtime_download_source = excluded.runtime_download_source",
         params![
             normalized.theme_mode,
             normalized.liquid_glass_style,
@@ -81,7 +84,8 @@ pub fn save_settings(conn: &Connection, settings: &AppSettings) -> LocalResult<(
             normalized.runner_script_path,
             normalized.local_asr_device,
             i64::from(normalized.local_asr_threads),
-            i64::from(normalized.local_asr_batch_size_seconds)
+            i64::from(normalized.local_asr_batch_size_seconds),
+            normalized.runtime_download_source
         ],
     )
     .map_err(|err| err.to_string())?;
@@ -122,6 +126,7 @@ fn normalize_settings(mut settings: AppSettings) -> AppSettings {
     };
     settings.local_asr_threads = settings.local_asr_threads.min(32);
     settings.local_asr_batch_size_seconds = settings.local_asr_batch_size_seconds.clamp(30, 1200);
+    settings.runtime_download_source = settings.runtime_download_source.trim().to_string();
     settings
 }
 

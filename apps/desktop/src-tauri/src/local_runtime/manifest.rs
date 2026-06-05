@@ -10,7 +10,17 @@ const RUNTIME_MANIFEST_JSON: &str = include_str!("../../resources/runtime-manife
 pub struct RuntimeManifest {
     pub runtime_version: String,
     pub python_version: String,
+    #[serde(default)]
+    pub download_sources: Vec<RuntimeDownloadSource>,
     pub platforms: Vec<PlatformRuntime>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeDownloadSource {
+    pub source_id: String,
+    pub name_zh: String,
+    pub base_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -32,7 +42,6 @@ pub struct PlatformRuntime {
 #[serde(rename_all = "camelCase")]
 pub struct BundledAsset {
     pub file_name: String,
-    pub download_url: String,
     #[serde(default)]
     pub sha256: String,
 }

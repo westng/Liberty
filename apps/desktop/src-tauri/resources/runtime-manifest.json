@@ -1,21 +1,45 @@
 {
   "runtimeVersion": "2026.06.04-remote.1",
   "pythonVersion": "3.9.25",
+  "downloadSources": [
+    {
+      "sourceId": "aliyun",
+      "nameZh": "阿里云镜像",
+      "nameEn": "Aliyun Mirror",
+      "baseUrl": "https://liberty-runtime.oss-cn-hangzhou.aliyuncs.com/runtime/2026.06.04-remote.1/"
+    },
+    {
+      "sourceId": "tencent",
+      "nameZh": "腾讯云镜像",
+      "nameEn": "Tencent Cloud Mirror",
+      "baseUrl": "https://liberty-runtime.cos.ap-shanghai.myqcloud.com/runtime/2026.06.04-remote.1/"
+    },
+    {
+      "sourceId": "huawei",
+      "nameZh": "华为云镜像",
+      "nameEn": "Huawei Cloud Mirror",
+      "baseUrl": "https://liberty-runtime.obs.cn-east-3.myhuaweicloud.com/runtime/2026.06.04-remote.1/"
+    },
+    {
+      "sourceId": "github",
+      "nameZh": "官方源",
+      "nameEn": "Official Source",
+      "baseUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/"
+    }
+  ],
   "platforms": [
     {
       "platformId": "darwin-aarch64",
       "asrBackend": "funasr",
       "pythonBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-aarch64-python-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-darwin-aarch64-python-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-aarch64-python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/bin/python3",
         "python/bin/python"
       ],
       "ffmpegBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-aarch64-ffmpeg-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-darwin-aarch64-ffmpeg-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-aarch64-ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg"
@@ -25,16 +49,14 @@
       "platformId": "darwin-x64",
       "asrBackend": "funasr",
       "pythonBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-x64-python-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-darwin-x64-python-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-x64-python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/bin/python3",
         "python/bin/python"
       ],
       "ffmpegBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-x64-ffmpeg-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-darwin-x64-ffmpeg-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-darwin-x64-ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg"
@@ -44,16 +66,14 @@
       "platformId": "windows-x64",
       "asrBackend": "funasr",
       "pythonBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x64-python-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-windows-x64-python-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x64-python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/python.exe",
         "python/python3.exe"
       ],
       "ffmpegBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x64-ffmpeg-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-windows-x64-ffmpeg-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x64-ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg.exe"
@@ -63,23 +83,20 @@
       "platformId": "windows-x86",
       "asrBackend": "sherpa-onnx",
       "pythonBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x86-python-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-windows-x86-python-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x86-python-runtime.tar.gz"
       },
       "pythonExecutableCandidates": [
         "python/python.exe",
         "python/python3.exe"
       ],
       "ffmpegBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x86-ffmpeg-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-windows-x86-ffmpeg-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x86-ffmpeg-runtime.tar.gz"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg.exe"
       ],
       "modelsBundle": {
-        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x86-models-runtime.tar.gz",
-        "downloadUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/liberty-runtime-2026.06.04-remote.1-windows-x86-models-runtime.tar.gz"
+        "fileName": "liberty-runtime-2026.06.04-remote.1-windows-x86-models-runtime.tar.gz"
       }
     }
   ]

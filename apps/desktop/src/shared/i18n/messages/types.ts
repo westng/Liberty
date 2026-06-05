@@ -106,6 +106,18 @@ export type MessageTree = {
     runtimeInstalledAt: string;
     runtimeInstallAction: string;
     runtimeReinstallAction: string;
+    runtimeDownloadSource: string;
+    runtimeDownloadSourcePlaceholder: string;
+    runtimeDownloadSourceRequired: string;
+    runtimeResourcePython: string;
+    runtimeResourceFfmpeg: string;
+    runtimeResourceFunasr: string;
+    runtimeResourcePending: string;
+    runtimeResourceDownloading: string;
+    runtimeResourceReady: string;
+    runtimeResourceFailed: string;
+    runtimeResourceDownload: string;
+    runtimeResourceRedownload: string;
     runtimeInstallProgress: string;
     runtimeInstallPreparing: string;
     runtimeInstallCompleted: string;

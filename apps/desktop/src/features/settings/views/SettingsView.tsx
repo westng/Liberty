@@ -12,7 +12,6 @@ export default function SettingsView() {
   const store = useMeetingStore();
   const messages = getMessages(store.settings.locale).settings;
   const shellMessages = getMessages(store.settings.locale).shell;
-  const commonMessages = getMessages(store.settings.locale).common;
   const {
     form,
     patchForm,
@@ -24,6 +23,7 @@ export default function SettingsView() {
     setGlassStyle,
     setLocale,
     setAccentColor,
+    setRuntimeDownloadSource,
     save,
   } = useSettingsForm(store);
   const {
@@ -34,10 +34,11 @@ export default function SettingsView() {
     runtimeStatusLabel,
     runtimeStatusDescription,
     runtimeBusy,
-    runtimeInstalledAtLabel,
-    runtimeInstallProgress,
+    runtimeSelectedSourceId,
+    runtimeDownloadSourceOptions,
+    runtimeResourceRows,
     refreshRuntimePanel,
-  } = useRuntimePanel(store, messages, shellMessages, commonMessages);
+  } = useRuntimePanel(store, messages, shellMessages);
   const {
     diagnostics,
     diagnosticsError,
@@ -60,6 +61,10 @@ export default function SettingsView() {
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  async function updateRuntimeDownloadSource(sourceId: string) {
+    await setRuntimeDownloadSource(sourceId);
   }
 
   return (
@@ -231,41 +236,62 @@ export default function SettingsView() {
           </div>
 
           <div className="runtime-panel">
+            <div className="runtime-source-row">
+              <label className="runtime-source-label" htmlFor="runtime-download-source">
+                {messages.runtimeDownloadSource}
+              </label>
+              <select
+                id="runtime-download-source"
+                value={runtimeSelectedSourceId}
+                onChange={(event) => {
+                  void updateRuntimeDownloadSource(event.target.value);
+                }}
+              >
+                <option value="">{messages.runtimeDownloadSourcePlaceholder}</option>
+                {runtimeDownloadSourceOptions.map((source) => (
+                  <option key={source.id} value={source.id}>
+                    {source.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="runtime-hero">
               <p className="runtime-status-text">{runtimeStatusDescription}</p>
-              <button className="text-button runtime-primary-action" type="button" disabled={runtimeBusy} onClick={installManagedRuntime}>
+              <button
+                className="text-button runtime-primary-action"
+                type="button"
+                disabled={runtimeBusy || !runtimeSelectedSourceId}
+                onClick={installManagedRuntime}
+              >
                 {runtimeActionLabel}
               </button>
             </div>
 
-            {(runtimeStatus.status === "installing" || runtimeInstallProgress.percent > 0) && (
-              <div className="runtime-progress-card">
-                <div className="runtime-progress-head">
-                  <span>{messages.runtimeInstallProgress}</span>
-                  <strong>{runtimeInstallProgress.percent}%</strong>
+            <div className="runtime-resource-list">
+              {runtimeResourceRows.map((resource) => (
+                <div key={resource.id} className="runtime-resource-row">
+                  <div className="runtime-resource-name">{resource.name}</div>
+                  <div className="runtime-resource-progress">
+                    <div className="runtime-progress-track">
+                      <span className="runtime-progress-bar" style={{ width: `${resource.percent}%` }}>
+                        {resource.percent > 0 && (
+                          <img className="runtime-progress-media" src={progressBarUrl} alt="" aria-hidden="true" />
+                        )}
+                      </span>
+                    </div>
+                    <span className="runtime-resource-status">{resource.statusLabel}</span>
+                  </div>
+                  <button
+                    className="text-button runtime-resource-action"
+                    type="button"
+                    disabled={resource.disabled}
+                    onClick={installManagedRuntime}
+                  >
+                    {resource.actionLabel}
+                  </button>
                 </div>
-                <div className="runtime-progress-track">
-                  <span className="runtime-progress-bar" style={{ width: `${runtimeInstallProgress.percent}%` }}>
-                    <img className="runtime-progress-media" src={progressBarUrl} alt="" aria-hidden="true" />
-                  </span>
-                </div>
-                <div className="runtime-progress-copy">{runtimeInstallProgress.label}</div>
-              </div>
-            )}
-
-            <div className="runtime-meta-grid">
-              <div className="runtime-meta-item">
-                <span>{messages.runtimeVersion}</span>
-                <strong>{runtimeStatus.runtimeVersion || "—"}</strong>
-              </div>
-              <div className="runtime-meta-item">
-                <span>{messages.runtimePythonVersion}</span>
-                <strong>{runtimeStatus.pythonVersion || "—"}</strong>
-              </div>
-              <div className="runtime-meta-item">
-                <span>{messages.runtimeInstalledAt}</span>
-                <strong>{runtimeInstalledAtLabel}</strong>
-              </div>
+              ))}
             </div>
 
             <div className="runtime-log">

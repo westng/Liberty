@@ -15,6 +15,7 @@ export const defaultSettings: SettingsState = {
   localAsrDevice: "auto",
   localAsrThreads: 0,
   localAsrBatchSizeSeconds: 300,
+  runtimeDownloadSource: "",
 };
 
 export function normalizeSettings(settings?: Partial<SettingsState> | null): SettingsState {
@@ -50,6 +51,7 @@ export function normalizeSettings(settings?: Partial<SettingsState> | null): Set
       1200,
       Math.max(30, Number(merged.localAsrBatchSizeSeconds) || defaultSettings.localAsrBatchSizeSeconds),
     ),
+    runtimeDownloadSource: merged.runtimeDownloadSource.trim(),
   };
 }
 
@@ -74,6 +76,10 @@ export function shouldAutoInstallManagedRuntime(
   }
 
   if (hasManualPythonOverride(settings)) {
+    return false;
+  }
+
+  if (!settings.runtimeDownloadSource.trim()) {
     return false;
   }
 

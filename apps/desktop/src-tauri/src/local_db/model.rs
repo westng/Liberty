@@ -604,6 +604,7 @@ pub struct AppSettings {
     pub local_asr_device: String,
     pub local_asr_threads: u32,
     pub local_asr_batch_size_seconds: u32,
+    pub runtime_download_source: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -657,6 +658,7 @@ impl Default for AppSettings {
             local_asr_device: "auto".into(),
             local_asr_threads: 0,
             local_asr_batch_size_seconds: 300,
+            runtime_download_source: String::new(),
         }
     }
 }
