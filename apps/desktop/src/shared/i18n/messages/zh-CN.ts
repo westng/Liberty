@@ -11,6 +11,7 @@ export const zhCNMessages: MessageTree = {
       petStore: "宠物商店",
       dailyCheckIn: "每日签到",
       dailyBlindBox: "每日盲盒",
+      redeemKey: "兑换中心",
       settings: "系统设置",
     },
     routeTitles: {
@@ -25,6 +26,7 @@ export const zhCNMessages: MessageTree = {
       petStore: "宠物商店",
       dailyCheckIn: "每日签到",
       dailyBlindBox: "每日盲盒",
+      redeemKey: "兑换中心",
       aiSummary: "AI 总结",
       settings: "系统设置",
     },

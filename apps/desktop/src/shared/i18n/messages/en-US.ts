@@ -11,6 +11,7 @@ export const enUSMessages: MessageTree = {
       petStore: "Pet Store",
       dailyCheckIn: "Daily Check-in",
       dailyBlindBox: "Daily Blind Box",
+      redeemKey: "Redeem Center",
       settings: "Settings",
     },
     routeTitles: {
@@ -25,6 +26,7 @@ export const enUSMessages: MessageTree = {
       petStore: "Pet Store",
       dailyCheckIn: "Daily Check-in",
       dailyBlindBox: "Daily Blind Box",
+      redeemKey: "Redeem Center",
       aiSummary: "AI Summary",
       settings: "Settings",
     },

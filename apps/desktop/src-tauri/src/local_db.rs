@@ -2,7 +2,7 @@ use crate::infrastructure::{
     ids, migrations,
     repositories::{
         ai_models, ai_summary_runs, ai_templates, job_events, members, pet, pet_blind_box,
-        pet_check_in, pet_store, runtime_state, settings,
+        pet_check_in, pet_redeem_key, pet_store, runtime_state, settings,
     },
 };
 use rusqlite::{params, Connection};
@@ -689,6 +689,39 @@ pub fn open_pet_gift_box(app: &AppHandle) -> LocalResult<PetGiftBoxOpenResult> {
         duplicate,
         duplicate_compensation_lp,
     })
+}
+
+pub fn redeem_pet_key(app: &AppHandle, key: &str) -> LocalResult<PetRedeemKeyResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let now = chrono::Utc::now().to_rfc3339();
+    pet_store::ensure_store_defaults_tx(&tx, &now)?;
+    let profile = pet::load_profile_tx(&tx)?;
+    let (redemption, rewards, duplicate) = pet_redeem_key::redeem_key_tx(&tx, profile, key, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    pet::reconcile_profile_leveling(&conn)?;
+    let profile = pet::load_profile(&conn)?;
+    Ok(PetRedeemKeyResult {
+        state: pet_store::store_state(&conn, profile)?,
+        redemption,
+        rewards,
+        duplicate,
+    })
+}
+
+pub fn list_pet_redeem_key_redemptions(
+    app: &AppHandle,
+    limit: usize,
+) -> LocalResult<Vec<PetRedeemKeyRedemption>> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    pet::ensure_default_exists_tx(&tx)?;
+    let values = pet_redeem_key::list_redemptions_tx(&tx, limit.clamp(1, 100))?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(values)
 }
 
 pub fn save_meeting_member(app: &AppHandle, member: &MeetingMember) -> LocalResult<()> {

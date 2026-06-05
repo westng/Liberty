@@ -245,6 +245,20 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS pet_redeem_key_redemptions (
+          id TEXT PRIMARY KEY,
+          pet_id TEXT NOT NULL,
+          key_hash TEXT NOT NULL,
+          code_prefix TEXT NOT NULL,
+          campaign_id TEXT NOT NULL,
+          reward_json TEXT NOT NULL,
+          status TEXT NOT NULL,
+          redeemed_at TEXT NOT NULL,
+          metadata TEXT,
+          UNIQUE(pet_id, key_hash),
+          FOREIGN KEY(pet_id) REFERENCES pet_profile(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS pet_blind_box_draws (
           id TEXT PRIMARY KEY,
           pet_id TEXT NOT NULL,
@@ -301,6 +315,7 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         CREATE INDEX IF NOT EXISTS idx_pet_cosmetic_unlocks_pet_id ON pet_cosmetic_unlocks(pet_id, unlocked_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_inventory_pet_id ON pet_inventory(pet_id, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_economy_pet_id ON pet_economy_ledger(pet_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pet_redeem_key_pet_time ON pet_redeem_key_redemptions(pet_id, redeemed_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_blind_box_draws_pet_date ON pet_blind_box_draws(pet_id, draw_date, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_daily_check_ins_pet_date ON pet_daily_check_ins(pet_id, check_in_date DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_store_daily_limits_pet_date ON pet_store_daily_limits(pet_id, limit_date DESC);

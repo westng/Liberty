@@ -11,6 +11,7 @@ export type MessageTree = {
     petStore: string;
     dailyCheckIn: string;
     dailyBlindBox: string;
+    redeemKey: string;
     settings: string;
   };
   routeTitles: Record<string, string>;

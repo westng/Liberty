@@ -2,6 +2,7 @@
 ._*
 .tmp/
 .dev/
+.liberty-secrets/
 node_modules/
 .pnpm-store/
 .pip-cache/

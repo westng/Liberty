@@ -68,6 +68,7 @@ function AppContent() {
         key: "benefits",
         title: store.settings.locale === "en-US" ? "Benefits" : "福利",
         items: [
+          { label: messages.nav.redeemKey, to: "/redeem-key", icon: "key" },
           { label: messages.nav.dailyCheckIn, to: "/daily-check-in", icon: "check" },
           { label: messages.nav.dailyBlindBox, to: "/daily-blind-box", icon: "gift" },
         ] satisfies NavItem[],

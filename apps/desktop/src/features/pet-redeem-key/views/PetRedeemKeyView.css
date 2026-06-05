@@ -1,0 +1,214 @@
+.pet-redeem-key-page {
+  position: relative;
+}
+
+.pet-redeem-key-hero {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pet-redeem-key-wallet {
+  min-width: 128px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 8px;
+  background: var(--native-control-bg);
+}
+
+.pet-redeem-key-wallet span,
+.pet-redeem-key-wallet small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pet-redeem-key-wallet strong {
+  color: var(--text-main);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.pet-redeem-key-message {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #2f7d4f 24%, var(--native-panel-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, #2f7d4f 8%, transparent);
+  color: var(--text-main);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.pet-redeem-key-message.error {
+  border-color: color-mix(in srgb, #c73535 28%, var(--native-panel-border));
+  background: color-mix(in srgb, #c73535 8%, transparent);
+}
+
+.pet-redeem-key-layout {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.pet-redeem-key-panel,
+.pet-redeem-key-history-panel {
+  align-content: start;
+}
+
+.pet-redeem-key-form {
+  display: grid;
+  gap: 10px;
+}
+
+.pet-redeem-key-form textarea {
+  width: 100%;
+  min-height: 124px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 8px;
+  background: var(--native-control-bg);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.pet-redeem-key-form textarea:focus {
+  border-color: color-mix(in srgb, var(--accent-color) 46%, var(--native-panel-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 16%, transparent);
+}
+
+.pet-redeem-key-form .primary-button {
+  justify-self: start;
+  min-height: 36px;
+  padding-inline: 18px;
+}
+
+.pet-redeem-key-result {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 28%, var(--native-panel-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--native-control-bg));
+}
+
+.pet-redeem-key-result > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pet-redeem-key-result span,
+.pet-redeem-key-history-row span,
+.pet-redeem-key-history-row small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.pet-redeem-key-result strong,
+.pet-redeem-key-history-row strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.pet-redeem-key-rewards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.pet-redeem-key-rewards > span,
+.pet-redeem-key-item {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 8px;
+  background: var(--native-control-bg);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.pet-redeem-key-rewards.compact > span,
+.pet-redeem-key-rewards.compact .pet-redeem-key-item {
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.pet-redeem-key-item {
+  max-width: 100%;
+}
+
+.pet-redeem-key-item img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.pet-redeem-key-item strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pet-redeem-key-item small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pet-redeem-key-history {
+  display: grid;
+}
+
+.pet-redeem-key-history-row {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.pet-redeem-key-history-row:last-child {
+  border-bottom: 0;
+}
+
+.pet-redeem-key-history-row > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pet-redeem-key-history-row em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 680;
+}
+
+@media (max-width: 1080px) {
+  .pet-redeem-key-layout,
+  .pet-redeem-key-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .pet-redeem-key-wallet {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 720px) {
+  .pet-redeem-key-form textarea {
+    min-height: 108px;
+  }
+}

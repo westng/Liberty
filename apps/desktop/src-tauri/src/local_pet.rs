@@ -1,7 +1,8 @@
 use crate::local_db::{
     self, LocalResult, PetBlindBoxDrawResult, PetBlindBoxState, PetCosmeticUnlock,
     PetDailyCheckInClaimResult, PetDailyCheckInMakeupResult, PetDailyCheckInState,
-    PetEventLedgerEntry, PetGiftBoxOpenResult, PetProfile, PetSettings, PetStoreState,
+    PetEventLedgerEntry, PetGiftBoxOpenResult, PetProfile, PetRedeemKeyRedemption,
+    PetRedeemKeyResult, PetSettings, PetStoreState,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -55,6 +56,12 @@ fn default_purchase_quantity() -> i64 {
 #[serde(rename_all = "camelCase")]
 pub struct PetInventorySlotInput {
     pub slot: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetRedeemKeyInput {
+    pub key: String,
 }
 
 #[tauri::command]
@@ -175,6 +182,19 @@ pub fn use_pet_inventory_item(
 #[tauri::command]
 pub fn open_pet_gift_box(app: AppHandle) -> LocalResult<PetGiftBoxOpenResult> {
     local_db::open_pet_gift_box(&app)
+}
+
+#[tauri::command]
+pub fn redeem_pet_key(app: AppHandle, input: PetRedeemKeyInput) -> LocalResult<PetRedeemKeyResult> {
+    local_db::redeem_pet_key(&app, input.key.trim())
+}
+
+#[tauri::command]
+pub fn list_pet_redeem_key_redemptions(
+    app: AppHandle,
+    limit: Option<usize>,
+) -> LocalResult<Vec<PetRedeemKeyRedemption>> {
+    local_db::list_pet_redeem_key_redemptions(&app, limit.unwrap_or(20).clamp(1, 100))
 }
 
 #[tauri::command]

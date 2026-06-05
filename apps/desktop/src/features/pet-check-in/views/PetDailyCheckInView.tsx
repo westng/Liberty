@@ -26,6 +26,7 @@ type RewardCalendarCell = {
   date: string;
   day: number;
   status: CalendarDayStatus;
+  isToday: boolean;
   reward: PetDailyCheckInRewardPreview | null;
 };
 
@@ -481,7 +482,7 @@ function buildRewardCalendar(
   const cells: RewardCalendarCell[] = [];
 
   for (let index = 0; index < leadingBlanks; index += 1) {
-    cells.push({ date: "", day: 0, status: "idle", reward: null });
+    cells.push({ date: "", day: 0, status: "idle", isToday: false, reward: null });
   }
 
   for (let day = 1; day <= daysInMonth; day += 1) {
@@ -499,6 +500,7 @@ function buildRewardCalendar(
       date,
       day,
       status: calendarStatusForDate(date, state, entry, missedDates),
+      isToday: date === state.checkInDate,
       reward,
     });
   }
@@ -671,10 +673,19 @@ function RewardCalendarDay({
   const isEnglish = locale === "en-US";
   const hasItemReward = Boolean(cell.reward?.items.length);
   const statusLabel = calendarStatusLabel(cell.status, locale);
+  const classNames = [
+    "pet-check-in-calendar-day",
+    cell.status,
+    cell.isToday ? "is-today" : "",
+    hasItemReward ? "milestone" : "",
+  ].filter(Boolean).join(" ");
   return (
-    <article className={`pet-check-in-calendar-day ${cell.status} ${hasItemReward ? "milestone" : ""}`}>
+    <article className={classNames} aria-current={cell.isToday ? "date" : undefined}>
       <div className="pet-check-in-calendar-day-head">
-        <strong>{cell.day}</strong>
+        <strong>
+          {cell.day}
+          {cell.isToday && <i aria-hidden="true" />}
+        </strong>
         <span>{statusLabel}</span>
       </div>
       {cell.reward && (

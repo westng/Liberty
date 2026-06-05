@@ -412,6 +412,36 @@ export interface PetGiftBoxOpenResult {
   duplicateCompensationLp: number;
 }
 
+export interface PetRedeemKeyRewardItem {
+  itemKey: string;
+  quantity: number;
+}
+
+export interface PetRedeemKeyRewards {
+  lp: number;
+  growthValue: number;
+  items: PetRedeemKeyRewardItem[];
+}
+
+export interface PetRedeemKeyRedemption {
+  id: string;
+  petId: string;
+  keyHash: string;
+  codePrefix: string;
+  campaignId: string;
+  rewardJson: string;
+  status: string;
+  redeemedAt: string;
+  metadata?: string | null;
+}
+
+export interface PetRedeemKeyResult {
+  state: PetStoreState;
+  redemption: PetRedeemKeyRedemption;
+  rewards: PetRedeemKeyRewards;
+  duplicate: boolean;
+}
+
 export interface PetWorkflowEventInput {
   eventType: PetWorkflowEventType;
   metadata?: string;

@@ -78,6 +78,12 @@ export const routes: RouteConfig[] = [
     component: lazy(() => import("@/features/pet-check-in/views/PetDailyCheckInView")),
   },
   {
+    path: "/redeem-key",
+    title: "兑换中心",
+    titleKey: "redeemKey",
+    component: lazy(() => import("@/features/pet-redeem-key/views/PetRedeemKeyView")),
+  },
+  {
     path: "/pet-store-item",
     title: "商品详情",
     standalone: true,

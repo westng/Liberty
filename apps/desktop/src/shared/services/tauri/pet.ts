@@ -10,6 +10,8 @@ import type {
   PetGiftBoxOpenResult,
   PetInteractionAction,
   PetProfile,
+  PetRedeemKeyRedemption,
+  PetRedeemKeyResult,
   PetSettings,
   PetStoreState,
   PetWorkflowEventInput,
@@ -67,6 +69,13 @@ export function createLocalPetService() {
       notifyPetStateChanged("gift-box");
       return result;
     },
+    redeemKey: async (key: string) => {
+      const result = await invoke<PetRedeemKeyResult>("redeem_pet_key", { input: { key } });
+      notifyPetStateChanged("redeem-key");
+      return result;
+    },
+    listRedeemKeyRedemptions: (limit = 20) =>
+      invoke<PetRedeemKeyRedemption[]>("list_pet_redeem_key_redemptions", { limit }),
     listEventLedger: (limit = 20) => invoke<PetEventLedgerEntry[]>("list_pet_event_ledger", { limit }),
     listCosmeticUnlocks: () => invoke<PetCosmeticUnlock[]>("list_pet_cosmetic_unlocks"),
     applyInteraction: (action: PetInteractionAction) =>

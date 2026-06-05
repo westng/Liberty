@@ -11,6 +11,7 @@ const iconNames = {
   store: "bag",
   check: "calendar-badge-plus",
   gift: "gift",
+  key: "ticket",
   gear: "gear",
   mode: "speedometer",
   processing: "timer",

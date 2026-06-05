@@ -469,6 +469,7 @@
 }
 
 .pet-check-in-calendar-day {
+  position: relative;
   min-width: 0;
   display: grid;
   align-content: start;
@@ -477,6 +478,25 @@
   border: 1px solid var(--native-panel-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--native-control-bg) 78%, transparent);
+}
+
+.pet-check-in-calendar-day.is-today {
+  border-color: color-mix(in srgb, var(--check-in-blue) 62%, var(--native-panel-border));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--check-in-blue) 16%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--check-in-blue) 24%, transparent);
+}
+
+.pet-check-in-calendar-day.is-today::before {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--check-in-blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--check-in-blue) 18%, transparent);
+  content: "";
 }
 
 .pet-check-in-calendar-day.signed {
@@ -515,10 +535,20 @@
 }
 
 .pet-check-in-calendar-day-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--text-main);
   font-size: 15px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.pet-check-in-calendar-day-head strong i {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--check-in-blue);
 }
 
 .pet-check-in-calendar-day-head span {
@@ -712,6 +742,11 @@
 
   .pet-check-in-calendar-day {
     padding: 6px;
+  }
+
+  .pet-check-in-calendar-day.is-today::before {
+    top: 5px;
+    right: 5px;
   }
 
   .pet-check-in-calendar-day-head {

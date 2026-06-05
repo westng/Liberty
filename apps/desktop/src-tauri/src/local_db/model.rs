@@ -518,6 +518,52 @@ pub struct PetGiftBoxOpenResult {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct PetRedeemKeyRewardItem {
+    pub item_key: String,
+    #[serde(default = "default_reward_quantity")]
+    pub quantity: i64,
+}
+
+fn default_reward_quantity() -> i64 {
+    1
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetRedeemKeyRewards {
+    #[serde(default)]
+    pub lp: i64,
+    #[serde(default)]
+    pub growth_value: i64,
+    #[serde(default)]
+    pub items: Vec<PetRedeemKeyRewardItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetRedeemKeyRedemption {
+    pub id: String,
+    pub pet_id: String,
+    pub key_hash: String,
+    pub code_prefix: String,
+    pub campaign_id: String,
+    pub reward_json: String,
+    pub status: String,
+    pub redeemed_at: String,
+    pub metadata: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PetRedeemKeyResult {
+    pub state: PetStoreState,
+    pub redemption: PetRedeemKeyRedemption,
+    pub rewards: PetRedeemKeyRewards,
+    pub duplicate: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct MeetingMemberImportResult {
     pub created: usize,
     pub updated: usize,

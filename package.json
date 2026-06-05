@@ -13,6 +13,8 @@
     "desktop:build:web": "pnpm --dir apps/desktop build:web",
     "desktop:build": "pnpm --dir apps/desktop build",
     "desktop:tauri": "pnpm --dir apps/desktop tauri",
+    "redeem-key:keypair": "node scripts/redeem-key.mjs keypair",
+    "redeem-key:generate": "node scripts/redeem-key.mjs generate",
     "release:check-platforms": "node scripts/check-platform-matrix.mjs",
     "release:check-security": "node scripts/check-security-baseline.mjs",
     "release:check-versions": "node scripts/check-version-consistency.mjs",
