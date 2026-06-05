@@ -266,6 +266,10 @@
   cursor: not-allowed;
 }
 
+.runtime-log-setting-row {
+  display: block;
+}
+
 .runtime-log pre {
   margin: 0;
   width: 100%;

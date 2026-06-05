@@ -362,9 +362,6 @@ export default function SettingsView() {
           </div>
 
           <div className="setting-row runtime-setting-row runtime-log-setting-row">
-            <div className="settings-meta">
-              <span className="settings-label">{messages.runtimeInstallLog}</span>
-            </div>
             <div className="setting-control runtime-log">
               <pre>{runtimeInstallLogReversed || messages.runtimeInstallLogEmpty}</pre>
             </div>

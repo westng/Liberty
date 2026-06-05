@@ -165,7 +165,13 @@ async function refreshRuntimeStatus() {
     } else {
       try {
         const systemStatus = await localRuntimeService.detectSystem();
-        setState({ runtimeStatus: isManagedRuntimeReady(systemStatus) ? systemStatus : managedStatus });
+        setState({
+          runtimeStatus:
+            isManagedRuntimeReady(systemStatus) ||
+            (managedStatus.status === "missing" && Boolean(systemStatus.lastError?.trim()))
+              ? systemStatus
+              : managedStatus,
+        });
       } catch {
         setState({ runtimeStatus: managedStatus });
       }
