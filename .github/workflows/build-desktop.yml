@@ -195,18 +195,18 @@ jobs:
           echo "prerelease=false" >> "$GITHUB_OUTPUT"
           echo "publish_release=${INPUT_PUBLISH_RELEASE:-false}" >> "$GITHUB_OUTPUT"
 
-      - name: Preview Chinese Changelog
+      - name: Preview Changelog
         shell: bash
         run: |
-          if [[ ! -s CHANGELOG.zh-CN.md ]]; then
-            echo "::error::CHANGELOG.zh-CN.md 不存在或内容为空。"
+          if [[ ! -s CHANGELOG.md ]]; then
+            echo "::error::CHANGELOG.md 不存在或内容为空。"
             exit 1
           fi
 
           {
             printf "## Release 正文预览\n\n"
-            printf "以下中文更新日志会显示在 GitHub Release 正文顶部：\n\n"
-            cat CHANGELOG.zh-CN.md
+            printf "以下中英双语更新日志会显示在 GitHub Release 正文顶部：\n\n"
+            cat CHANGELOG.md
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -403,8 +403,8 @@ jobs:
           RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
           TARGET_COMMIT: ${{ needs.prepare_release.outputs.target_commit }}
         run: |
-          if [[ ! -s CHANGELOG.zh-CN.md ]]; then
-            echo "::error::CHANGELOG.zh-CN.md 不存在或内容为空。"
+          if [[ ! -s CHANGELOG.md ]]; then
+            echo "::error::CHANGELOG.md 不存在或内容为空。"
             exit 1
           fi
 
@@ -416,7 +416,7 @@ jobs:
             --jq ".body" > github-release-notes.md
 
           {
-            cat CHANGELOG.zh-CN.md
+            cat CHANGELOG.md
             printf "\n\n---\n\n"
             printf "## GitHub 自动生成记录\n\n"
             cat github-release-notes.md
