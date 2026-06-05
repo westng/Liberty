@@ -279,25 +279,25 @@ export default function SettingsView() {
 
       <div className="settings-group">
         <h3 className="settings-group-title">{messages.localRuntime}</h3>
-        <article className="surface settings-block runtime-card">
-          <div className="runtime-card-head">
-            <div className="runtime-card-title-wrap">
-              <span className="runtime-card-title">{messages.managedRuntime}</span>
-              <p className="runtime-card-hint">{messages.managedRuntimeHint}</p>
+        <article className="surface settings-block runtime-settings-block">
+          <div className="setting-row runtime-setting-row">
+            <div className="settings-meta">
+              <span className="settings-label">{messages.managedRuntime}</span>
+              <p className="settings-hint">{messages.managedRuntimeHint}</p>
             </div>
-            <div className="runtime-card-status">
-              <span className="runtime-status-label">{messages.runtimeStatus}</span>
+            <div className="setting-control setting-control-inline runtime-state-control">
               <span className={`runtime-status-badge runtime-status-${runtimeStatus.status}`}>
                 {runtimeStatusLabel}
               </span>
             </div>
           </div>
 
-          <div className="runtime-panel">
-            <div className="runtime-source-row">
-              <label className="runtime-source-label" htmlFor="runtime-download-source">
-                {messages.runtimeDownloadSource}
-              </label>
+          <div className="setting-row runtime-setting-row">
+            <div className="settings-meta">
+              <label className="settings-label" htmlFor="runtime-download-source">{messages.runtimeDownloadSource}</label>
+              <p className="settings-hint">{runtimeStatusDescription}</p>
+            </div>
+            <div className="setting-control setting-control-inline runtime-source-control">
               <select
                 id="runtime-download-source"
                 value={runtimeSelectedSourceId}
@@ -313,24 +313,16 @@ export default function SettingsView() {
                 ))}
               </select>
             </div>
+          </div>
 
-            <div className="runtime-hero">
-              <p className="runtime-status-text">{runtimeStatusDescription}</p>
-              <button
-                className="text-button runtime-primary-action"
-                type="button"
-                disabled={runtimeBusy || !runtimeSelectedSourceId}
-                onClick={installManagedRuntime}
-              >
-                {runtimeActionLabel}
-              </button>
-            </div>
-
-            <div className="runtime-resource-list">
-              {runtimeResourceRows.map((resource) => (
-                <div key={resource.id} className="runtime-resource-row">
-                  <div className="runtime-resource-name">{resource.name}</div>
-                  <div className="runtime-resource-progress">
+          {runtimeResourceRows.map((resource) => (
+            <div key={resource.id} className="setting-row runtime-setting-row runtime-resource-setting-row">
+              <div className="settings-meta">
+                <span className="settings-label">{resource.name}</span>
+              </div>
+              <div className="setting-control runtime-resource-control">
+                <div className="runtime-resource-progress">
+                  <div className="runtime-resource-progress-copy">
                     <div className="runtime-progress-track">
                       <span className="runtime-progress-bar" style={{ width: `${resource.percent}%` }}>
                         {resource.percent > 0 && (
@@ -340,20 +332,40 @@ export default function SettingsView() {
                     </div>
                     <span className="runtime-resource-status">{resource.statusLabel}</span>
                   </div>
-                  <button
-                    className="text-button runtime-resource-action"
-                    type="button"
-                    disabled={resource.disabled}
-                    onClick={installManagedRuntime}
-                  >
-                    {resource.actionLabel}
-                  </button>
                 </div>
-              ))}
+                <button
+                  className="text-button runtime-resource-action"
+                  type="button"
+                  disabled={resource.disabled}
+                  onClick={installManagedRuntime}
+                >
+                  {resource.actionLabel}
+                </button>
+              </div>
             </div>
+          ))}
 
-            <div className="runtime-log">
-              <span className="runtime-log-title">{messages.runtimeInstallLog}</span>
+          <div className="setting-row runtime-setting-row">
+            <div className="settings-meta">
+              <span className="settings-label">{messages.runtimeInstallAction}</span>
+            </div>
+            <div className="setting-control setting-control-inline">
+              <button
+                className="text-button runtime-primary-action"
+                type="button"
+                disabled={runtimeBusy || !runtimeSelectedSourceId}
+                onClick={installManagedRuntime}
+              >
+                {runtimeActionLabel}
+              </button>
+            </div>
+          </div>
+
+          <div className="setting-row runtime-setting-row runtime-log-setting-row">
+            <div className="settings-meta">
+              <span className="settings-label">{messages.runtimeInstallLog}</span>
+            </div>
+            <div className="setting-control runtime-log">
               <pre>{runtimeInstallLogReversed || messages.runtimeInstallLogEmpty}</pre>
             </div>
           </div>
