@@ -181,37 +181,60 @@ export default function SettingsView() {
 
       <div className="settings-group">
         <h3 className="settings-group-title">工程诊断</h3>
-        <article className="surface settings-block runtime-card diagnostics-card">
-          <div className="runtime-card-head">
-            <div className="runtime-card-title-wrap">
-              <span className="runtime-card-title">企业级基线</span>
-              <p className="runtime-card-hint">用于验收平台矩阵、数据库版本、运行时状态和安全基线。</p>
+        <article className="surface settings-block diagnostics-card">
+          <div className="setting-row diagnostics-row">
+            <div className="settings-meta">
+              <span className="settings-label">系统健康检查</span>
+              <p className="settings-hint">平台矩阵、数据库版本、运行时与安全基线</p>
             </div>
-            <button className="text-button runtime-primary-action" type="button" onClick={refreshDiagnostics}>
-              刷新
-            </button>
+            <div className="setting-control setting-control-inline diagnostics-actions">
+              <span
+                className={`diagnostics-state ${
+                  diagnosticsError
+                    ? "diagnostics-state-error"
+                    : diagnostics
+                      ? "diagnostics-state-ready"
+                      : "diagnostics-state-pending"
+                }`}
+              >
+                {diagnosticsError ? "异常" : diagnostics ? "正常" : "待刷新"}
+              </span>
+              <button className="text-button diagnostics-refresh" type="button" onClick={refreshDiagnostics}>
+                刷新
+              </button>
+            </div>
           </div>
 
-          <div className="runtime-meta-grid diagnostics-grid">
-            {diagnosticsRows.map(([label, value]) => (
-              <div key={label} className="runtime-meta-item">
-                <span>{label}</span>
+          {diagnosticsRows.map(([label, value]) => (
+            <div key={label} className="setting-row diagnostics-row">
+              <div className="settings-meta">
+                <span className="settings-label">{label}</span>
+              </div>
+              <div className="setting-control diagnostics-value">
                 <strong>{value}</strong>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
 
           {supportedPlatformText && (
-            <div className="runtime-log">
-              <span className="runtime-log-title">发布平台矩阵</span>
-              <pre>{supportedPlatformText}</pre>
+            <div className="setting-row diagnostics-row diagnostics-log-row">
+              <div className="settings-meta">
+                <span className="settings-label">发布平台矩阵</span>
+              </div>
+              <div className="setting-control diagnostics-log">
+                <pre>{supportedPlatformText}</pre>
+              </div>
             </div>
           )}
 
           {diagnostics?.desktopPetDiagnosticLogTail && (
-            <div className="runtime-log">
-              <span className="runtime-log-title">桌宠拖拽诊断日志</span>
-              <pre>{diagnostics.desktopPetDiagnosticLogTail}</pre>
+            <div className="setting-row diagnostics-row diagnostics-log-row">
+              <div className="settings-meta">
+                <span className="settings-label">桌宠拖拽诊断日志</span>
+              </div>
+              <div className="setting-control diagnostics-log">
+                <pre>{diagnostics.desktopPetDiagnosticLogTail}</pre>
+              </div>
             </div>
           )}
 
