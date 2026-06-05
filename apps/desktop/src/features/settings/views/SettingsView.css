@@ -181,7 +181,7 @@
 
 .runtime-source-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
 }
@@ -194,7 +194,6 @@
 
 .runtime-source-row select {
   justify-self: end;
-  width: min(360px, 100%);
 }
 
 .runtime-status-ready {
