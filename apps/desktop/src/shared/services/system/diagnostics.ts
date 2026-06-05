@@ -21,11 +21,8 @@ export function useDiagnosticsPanel() {
       ["凭据存储", diagnostics.securityBaseline.credentialStoreRequired ? "需要系统钥匙串" : "未要求"],
     ] as const;
   }, [diagnostics]);
-  const supportedPlatformText = useMemo(
-    () =>
-      diagnostics?.supportedPlatforms
-        .map((platform) => `${platform.label}: ${platform.rustTarget}`)
-        .join("\n") ?? "",
+  const supportedPlatformTags = useMemo(
+    () => diagnostics?.supportedPlatforms.map((platform) => platform.id) ?? [],
     [diagnostics],
   );
 
@@ -43,7 +40,7 @@ export function useDiagnosticsPanel() {
     diagnostics,
     diagnosticsError,
     diagnosticsRows,
-    supportedPlatformText,
+    supportedPlatformTags,
     refreshDiagnostics,
   };
 }

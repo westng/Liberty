@@ -45,7 +45,7 @@ export default function SettingsView() {
     diagnostics,
     diagnosticsError,
     diagnosticsRows,
-    supportedPlatformText,
+    supportedPlatformTags,
     refreshDiagnostics,
   } = useDiagnosticsPanel();
 
@@ -240,13 +240,17 @@ export default function SettingsView() {
             </div>
           ))}
 
-          {supportedPlatformText && (
-            <div className="setting-row diagnostics-row diagnostics-log-row">
+          {supportedPlatformTags.length > 0 && (
+            <div className="setting-row diagnostics-row">
               <div className="settings-meta">
                 <span className="settings-label">发布平台矩阵</span>
               </div>
-              <div className="setting-control diagnostics-log">
-                <pre>{supportedPlatformText}</pre>
+              <div className="setting-control diagnostics-tags">
+                {supportedPlatformTags.map((tag) => (
+                  <span key={tag} className="diagnostics-tag">
+                    {tag}
+                  </span>
+                ))}
               </div>
             </div>
           )}

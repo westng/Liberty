@@ -103,29 +103,28 @@
   text-align: right;
 }
 
-.diagnostics-log-row {
-  align-items: flex-start;
-}
-
-.diagnostics-log {
+.diagnostics-tags {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
   min-width: 0;
 }
 
-.diagnostics-log pre {
-  margin: 0;
-  width: 100%;
-  max-height: 180px;
-  overflow: auto;
-  padding: 12px 14px;
-  border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--divider-soft) 86%, transparent);
-  background: var(--native-subpanel-bg, var(--bg-card));
+.diagnostics-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--divider-soft) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 84%, transparent);
   color: var(--text-secondary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .runtime-card-title-wrap {
@@ -452,6 +451,10 @@
   }
 
   .diagnostics-value {
+    justify-content: flex-start;
+  }
+
+  .diagnostics-tags {
     justify-content: flex-start;
   }
 
