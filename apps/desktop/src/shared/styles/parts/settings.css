@@ -33,7 +33,6 @@
   grid-template-areas:
     "label control"
     "hint hint";
-  gap: 12px;
   align-items: start;
   margin: 0;
   padding: 9px 14px;
