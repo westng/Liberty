@@ -1,32 +1,7 @@
 {
   "runtimeVersion": "2026.06.04-remote.1",
   "pythonVersion": "3.9.25",
-  "downloadSources": [
-    {
-      "sourceId": "aliyun",
-      "nameZh": "阿里云镜像",
-      "nameEn": "Aliyun Mirror",
-      "baseUrl": "https://liberty-runtime.oss-cn-hangzhou.aliyuncs.com/runtime/2026.06.04-remote.1/"
-    },
-    {
-      "sourceId": "tencent",
-      "nameZh": "腾讯云镜像",
-      "nameEn": "Tencent Cloud Mirror",
-      "baseUrl": "https://liberty-runtime.cos.ap-shanghai.myqcloud.com/runtime/2026.06.04-remote.1/"
-    },
-    {
-      "sourceId": "huawei",
-      "nameZh": "华为云镜像",
-      "nameEn": "Huawei Cloud Mirror",
-      "baseUrl": "https://liberty-runtime.obs.cn-east-3.myhuaweicloud.com/runtime/2026.06.04-remote.1/"
-    },
-    {
-      "sourceId": "github",
-      "nameZh": "官方源",
-      "nameEn": "Official Source",
-      "baseUrl": "https://github.com/whalesky-labs/Liberty/releases/download/runtime-2026.06.04-remote.1/"
-    }
-  ],
+  "downloadSources": [],
   "platforms": [
     {
       "platformId": "darwin-aarch64",

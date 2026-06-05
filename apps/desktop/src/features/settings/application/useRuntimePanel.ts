@@ -3,13 +3,6 @@ import type { MessageTree } from "@/shared/i18n";
 import type { ManagedRuntimeStatus } from "@/shared/types/meeting";
 import type { MeetingStore } from "@/features/meeting/stores/useMeetingStore";
 
-const runtimeDownloadSources = [
-  { sourceId: "aliyun", nameZh: "阿里云镜像", nameEn: "Aliyun Mirror" },
-  { sourceId: "tencent", nameZh: "腾讯云镜像", nameEn: "Tencent Cloud Mirror" },
-  { sourceId: "huawei", nameZh: "华为云镜像", nameEn: "Huawei Cloud Mirror" },
-  { sourceId: "github", nameZh: "官方源", nameEn: "Official Source" },
-] as const;
-
 type RuntimeResourceId = "python" | "ffmpeg" | "model";
 
 export interface RuntimeResourceRow {
@@ -52,11 +45,8 @@ export function useRuntimePanel(
   const runtimeStatusDescription = runtimeDescription(runtimeStatus, messages);
   const runtimeBusy = runtimeStatus.status === "installing" || runtimeStatus.status === "unsupported";
   const runtimeSelectedSourceId = store.settings.runtimeDownloadSource.trim();
-  const runtimeDownloadSourceOptions = runtimeDownloadSources.map((source) => ({
-    id: source.sourceId,
-    label: store.settings.locale === "en-US" ? source.nameEn : source.nameZh,
-  }));
-  const runtimeSourceRequired = !runtimeSelectedSourceId;
+  const runtimeDownloadSourceOptions: { id: string; label: string }[] = [];
+  const runtimeSourceRequired = true;
   const runtimeResourceRows = runtimeResources(
     runtimeStatus,
     runtimeInstallLog,

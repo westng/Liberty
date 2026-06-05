@@ -15,7 +15,7 @@
 #### 调整
 
 - Python 运行环境与 FFmpeg 改为外置下载，不再随主安装包内置，以降低 CI 构建耗时和安装包体积。
-- 系统设置中的「模型下载」调整为「环境&模型」，以列表形式展示 Python、FFmpeg、FunASR 模型，并支持选择阿里云、腾讯云、华为云或官方源。
+- 系统设置中的「模型下载」调整为「环境&模型」，以列表形式展示 Python、FFmpeg、FunASR 模型；下载源需配置真实可用的资源地址后启用。
 - 运行环境资源改为由客户端内下载入口获取，CI 不再单独构建 Python、FFmpeg 与模型资源包。
 - 优化「环境&模型」设置布局，运行资源、下载源、平台标签与安装日志按设置列表风格展示，减少拥挤和多余标题占位。
 - 优化本机环境检测失败提示，托管环境未安装时会展示缺少 Python 依赖、FFmpeg 等具体原因。
@@ -42,7 +42,7 @@
 #### Changed
 
 - Moved Python runtime and FFmpeg to external downloads instead of bundling them in the main installer, reducing CI build time and installer size.
-- Renamed Settings > Model Download to Environment & Models, showing Python, FFmpeg, and FunASR as list items with selectable Alibaba Cloud, Tencent Cloud, Huawei Cloud, and official download sources.
+- Renamed Settings > Model Download to Environment & Models, showing Python, FFmpeg, and FunASR as list items; download sources must be configured with real available resource URLs before use.
 - Runtime resources are now downloaded from inside the client; CI no longer builds separate Python, FFmpeg, or model resource packages.
 - Improved the Environment & Models layout so runtime resources, download sources, platform tags, and install logs follow the settings list style with less crowding.
 - Improved local environment detection messages with specific reasons when Python dependencies, FFmpeg, or managed runtimes are missing.

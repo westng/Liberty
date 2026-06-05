@@ -16,6 +16,7 @@ const SHORT_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ITEM_NAME_ZH = {
   "gem-ticket-tool": "补签票券",
   "gift-box-tool": "惊喜礼盒",
+  "sheep-plush-scene": "小羊玩偶",
 };
 const COMPACT_PAYLOAD_BYTES = 28;
 const COMPACT_SIGNATURE_BYTES = 64;

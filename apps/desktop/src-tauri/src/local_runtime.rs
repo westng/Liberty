@@ -501,6 +501,9 @@ fn selected_runtime_download_source(
 ) -> LocalResult<RuntimeDownloadSource> {
     let settings = local_db::get_settings(app)?;
     let source_id = settings.runtime_download_source.trim();
+    if manifest.download_sources.is_empty() {
+        return Err("运行环境下载源未配置，请先配置真实可用的下载源。".into());
+    }
     if source_id.is_empty() {
         return Err("请选择下载源后再下载运行环境。".into());
     }
