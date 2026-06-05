@@ -460,7 +460,7 @@ fn is_short_display_prefix(value: &str) -> bool {
 }
 
 fn validate_payload(payload: &RedeemKeyPayload) -> LocalResult<()> {
-    if !matches!(payload.version, 1 | 2 | 3) {
+    if !matches!(payload.version, 1..=3) {
         return Err("当前版本暂不支持该兑换 Key。".into());
     }
     if payload.campaign_id.trim().is_empty() {
