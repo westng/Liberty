@@ -157,16 +157,44 @@ jobs:
 
       - name: Preview Changelog
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           if [[ ! -s CHANGELOG.md ]]; then
             echo "::error::CHANGELOG.md 不存在或内容为空。"
             exit 1
           fi
 
+          node <<'NODE' > release-changelog.md
+          const fs = require('fs');
+
+          const version = process.env.RELEASE_VERSION;
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const heading = new RegExp(`^##\\s+v?${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s+-\\s+.*)?\\s*$`, 'm');
+          const match = changelog.match(heading);
+
+          if (!match || match.index === undefined) {
+            console.error(`CHANGELOG.md 中找不到版本 ${version} 的更新内容。`);
+            process.exit(1);
+          }
+
+          const start = match.index;
+          const next = changelog.slice(start + match[0].length).search(/^##\s+/m);
+          const end = next === -1 ? changelog.length : start + match[0].length + next;
+          const section = changelog.slice(start, end).trim();
+
+          if (!section) {
+            console.error(`CHANGELOG.md 中版本 ${version} 的更新内容为空。`);
+            process.exit(1);
+          }
+
+          process.stdout.write(`${section}\n`);
+          NODE
+
           {
             printf "## Release 正文预览\n\n"
             printf "以下中英双语更新日志会显示在 GitHub Release 正文顶部：\n\n"
-            cat CHANGELOG.md
+            cat release-changelog.md
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -361,12 +389,39 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare_release.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.prepare_release.outputs.release_version }}
           TARGET_COMMIT: ${{ needs.prepare_release.outputs.target_commit }}
         run: |
           if [[ ! -s CHANGELOG.md ]]; then
             echo "::error::CHANGELOG.md 不存在或内容为空。"
             exit 1
           fi
+
+          node <<'NODE' > release-changelog.md
+          const fs = require('fs');
+
+          const version = process.env.RELEASE_VERSION;
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const heading = new RegExp(`^##\\s+v?${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s+-\\s+.*)?\\s*$`, 'm');
+          const match = changelog.match(heading);
+
+          if (!match || match.index === undefined) {
+            console.error(`CHANGELOG.md 中找不到版本 ${version} 的更新内容。`);
+            process.exit(1);
+          }
+
+          const start = match.index;
+          const next = changelog.slice(start + match[0].length).search(/^##\s+/m);
+          const end = next === -1 ? changelog.length : start + match[0].length + next;
+          const section = changelog.slice(start, end).trim();
+
+          if (!section) {
+            console.error(`CHANGELOG.md 中版本 ${version} 的更新内容为空。`);
+            process.exit(1);
+          }
+
+          process.stdout.write(`${section}\n`);
+          NODE
 
           gh api \
             --method POST \
@@ -376,7 +431,7 @@ jobs:
             --jq ".body" > github-release-notes.md
 
           {
-            cat CHANGELOG.md
+            cat release-changelog.md
             printf "\n\n---\n\n"
             printf "## GitHub 自动生成记录\n\n"
             cat github-release-notes.md
