@@ -1,7 +1,7 @@
 use crate::local_db::{self, LocalResult, PetEventLedgerEntry, PetSettings};
 use chrono::Utc;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -218,7 +218,7 @@ fn get_action_for_environment(environment_state: &str, mood: &str) -> PetAction 
         "transcribing" | "speaker_processing" | "summarizing" => PetAction::Work,
         "completed" => PetAction::Snow,
         "failed" => PetAction::Pants,
-        "uploaded" => PetAction::Read,
+        "uploaded" => PetAction::Reading,
         _ => get_action_for_mood(mood),
     }
 }
@@ -230,7 +230,7 @@ fn get_action_for_mood(mood: &str) -> PetAction {
         "proud" => PetAction::Eat,
         "needy" => PetAction::Toy,
         "sleepy" => PetAction::Sleep,
-        "bored" => PetAction::Read,
+        "bored" => PetAction::Reading,
         _ => PetAction::Slack,
     }
 }
@@ -261,7 +261,7 @@ fn get_action_for_recent_event(event: &PetEventLedgerEntry, mood: &str) -> PetAc
 }
 
 fn get_daily_idle_action(latest_event_at: u64, idle_ms: u64) -> PetAction {
-    const ACTIONS: [PetAction; 13] = [
+    const ACTIONS: [PetAction; 15] = [
         PetAction::Slack,
         PetAction::Toy,
         PetAction::Rope,
@@ -269,11 +269,13 @@ fn get_daily_idle_action(latest_event_at: u64, idle_ms: u64) -> PetAction {
         PetAction::Crush,
         PetAction::Defecate,
         PetAction::Eat,
+        PetAction::Gaming,
         PetAction::Pants,
-        PetAction::Read,
+        PetAction::Reading,
         PetAction::Run,
         PetAction::Sleep,
         PetAction::Snow,
+        PetAction::Studying,
         PetAction::Work,
     ];
     let bucket = ((latest_event_at + idle_ms) / DAILY_ACTION_BUCKET_MS) as usize;
@@ -291,13 +293,15 @@ impl PetAnimationFrames {
             PetAction::Defecate => &self.defecate,
             PetAction::Drive => &self.drive,
             PetAction::Eat => &self.eat,
+            PetAction::Gaming => &self.gaming,
             PetAction::Pants => &self.pants,
-            PetAction::Read => &self.read,
+            PetAction::Reading => &self.reading,
             PetAction::Rope => &self.rope,
             PetAction::Run => &self.run,
             PetAction::Slack => &self.slack,
             PetAction::Sleep => &self.sleep,
             PetAction::Snow => &self.snow,
+            PetAction::Studying => &self.studying,
             PetAction::Toy => &self.toy,
             PetAction::Work => &self.work,
         };
@@ -314,13 +318,15 @@ pub(crate) fn load_pet_animation_frames(app: &AppHandle) -> LocalResult<PetAnima
         defecate: resolve_pet_frame_paths(app, PetAction::Defecate)?,
         drive: resolve_pet_frame_paths(app, PetAction::Drive)?,
         eat: resolve_pet_frame_paths(app, PetAction::Eat)?,
+        gaming: resolve_pet_frame_paths(app, PetAction::Gaming)?,
         pants: resolve_pet_frame_paths(app, PetAction::Pants)?,
-        read: resolve_pet_frame_paths(app, PetAction::Read)?,
+        reading: resolve_pet_frame_paths(app, PetAction::Reading)?,
         rope: resolve_pet_frame_paths(app, PetAction::Rope)?,
         run: resolve_pet_frame_paths(app, PetAction::Run)?,
         slack: resolve_pet_frame_paths(app, PetAction::Slack)?,
         sleep: resolve_pet_frame_paths(app, PetAction::Sleep)?,
         snow: resolve_pet_frame_paths(app, PetAction::Snow)?,
+        studying: resolve_pet_frame_paths(app, PetAction::Studying)?,
         toy: resolve_pet_frame_paths(app, PetAction::Toy)?,
         work: resolve_pet_frame_paths(app, PetAction::Work)?,
     })
@@ -336,28 +342,30 @@ fn sorted_png_frames(group_dir: PathBuf) -> LocalResult<Vec<PathBuf>> {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.extension().is_some_and(|extension| extension == "png"))
-        .filter(|path| {
-            path.file_stem()
-                .and_then(|stem| stem.to_str())
-                .and_then(|stem| stem.parse::<u32>().ok())
-                .is_some()
-        })
+        .filter(|path| pet_frame_number(path).is_some())
         .collect::<Vec<_>>();
 
-    entries.sort_by_key(|path| {
-        path.file_stem()
-            .and_then(|stem| stem.to_str())
-            .and_then(|stem| stem.parse::<u32>().ok())
-            .unwrap_or(u32::MAX)
-    });
+    entries.sort_by_key(|path| pet_frame_number(path).unwrap_or(u32::MAX));
     Ok(entries)
 }
 
+fn pet_frame_number(path: &Path) -> Option<u32> {
+    let stem = path.file_stem()?.to_str()?;
+    stem.parse::<u32>()
+        .ok()
+        .or_else(|| stem.rsplit_once('_')?.1.parse::<u32>().ok())
+}
+
 fn pet_resource_root(app: &AppHandle) -> LocalResult<PathBuf> {
-    let resource_dir = app.path().resource_dir().map_err(|err| err.to_string())?;
-    let packaged = resource_dir.join("pet");
-    if packaged.exists() {
-        return Ok(packaged);
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let manifest_candidates = [
+        manifest_dir.join("../src/assets/images/action"),
+        manifest_dir.join("resources/pet"),
+    ];
+    for candidate in manifest_candidates {
+        if is_pet_resource_root(&candidate) {
+            return Ok(candidate);
+        }
     }
 
     if let Ok(current_dir) = std::env::current_dir() {
@@ -369,16 +377,29 @@ fn pet_resource_root(app: &AppHandle) -> LocalResult<PathBuf> {
             current_dir.join("apps/desktop/src-tauri/resources/pet"),
         ];
         for candidate in dev_candidates {
-            if candidate.exists() {
+            if is_pet_resource_root(&candidate) {
                 return Ok(candidate);
             }
         }
+    }
+
+    let resource_dir = app.path().resource_dir().map_err(|err| err.to_string())?;
+    let packaged = resource_dir.join("pet");
+    if packaged.exists() {
+        return Ok(packaged);
     }
 
     Ok(app
         .path()
         .resolve("resources/pet", tauri::path::BaseDirectory::Resource)
         .unwrap_or(resource_dir.join("pet")))
+}
+
+fn is_pet_resource_root(path: &Path) -> bool {
+    path.join("reading").is_dir()
+        && path.join("gaming").is_dir()
+        && path.join("studying").is_dir()
+        && path.join("slack").join("slack_01.png").is_file()
 }
 
 pub(crate) fn resolve_pet_position(

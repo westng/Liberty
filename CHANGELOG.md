@@ -1,5 +1,45 @@
 # 更新日志 / Changelog
 
+## Unreleased - 2026-06-06
+
+### 中文
+
+#### 新增
+
+- 新增桌宠动作序列帧资源，补齐 `crush`、`defecate`、`drive`、`eat`、`gaming`、`pants`、`reading`、`rope`、`run`、`slack`、`sleep`、`snow`、`studying`、`toy`、`work` 共 15 组动作，每组 9 帧。
+- 新增桌宠空闲动作池中的 `gaming`、`reading`、`studying` 动作，使桌宠日常状态更丰富。
+
+#### 调整
+
+- 桌宠动作帧命名调整为 `动作名_01.png` 至 `动作名_09.png`，前端与 Tauri 桌宠加载逻辑均支持按数字序号排序播放。
+- 桌宠动画播放间隔由 1000ms 调整为 300ms，使 9 帧序列动画播放更连贯。
+- 桌宠资源加载优先读取前端动作资源目录，开发环境下可直接预览最新动作帧。
+
+#### 修复
+
+- 修复 `snow` 动作 4-6 帧顶部残留、1-3 帧脚部像素缺失，以及部分底部切图碎点。
+- 修复 `crush`、`pants`、`toy` 动作 7-9 帧头部羊毛区域被误扣透明的问题。
+- 清理 `toy` 动作 4-6 帧底部多余切片残留，保持主体位置和透明画布不变。
+
+### English
+
+#### Added
+
+- Added desktop pet sequence-frame assets for 15 action groups: `crush`, `defecate`, `drive`, `eat`, `gaming`, `pants`, `reading`, `rope`, `run`, `slack`, `sleep`, `snow`, `studying`, `toy`, and `work`, with 9 frames per action.
+- Added `gaming`, `reading`, and `studying` to the desktop pet idle action pool for richer daily behavior.
+
+#### Changed
+
+- Renamed pet action frames to the `action_01.png` through `action_09.png` pattern, with both frontend and Tauri loaders sorting frames by numeric order.
+- Reduced the desktop pet animation interval from 1000ms to 300ms so 9-frame sequences play more smoothly.
+- Prioritized loading pet resources from the frontend action asset directory in development so updated frames can be previewed directly.
+
+#### Fixed
+
+- Fixed `snow` frame issues including top-center leftovers in frames 4-6, missing foot pixels in frames 1-3, and small bottom trimming artifacts.
+- Fixed incorrectly transparent head-wool areas in `crush`, `pants`, and `toy` frames 7-9.
+- Removed extra bottom-slice remnants from `toy` frames 4-6 while preserving sprite position and transparent canvas size.
+
 ## 1.1.21 - 2026-06-05
 
 ### 中文

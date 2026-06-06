@@ -28,7 +28,7 @@ pub(crate) const PET_WINDOW_HEIGHT: f64 = 220.0;
 pub(crate) const PET_SPRITE_WIDTH: u32 = 148;
 #[cfg(any(windows, target_os = "macos"))]
 pub(crate) const PET_SPRITE_HEIGHT: u32 = 148;
-pub(crate) const ANIMATION_FRAME_MS: u64 = 1000;
+pub(crate) const ANIMATION_FRAME_MS: u64 = 300;
 pub(crate) const PET_RENDER_TICK_MS: u64 = 100;
 pub(crate) const STATE_REFRESH_MS: u64 = 5000;
 pub(crate) const RECENT_EVENT_ACTION_HOLD_MS: u64 = 45_000;
@@ -145,13 +145,15 @@ pub(crate) struct PetAnimationFrames {
     pub(crate) defecate: Vec<PathBuf>,
     pub(crate) drive: Vec<PathBuf>,
     pub(crate) eat: Vec<PathBuf>,
+    pub(crate) gaming: Vec<PathBuf>,
     pub(crate) pants: Vec<PathBuf>,
-    pub(crate) read: Vec<PathBuf>,
+    pub(crate) reading: Vec<PathBuf>,
     pub(crate) rope: Vec<PathBuf>,
     pub(crate) run: Vec<PathBuf>,
     pub(crate) slack: Vec<PathBuf>,
     pub(crate) sleep: Vec<PathBuf>,
     pub(crate) snow: Vec<PathBuf>,
+    pub(crate) studying: Vec<PathBuf>,
     pub(crate) toy: Vec<PathBuf>,
     pub(crate) work: Vec<PathBuf>,
 }
@@ -162,13 +164,15 @@ pub(crate) enum PetAction {
     Defecate,
     Drive,
     Eat,
+    Gaming,
     Pants,
-    Read,
+    Reading,
     Rope,
     Run,
     Slack,
     Sleep,
     Snow,
+    Studying,
     Toy,
     Work,
 }
@@ -192,13 +196,15 @@ impl PetAction {
             Self::Defecate => "defecate",
             Self::Drive => "drive",
             Self::Eat => "eat",
+            Self::Gaming => "gaming",
             Self::Pants => "pants",
-            Self::Read => "read",
+            Self::Reading => "reading",
             Self::Rope => "rope",
             Self::Run => "run",
             Self::Slack => "slack",
             Self::Sleep => "sleep",
             Self::Snow => "snow",
+            Self::Studying => "studying",
             Self::Toy => "toy",
             Self::Work => "work",
         }

@@ -5,13 +5,15 @@ export type PetImageGroup =
   | "defecate"
   | "drive"
   | "eat"
+  | "gaming"
   | "pants"
-  | "read"
+  | "reading"
   | "rope"
   | "run"
   | "slack"
   | "sleep"
   | "snow"
+  | "studying"
   | "toy"
   | "work";
 type PetFrameEntry = {
@@ -31,7 +33,7 @@ const moodImageGroupMap: Record<PetMood, PetImageGroup> = {
   proud: "eat",
   needy: "toy",
   sleepy: "sleep",
-  bored: "read",
+  bored: "reading",
 };
 
 const stageScaleMap: Record<PetStage, number> = {
@@ -54,13 +56,13 @@ function parsePetFrameFilename(path: string): { group: PetImageGroup; frame: num
     return null;
   }
 
-  const matched = filename.match(/^(\d+)\.png$/);
-  if (!matched) {
+  const groupName = path.split("/").at(-2);
+  if (!isPetImageGroup(groupName)) {
     return null;
   }
 
-  const groupName = path.split("/").at(-2);
-  if (!isPetImageGroup(groupName)) {
+  const matched = filename.match(/^(?:[a-z]+_)?(\d+)\.png$/);
+  if (!matched) {
     return null;
   }
 
@@ -82,13 +84,15 @@ function isPetImageGroup(value: string | undefined): value is PetImageGroup {
     value === "defecate" ||
     value === "drive" ||
     value === "eat" ||
+    value === "gaming" ||
     value === "pants" ||
-    value === "read" ||
+    value === "reading" ||
     value === "rope" ||
     value === "run" ||
     value === "slack" ||
     value === "sleep" ||
     value === "snow" ||
+    value === "studying" ||
     value === "toy" ||
     value === "work"
   );
@@ -128,7 +132,7 @@ export function getPetImageGroupForEnvironment(environmentState?: JobStage | nul
     case "failed":
       return "pants";
     case "uploaded":
-      return "read";
+      return "reading";
     case "idle":
     default:
       return getPetImageGroupByMood(mood);
@@ -248,11 +252,13 @@ const dailyIdleActions: PetImageGroup[] = [
   "crush",
   "defecate",
   "eat",
+  "gaming",
   "pants",
-  "read",
+  "reading",
   "run",
   "sleep",
   "snow",
+  "studying",
   "work",
 ];
 

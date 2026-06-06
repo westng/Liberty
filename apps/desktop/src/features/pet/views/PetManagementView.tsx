@@ -23,7 +23,7 @@ import { applyDesktopPetState, openExtraDesktopPet } from "@/shared/services/tau
 import { promptPetName } from "@/shared/services/tauri/system";
 import type { LocaleCode, PetInteractionAction, PetInventoryItem, PetSettings, PetStage } from "@/shared/types/meeting";
 
-const ANIMATION_FRAME_INTERVAL_MS = 1000;
+const ANIMATION_FRAME_INTERVAL_MS = 300;
 
 type SettingsForm = Omit<PetSettings, "petId" | "updatedAt">;
 
