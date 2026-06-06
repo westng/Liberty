@@ -45,8 +45,8 @@ export function useRuntimePanel(
   const runtimeStatusDescription = runtimeDescription(runtimeStatus, messages);
   const runtimeBusy = runtimeStatus.status === "installing" || runtimeStatus.status === "unsupported";
   const runtimeSelectedSourceId = store.settings.runtimeDownloadSource.trim();
-  const runtimeDownloadSourceOptions: { id: string; label: string }[] = [];
-  const runtimeSourceRequired = true;
+  const runtimeDownloadSourceOptions = store.runtimeDownloadSources;
+  const runtimeSourceRequired = runtimeDownloadSourceOptions.length > 0 && !runtimeSelectedSourceId;
   const runtimeResourceRows = runtimeResources(
     runtimeStatus,
     runtimeInstallLog,
@@ -56,6 +56,7 @@ export function useRuntimePanel(
   );
 
   async function refreshRuntimePanel() {
+    await store.refreshRuntimeDownloadSources();
     await store.refreshRuntimeStatus();
     await store.refreshRuntimeInstallLog();
   }

@@ -24,12 +24,14 @@ import type {
   NewMeetingJobInput,
   SettingsState,
 } from "@/shared/types/meeting";
+import type { RuntimeDownloadSourceOption } from "@/shared/services/tauri/runtime";
 
 type MeetingState = {
   jobs: MeetingJob[];
   settings: SettingsState;
   runtimeStatus: ManagedRuntimeStatus;
   runtimeInstallLog: string;
+  runtimeDownloadSources: RuntimeDownloadSourceOption[];
   settingsLoaded: boolean;
 };
 
@@ -46,6 +48,7 @@ let state: MeetingState = {
   settings: { ...defaultSettings },
   runtimeStatus: initialRuntimeStatus,
   runtimeInstallLog: "",
+  runtimeDownloadSources: [],
   settingsLoaded: false,
 };
 
@@ -136,6 +139,7 @@ async function ensureSettingsLoaded(force = false) {
     }
 
     await refreshRuntimeStatus();
+    await refreshRuntimeDownloadSources();
     setState({ settingsLoaded: true });
     applyAppearance(state.settings);
     syncLocalPolling();
@@ -195,6 +199,16 @@ async function refreshRuntimeInstallLog() {
   }
 
   return state.runtimeInstallLog;
+}
+
+async function refreshRuntimeDownloadSources() {
+  try {
+    setState({ runtimeDownloadSources: await localRuntimeService.listDownloadSources() });
+  } catch {
+    setState({ runtimeDownloadSources: [] });
+  }
+
+  return state.runtimeDownloadSources;
 }
 
 function maybeStartRuntimeAutoInstall() {
@@ -531,6 +545,7 @@ const actions = {
   ensureSettingsLoaded,
   refreshRuntimeStatus,
   refreshRuntimeInstallLog,
+  refreshRuntimeDownloadSources,
   refreshJobs,
   refreshJob,
   refreshJobRuns,

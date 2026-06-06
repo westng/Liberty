@@ -1,6 +1,9 @@
 # Managed local runtime requirements for Liberty.
 # Keep these versions conservative so Python 3.9 remains supported on macOS and Windows.
 numpy<2
+torch>=2.1,<2.4
+torchaudio>=2.1,<2.4
+torchvision>=0.16,<0.19
 modelscope>=1.24,<2
 huggingface_hub>=0.30,<1
 funasr>=1.1,<2

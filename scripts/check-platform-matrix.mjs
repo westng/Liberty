@@ -41,8 +41,8 @@ for (const platformId of manifestPlatformIds) {
 const windowsX86 = (manifest.platforms ?? []).find(
   (platform) => platform.platformId === "windows-x86",
 );
-if (windowsX86?.asrBackend !== "sherpa-onnx") {
-  errors.push("windows-x86 must use the separately validated sherpa-onnx backend");
+if (!windowsX86?.unsupportedReason && windowsX86?.asrBackend !== "sherpa-onnx") {
+  errors.push("windows-x86 must use the separately validated sherpa-onnx backend when it is enabled");
 }
 
 if (errors.length > 0) {

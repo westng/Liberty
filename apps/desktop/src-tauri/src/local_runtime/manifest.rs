@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::domain::platform;
 use crate::local_db::LocalResult;
@@ -20,7 +21,10 @@ pub struct RuntimeManifest {
 pub struct RuntimeDownloadSource {
     pub source_id: String,
     pub name_zh: String,
-    pub base_url: String,
+    #[serde(default)]
+    pub pip_index_url: Option<String>,
+    #[serde(default)]
+    pub model_endpoint: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -42,6 +46,8 @@ pub struct PlatformRuntime {
 #[serde(rename_all = "camelCase")]
 pub struct BundledAsset {
     pub file_name: String,
+    #[serde(default)]
+    pub urls: HashMap<String, String>,
     #[serde(default)]
     pub sha256: String,
 }
