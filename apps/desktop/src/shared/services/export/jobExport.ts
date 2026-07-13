@@ -109,6 +109,7 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
   if (kind === "word") {
     await invoke("export_job_summary_docx", {
       jobId: job.id,
+      summaryRunId: job.activeSummaryRunId ?? null,
       filePath,
     });
     void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);

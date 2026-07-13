@@ -1,12 +1,13 @@
 mod model;
 mod parser;
 mod renderer;
+mod source;
 mod xml;
 
 use crate::local_db::{
-    self, AiSummaryResult, AiSummaryRun, LocalResult, MeetingJob, MeetingMember,
-    MeetingMinutesInfo, MeetingMinutesParticipant, MeetingMinutesPayload,
-    MeetingMinutesSpeakerReport, TranscriptSegment,
+    self, AiSummaryResult, LocalResult, MeetingJob, MeetingMember, MeetingMinutesInfo,
+    MeetingMinutesParticipant, MeetingMinutesPayload, MeetingMinutesSpeakerReport,
+    TranscriptSegment,
 };
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -18,6 +19,7 @@ use parser::{
     parse_speaker_header, trim_numbered_prefix,
 };
 use renderer::export_summary_docx;
+use source::{resolve_summary_source, SummaryExportSource};
 
 const FIXED_MEETING_TIME: &str = "9:00";
 const FIXED_MEETING_LOCATION: &str = "小会议室";
@@ -27,6 +29,7 @@ const FIXED_MEETING_HOST: &str = "冯吉琼";
 pub fn export_job_summary_docx(
     app: AppHandle,
     job_id: String,
+    summary_run_id: Option<String>,
     file_path: String,
 ) -> LocalResult<()> {
     if file_path.trim().is_empty() {
@@ -34,63 +37,10 @@ pub fn export_job_summary_docx(
     }
 
     let job = local_db::get_job(&app, &job_id)?;
-    let summary_source = resolve_summary_source(&job);
+    let summary_source = resolve_summary_source(&job, summary_run_id.as_deref())?;
     let members = local_db::list_meeting_members(&app)?;
     let export_data = build_export_doc_data_from_source(&job, &summary_source, &members);
     export_summary_docx(&export_data, Path::new(file_path.trim()))
-}
-
-#[derive(Debug, Clone)]
-struct SummaryExportSource {
-    result: AiSummaryResult,
-    minutes_payload: Option<MeetingMinutesPayload>,
-    template_id: String,
-    run_id: Option<String>,
-}
-
-fn resolve_summary_source(job: &MeetingJob) -> SummaryExportSource {
-    if let Some(active_run_id) = job.active_summary_run_id.as_deref() {
-        if let Some(run) = job
-            .summary_runs
-            .iter()
-            .find(|run| run.id == active_run_id && run.result.is_some())
-        {
-            return summary_source_from_run(run);
-        }
-    }
-
-    if let Some(run) = job
-        .summary_runs
-        .iter()
-        .filter(|run| run.result.is_some())
-        .max_by(|left, right| left.updated_at.cmp(&right.updated_at))
-    {
-        return summary_source_from_run(run);
-    }
-
-    SummaryExportSource {
-        result: AiSummaryResult {
-            title: job.title.clone(),
-            overview: job.summary.overview.clone(),
-            topics: job.summary.topics.clone(),
-            decisions: Vec::new(),
-            action_items: Vec::new(),
-            risks: Vec::new(),
-            follow_ups: Vec::new(),
-        },
-        minutes_payload: None,
-        template_id: String::new(),
-        run_id: None,
-    }
-}
-
-fn summary_source_from_run(run: &AiSummaryRun) -> SummaryExportSource {
-    SummaryExportSource {
-        result: run.result.clone().unwrap_or_default(),
-        minutes_payload: run.minutes_payload.clone(),
-        template_id: run.template_id.clone(),
-        run_id: Some(run.id.clone()),
-    }
 }
 
 fn build_export_doc_data_from_source(
@@ -98,22 +48,32 @@ fn build_export_doc_data_from_source(
     source: &SummaryExportSource,
     members: &[MeetingMember],
 ) -> ExportDocData {
-    let derived_payload = derive_meeting_minutes_payload(
+    let projection = derive_meeting_minutes_projection(
         job,
         &source.result,
         members,
         &source.template_id,
         source.run_id.clone(),
     );
-    let payload = source
-        .minutes_payload
+    let mut payload = if projection.has_summary_speakers {
+        projection.payload
+    } else {
+        source
+            .cached_projection
+            .as_ref()
+            .filter(|cached| cached_projection_matches_source(cached, source.run_id.as_deref()))
+            .filter(|cached| !cached.speaker_reports.is_empty())
+            .cloned()
+            .unwrap_or(projection.payload)
+    };
+
+    if let Some(cached) = source
+        .cached_projection
         .as_ref()
-        .filter(|payload| {
-            minutes_payload_content_score(payload)
-                >= minutes_payload_content_score(&derived_payload)
-        })
-        .cloned()
-        .unwrap_or(derived_payload);
+        .filter(|cached| cached_projection_matches_source(cached, source.run_id.as_deref()))
+    {
+        apply_cached_identity_metadata(&mut payload, cached);
+    }
 
     build_export_doc_data_from_minutes_payload(job, &source.result, &payload, members)
 }
@@ -135,7 +95,24 @@ pub(crate) fn derive_meeting_minutes_payload(
     template_id: &str,
     source_summary_run_id: Option<String>,
 ) -> MeetingMinutesPayload {
+    derive_meeting_minutes_projection(job, summary, members, template_id, source_summary_run_id)
+        .payload
+}
+
+struct DerivedMinutesProjection {
+    payload: MeetingMinutesPayload,
+    has_summary_speakers: bool,
+}
+
+fn derive_meeting_minutes_projection(
+    job: &MeetingJob,
+    summary: &AiSummaryResult,
+    members: &[MeetingMember],
+    template_id: &str,
+    source_summary_run_id: Option<String>,
+) -> DerivedMinutesProjection {
     let mut data = parse_overview_to_export_data(&summary.overview);
+    let has_summary_speakers = !data.speech_blocks.is_empty();
     let mut summary_blocks = std::mem::take(&mut data.speech_blocks);
     let speech_blocks = resolve_speech_blocks(job, &mut summary_blocks, members);
 
@@ -177,30 +154,33 @@ pub(crate) fn derive_meeting_minutes_payload(
         Vec::new()
     };
 
-    MeetingMinutesPayload {
-        schema_version: 1,
-        template_id: template_id.trim().to_string(),
-        source_summary_run_id,
-        meeting_info: MeetingMinutesInfo {
-            meeting_name: resolved_title.to_string(),
-            meeting_time: FIXED_MEETING_TIME.to_string(),
-            meeting_location: FIXED_MEETING_LOCATION.to_string(),
-            recorder,
-            attendees,
-            absentees: data.absentees.trim().to_string(),
-            host: FIXED_MEETING_HOST.to_string(),
-            reviewer: data.reviewer.trim().to_string(),
+    DerivedMinutesProjection {
+        has_summary_speakers,
+        payload: MeetingMinutesPayload {
+            schema_version: 1,
+            template_id: template_id.trim().to_string(),
+            source_summary_run_id,
+            meeting_info: MeetingMinutesInfo {
+                meeting_name: resolved_title.to_string(),
+                meeting_time: FIXED_MEETING_TIME.to_string(),
+                meeting_location: FIXED_MEETING_LOCATION.to_string(),
+                recorder,
+                attendees,
+                absentees: data.absentees.trim().to_string(),
+                host: FIXED_MEETING_HOST.to_string(),
+                reviewer: data.reviewer.trim().to_string(),
+            },
+            participants: speech_blocks
+                .iter()
+                .map(|block| block_to_minutes_participant(block, members))
+                .collect(),
+            speaker_reports: speech_blocks
+                .into_iter()
+                .map(|block| block_to_minutes_report(block, members))
+                .collect(),
+            topics,
+            global_summary: data.closing_summary,
         },
-        participants: speech_blocks
-            .iter()
-            .map(|block| block_to_minutes_participant(block, members))
-            .collect(),
-        speaker_reports: speech_blocks
-            .into_iter()
-            .map(|block| block_to_minutes_report(block, members))
-            .collect(),
-        topics,
-        global_summary: data.closing_summary,
     }
 }
 
@@ -297,71 +277,224 @@ fn resolve_speech_blocks(
     summary_blocks: &mut Vec<SpeechBlock>,
     members: &[MeetingMember],
 ) -> Vec<SpeechBlock> {
-    let transcript_speakers = collect_speaker_names(job);
-    let mut blocks_by_name: HashMap<String, SpeechBlock> = HashMap::new();
-
-    for mut block in summary_blocks.drain(..) {
-        if normalize_member_name(&block.name).is_empty() {
-            continue;
-        }
-
-        block.name = normalize_member_name(&block.name);
-        blocks_by_name.insert(block.name.clone(), block);
-    }
-
-    let mut speech_blocks = Vec::new();
-    let mut seen_names = HashSet::new();
-    for (index, speaker_name) in transcript_speakers.iter().enumerate() {
-        let normalized_name = normalize_member_name(speaker_name);
-        if normalized_name.is_empty() || !seen_names.insert(normalized_name.to_string()) {
-            continue;
-        }
-
-        let mut block = blocks_by_name
-            .remove(&normalized_name)
-            .unwrap_or_else(|| SpeechBlock {
-                name: normalized_name.clone(),
+    let mut speech_blocks = merge_summary_speech_blocks(summary_blocks);
+    if speech_blocks.is_empty() {
+        speech_blocks = collect_speaker_names(job)
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| SpeechBlock {
+                name,
                 original_index: index,
                 ..SpeechBlock::default()
-            });
-        block.name = normalized_name.clone();
-        block.original_index = index;
-        speech_blocks.push(block);
-    }
-
-    for (_, mut block) in blocks_by_name {
-        block.name = normalize_member_name(&block.name);
-        if block.name.trim().is_empty() {
-            continue;
-        }
-
-        if transcript_speakers.is_empty() || speech_block_has_content(&block) {
-            block.original_index = transcript_speakers.len() + speech_blocks.len();
-            speech_blocks.push(block);
-        }
+            })
+            .collect();
     }
 
     sort_speech_blocks(&mut speech_blocks, members);
     speech_blocks
 }
 
-fn speech_block_has_content(block: &SpeechBlock) -> bool {
-    !block.weekly_summary.is_empty()
-        || !block.next_week_plan.is_empty()
-        || !block.summary.is_empty()
+fn merge_summary_speech_blocks(summary_blocks: &mut Vec<SpeechBlock>) -> Vec<SpeechBlock> {
+    let mut merged = Vec::<SpeechBlock>::new();
+    let mut block_index_by_name = HashMap::<String, usize>::new();
+
+    for mut block in summary_blocks.drain(..) {
+        let normalized_name = normalize_member_name(&block.name);
+        if normalized_name.is_empty() {
+            continue;
+        }
+
+        if let Some(existing_index) = block_index_by_name.get(&normalized_name).copied() {
+            let existing = &mut merged[existing_index];
+            append_unique_items(&mut existing.weekly_summary, block.weekly_summary);
+            append_unique_items(&mut existing.next_week_plan, block.next_week_plan);
+            append_unique_items(&mut existing.summary, block.summary);
+            if existing.department.trim().is_empty() && !block.department.trim().is_empty() {
+                existing.department = block.department.trim().to_string();
+            }
+            continue;
+        }
+
+        block.name = normalized_name.clone();
+        block.original_index = merged.len();
+        block_index_by_name.insert(normalized_name, merged.len());
+        merged.push(block);
+    }
+
+    merged
 }
 
-fn minutes_payload_content_score(payload: &MeetingMinutesPayload) -> usize {
-    payload
-        .speaker_reports
+fn append_unique_items(target: &mut Vec<String>, items: Vec<String>) {
+    for item in items {
+        if !target.iter().any(|existing| existing == &item) {
+            target.push(item);
+        }
+    }
+}
+
+fn cached_projection_matches_source(
+    cached: &MeetingMinutesPayload,
+    source_run_id: Option<&str>,
+) -> bool {
+    match (
+        cached.source_summary_run_id.as_deref(),
+        source_run_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
+    ) {
+        (Some(cached_run_id), Some(source_run_id)) => cached_run_id == source_run_id,
+        (None, Some(_)) => true,
+        (None, None) => true,
+        (Some(_), None) => false,
+    }
+}
+
+#[derive(Clone)]
+struct CachedSpeakerIdentity {
+    keys: Vec<String>,
+    member_id: String,
+    department: String,
+    sort_order: i64,
+    match_status: String,
+}
+
+fn apply_cached_identity_metadata(
+    payload: &mut MeetingMinutesPayload,
+    cached: &MeetingMinutesPayload,
+) {
+    let identities = cached_speaker_identities(cached);
+
+    for participant in &mut payload.participants {
+        if let Some(identity) = find_cached_identity(
+            &identities,
+            [&participant.speaker_label, &participant.resolved_name],
+        ) {
+            apply_identity_to_participant(participant, identity);
+        }
+    }
+
+    for report in &mut payload.speaker_reports {
+        if let Some(identity) =
+            find_cached_identity(&identities, [&report.speaker_label, &report.resolved_name])
+        {
+            apply_identity_to_report(report, identity);
+        }
+    }
+}
+
+fn cached_speaker_identities(cached: &MeetingMinutesPayload) -> Vec<CachedSpeakerIdentity> {
+    let mut identities = Vec::new();
+
+    for participant in &cached.participants {
+        push_cached_identity(
+            &mut identities,
+            &participant.speaker_label,
+            &participant.resolved_name,
+            &participant.member_id,
+            &participant.department,
+            participant.sort_order,
+            &participant.match_status,
+        );
+    }
+
+    for report in &cached.speaker_reports {
+        push_cached_identity(
+            &mut identities,
+            &report.speaker_label,
+            &report.resolved_name,
+            &report.member_id,
+            &report.department,
+            report.sort_order,
+            &report.match_status,
+        );
+    }
+
+    identities
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_cached_identity(
+    identities: &mut Vec<CachedSpeakerIdentity>,
+    speaker_label: &str,
+    resolved_name: &str,
+    member_id: &str,
+    department: &str,
+    sort_order: i64,
+    match_status: &str,
+) {
+    let keys = [speaker_label, resolved_name]
+        .into_iter()
+        .map(normalize_member_name)
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    if keys.is_empty() {
+        return;
+    }
+
+    if identities
         .iter()
-        .map(|report| {
-            report.weekly_summary.len() + report.next_week_plan.len() + report.summary.len()
-        })
-        .sum::<usize>()
-        * 10
-        + payload.speaker_reports.len()
-        + payload.global_summary.len()
+        .any(|identity| identity.keys.iter().any(|key| keys.contains(key)))
+    {
+        return;
+    }
+
+    identities.push(CachedSpeakerIdentity {
+        keys,
+        member_id: member_id.trim().to_string(),
+        department: department.trim().to_string(),
+        sort_order,
+        match_status: match_status.trim().to_string(),
+    });
+}
+
+fn find_cached_identity<'a, const N: usize>(
+    identities: &'a [CachedSpeakerIdentity],
+    values: [&str; N],
+) -> Option<&'a CachedSpeakerIdentity> {
+    let keys = values
+        .into_iter()
+        .map(normalize_member_name)
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    identities
+        .iter()
+        .find(|identity| identity.keys.iter().any(|key| keys.contains(key)))
+}
+
+fn apply_identity_to_participant(
+    participant: &mut MeetingMinutesParticipant,
+    identity: &CachedSpeakerIdentity,
+) {
+    if participant.member_id.trim().is_empty() {
+        participant.member_id = identity.member_id.clone();
+    }
+    if participant.department.trim().is_empty() {
+        participant.department = identity.department.clone();
+    }
+    if participant.sort_order == 0 {
+        participant.sort_order = identity.sort_order;
+    }
+    if participant.match_status.trim().is_empty() || participant.match_status == "unmatched" {
+        participant.match_status = identity.match_status.clone();
+    }
+}
+
+fn apply_identity_to_report(
+    report: &mut MeetingMinutesSpeakerReport,
+    identity: &CachedSpeakerIdentity,
+) {
+    if report.member_id.trim().is_empty() {
+        report.member_id = identity.member_id.clone();
+    }
+    if report.department.trim().is_empty() {
+        report.department = identity.department.clone();
+    }
+    if report.sort_order == 0 {
+        report.sort_order = identity.sort_order;
+    }
+    if report.match_status.trim().is_empty() || report.match_status == "unmatched" {
+        report.match_status = identity.match_status.clone();
+    }
 }
 
 fn block_to_minutes_participant(
@@ -898,7 +1031,7 @@ mod tests {
 
         let data = build_export_doc_data(&job, &summary, &members);
         assert_eq!(data.recorder, "肖明容");
-        assert_eq!(data.attendees, "肖明容、李兰、段世琼");
+        assert_eq!(data.attendees, "肖明容、李兰");
     }
 
     #[test]
@@ -968,7 +1101,7 @@ mod tests {
     }
 
     #[test]
-    fn derive_minutes_payload_resolves_members_and_keeps_unmatched_speakers() {
+    fn derive_minutes_payload_preserves_summary_speakers_as_content_authority() {
         let job = MeetingJob {
             id: "job-5".into(),
             title: "周会".into(),
@@ -1016,14 +1149,15 @@ mod tests {
 
         assert_eq!(payload.template_id, "builtin-formal-meeting-minutes");
         assert_eq!(payload.source_summary_run_id.as_deref(), Some("run-1"));
-        assert_eq!(payload.speaker_reports.len(), 3);
-        assert_eq!(payload.speaker_reports[0].resolved_name, "段世琼");
-        assert_eq!(payload.speaker_reports[0].department, "财务部");
-        assert_eq!(payload.speaker_reports[0].match_status, "matched");
-        assert_eq!(payload.speaker_reports[1].resolved_name, "李兰");
-        assert_eq!(payload.speaker_reports[1].match_status, "unmatched");
-        assert_eq!(payload.speaker_reports[2].resolved_name, "肖明容");
-        assert_eq!(payload.speaker_reports[2].weekly_summary.len(), 1);
+        assert_eq!(payload.speaker_reports.len(), 2);
+        assert_eq!(payload.speaker_reports[0].resolved_name, "李兰");
+        assert_eq!(payload.speaker_reports[0].match_status, "unmatched");
+        assert_eq!(payload.speaker_reports[1].resolved_name, "肖明容");
+        assert_eq!(payload.speaker_reports[1].weekly_summary.len(), 1);
+        assert!(payload
+            .speaker_reports
+            .iter()
+            .all(|report| report.resolved_name != "段世琼"));
     }
 
     #[test]
@@ -1063,7 +1197,7 @@ mod tests {
         };
         let source = SummaryExportSource {
             result: summary,
-            minutes_payload: Some(stale_payload),
+            cached_projection: Some(stale_payload),
             template_id: "builtin-formal-meeting-minutes".into(),
             run_id: Some("run-1".into()),
         };
@@ -1074,6 +1208,101 @@ mod tests {
             .speech_blocks
             .iter()
             .any(|block| block.name == "肖明容" && !block.weekly_summary.is_empty()));
+    }
+
+    #[test]
+    fn cached_projection_with_more_items_cannot_replace_summary_people() {
+        let speakers = [
+            ("营销部", "段世琼"),
+            ("营销部", "李兰"),
+            ("温泉部", "杨小容"),
+            ("客房部", "陈丽"),
+            ("餐饮部", "游长春"),
+            ("安全部", "周永均"),
+            ("工程安保部", "明红"),
+            ("运营部", "王英海"),
+            ("财务部", "何冬妹"),
+            ("办公室", "肖明容"),
+            ("董事办", "贾世强"),
+        ];
+        let overview = format!(
+            "发言内容\n{}",
+            speakers
+                .iter()
+                .map(|(department, name)| format!(
+                    "【{department}】：{name}\n上周总结：\n1、{name}上周事项\n本周计划：\n1、{name}本周计划"
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let job = MeetingJob {
+            id: "job-authority".into(),
+            title: "周会".into(),
+            ..MeetingJob::default()
+        };
+        let summary = AiSummaryResult {
+            title: "周会".into(),
+            overview,
+            ..AiSummaryResult::default()
+        };
+        let cached_projection = MeetingMinutesPayload {
+            source_summary_run_id: Some("run-authority".into()),
+            speaker_reports: speakers[..8]
+                .iter()
+                .map(|(_, name)| MeetingMinutesSpeakerReport {
+                    speaker_label: (*name).into(),
+                    resolved_name: (*name).into(),
+                    weekly_summary: (1..=100)
+                        .map(|index| format!("{name}缓存条目 {index}"))
+                        .collect(),
+                    ..MeetingMinutesSpeakerReport::default()
+                })
+                .collect(),
+            ..MeetingMinutesPayload::default()
+        };
+        let source = SummaryExportSource {
+            result: summary,
+            cached_projection: Some(cached_projection),
+            template_id: "builtin-formal-meeting-minutes".into(),
+            run_id: Some("run-authority".into()),
+        };
+
+        let data = build_export_doc_data_from_source(&job, &source, &[]);
+
+        assert_eq!(data.speech_blocks.len(), speakers.len());
+        assert_eq!(data.speech_blocks[0].name, "段世琼");
+        assert_eq!(data.speech_blocks[10].name, "贾世强");
+        assert!(data.speech_blocks.iter().all(|block| block
+            .weekly_summary
+            .iter()
+            .all(|item| !item.contains("缓存条目"))));
+    }
+
+    #[test]
+    fn duplicate_summary_sections_are_merged_without_losing_items() {
+        let job = MeetingJob {
+            id: "job-duplicate".into(),
+            title: "周会".into(),
+            ..MeetingJob::default()
+        };
+        let summary = AiSummaryResult {
+            title: "周会".into(),
+            overview: "发言内容\n【营销部】：李兰\n上周总结：\n1、事项一\n本周计划：\n1、计划一\n【营销部】：李兰\n上周总结：\n1、事项二\n本周计划：\n1、计划二"
+                .into(),
+            ..AiSummaryResult::default()
+        };
+
+        let payload = derive_meeting_minutes_payload(&job, &summary, &[], "", None);
+
+        assert_eq!(payload.speaker_reports.len(), 1);
+        assert_eq!(
+            payload.speaker_reports[0].weekly_summary,
+            vec!["1、事项一".to_string(), "1、事项二".to_string()]
+        );
+        assert_eq!(
+            payload.speaker_reports[0].next_week_plan,
+            vec!["1、计划一".to_string(), "1、计划二".to_string()]
+        );
     }
 
     #[test]

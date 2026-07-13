@@ -71,7 +71,10 @@ export default function WorkbenchView() {
     setIsExporting(true);
 
     try {
-      await exportJob(job, kind);
+      const exportSnapshot = kind === "word" ? await store.refreshJob(job.id) : job;
+      if (exportSnapshot) {
+        await exportJob(exportSnapshot, kind);
+      }
     } finally {
       setIsExporting(false);
     }
