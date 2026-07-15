@@ -407,7 +407,7 @@ function AppContent() {
           <header className="nav-header">
             <div className="nav-brand">
               <img className="nav-brand-image" src={sidebarMascotUrl} alt="Liberty mascot" />
-              <h1>Liberty</h1>
+              <h1>Liberty.</h1>
             </div>
             <p className="nav-slogan">{messages.shell.slogan}</p>
           </header>
