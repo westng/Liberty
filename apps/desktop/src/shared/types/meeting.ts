@@ -13,6 +13,17 @@ export type ThemeMode = "auto" | "light" | "dark";
 export type LiquidGlassStyle = "transparent" | "tinted";
 export type LocaleCode = "zh-CN" | "en-US";
 export type LocalAsrDevice = "auto" | "cpu" | "mps" | "cuda";
+export type RuntimeSource = "managed" | "system";
+export type RuntimeComponentId = "python" | "ffmpeg" | "model";
+export type RuntimeComponentAvailability = "unavailable" | "ready" | "unsupported";
+export type RuntimeOperationKind =
+  | "idle"
+  | "detecting"
+  | "waiting_for_python"
+  | "downloading"
+  | "installing"
+  | "validating"
+  | "failed";
 export type ManagedRuntimeInstallStatus =
   | "missing"
   | "installing"
@@ -523,11 +534,37 @@ export interface SettingsState {
   summaryTemplate: string;
   concurrency: number;
   pythonPath: string;
+  ffmpegPath: string;
+  pythonRuntimeSource: RuntimeSource;
+  ffmpegRuntimeSource: RuntimeSource;
   runnerScriptPath: string;
   localAsrDevice: LocalAsrDevice;
   localAsrThreads: number;
   localAsrBatchSizeSeconds: number;
   runtimeDownloadSource: string;
+}
+
+export interface RuntimeArtifactState {
+  generationId: string;
+  artifactVersion: string;
+  resolvedPath: string;
+}
+
+export interface RuntimeOperationState {
+  kind: RuntimeOperationKind;
+  generation: number;
+  phase: string;
+  progress?: number;
+  lastError?: string;
+}
+
+export interface RuntimeComponentState {
+  component: RuntimeComponentId;
+  source?: RuntimeSource;
+  availability: RuntimeComponentAvailability;
+  activeArtifact?: RuntimeArtifactState;
+  operation: RuntimeOperationState;
+  updatedAt: string;
 }
 
 export interface ManagedRuntimeStatus {
@@ -543,6 +580,10 @@ export interface ManagedRuntimeStatus {
   installedAt?: string;
   updatedAt: string;
   lastLogPath?: string;
+  python: RuntimeComponentState;
+  ffmpeg: RuntimeComponentState;
+  models: RuntimeComponentState;
+  shellReady: boolean;
 }
 
 export interface ProcessMetrics {

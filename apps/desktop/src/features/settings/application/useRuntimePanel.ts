@@ -1,9 +1,15 @@
 import { useMemo } from "react";
 import type { MessageTree } from "@/shared/i18n";
-import type { ManagedRuntimeStatus } from "@/shared/types/meeting";
+import type {
+  ManagedRuntimeStatus,
+  RuntimeComponentState,
+  RuntimeOperationKind,
+  RuntimeSource,
+} from "@/shared/types/meeting";
 import type { MeetingStore } from "@/features/meeting/stores/useMeetingStore";
 
-type RuntimeResourceId = "python" | "ffmpeg" | "model";
+export type RuntimeResourceId = "python" | "ffmpeg" | "model";
+export type RuntimeResourceSource = RuntimeSource;
 
 export interface RuntimeResourceRow {
   id: RuntimeResourceId;
@@ -11,7 +17,12 @@ export interface RuntimeResourceRow {
   percent: number;
   statusLabel: string;
   actionLabel: string;
+  actionKind: "detect" | "install";
   disabled: boolean;
+  busy: boolean;
+  indeterminate: boolean;
+  source: RuntimeResourceSource;
+  sourceSelectable: boolean;
 }
 
 export function useRuntimePanel(
@@ -43,16 +54,16 @@ export function useRuntimePanel(
         : messages.runtimeInstallAction;
   const runtimeStatusLabel = labelForRuntimeStatus(runtimeStatus, messages);
   const runtimeStatusDescription = runtimeDescription(runtimeStatus, messages);
-  const runtimeBusy = runtimeStatus.status === "installing" || runtimeStatus.status === "unsupported";
+  const runtimeBusy = runtimeStatus.status === "unsupported";
   const runtimeSelectedSourceId = store.settings.runtimeDownloadSource.trim();
   const runtimeDownloadSourceOptions = store.runtimeDownloadSources;
   const runtimeSourceRequired = runtimeDownloadSourceOptions.length > 0 && !runtimeSelectedSourceId;
   const runtimeResourceRows = runtimeResources(
     runtimeStatus,
-    runtimeInstallLog,
     messages,
     runtimeSourceRequired,
-    runtimeBusy,
+    store.settings.pythonRuntimeSource,
+    store.settings.ffmpegRuntimeSource,
   );
 
   async function refreshRuntimePanel() {
@@ -120,117 +131,98 @@ function runtimeDescription(status: ManagedRuntimeStatus, messages: MessageTree[
 
 function runtimeResources(
   status: ManagedRuntimeStatus,
-  log: string,
   messages: MessageTree["settings"],
   sourceRequired: boolean,
-  runtimeBusy: boolean,
+  pythonSource: RuntimeSource,
+  ffmpegSource: RuntimeSource,
 ): RuntimeResourceRow[] {
   return [
-    runtimeResource("python", messages.runtimeResourcePython, status, log, messages, sourceRequired, runtimeBusy),
-    runtimeResource("ffmpeg", messages.runtimeResourceFfmpeg, status, log, messages, sourceRequired, runtimeBusy),
-    runtimeResource("model", messages.runtimeResourceFunasr, status, log, messages, sourceRequired, runtimeBusy),
+    runtimeResource("python", messages.runtimeResourcePython, status.python, messages, sourceRequired, pythonSource),
+    runtimeResource("ffmpeg", messages.runtimeResourceFfmpeg, status.ffmpeg, messages, sourceRequired, ffmpegSource),
+    runtimeResource("model", messages.runtimeResourceFunasr, status.models, messages, sourceRequired, "managed"),
   ];
 }
 
 function runtimeResource(
   id: RuntimeResourceId,
   name: string,
-  status: ManagedRuntimeStatus,
-  log: string,
+  component: RuntimeComponentState,
   messages: MessageTree["settings"],
   sourceRequired: boolean,
-  runtimeBusy: boolean,
+  selectedSource: RuntimeSource,
 ): RuntimeResourceRow {
-  const completed = isResourceCompleted(id, status, log);
-  const active = isResourceActive(id, status, log);
-  const progress = active ? activeResourceProgress(log) : 0;
-  const percent = completed ? 100 : progress;
-  const disabled = status.status === "system_ready" || sourceRequired || runtimeBusy;
+  const sourceSelectable = id !== "model";
+  const source = sourceSelectable ? selectedSource : "managed";
+  const busy = isOperationActive(component.operation.kind);
+  const progress = component.operation.progress;
+  const percent = component.availability === "ready" && !busy
+    ? 100
+    : progress ?? (busy ? 36 : 0);
+  const indeterminate = busy && progress === undefined;
+  const actionKind = source === "system" ? "detect" : "install";
+  const disabled = busy || (source === "managed" && sourceRequired);
 
   return {
     id,
     name,
     percent,
-    statusLabel: resourceStatusLabel(status, messages, sourceRequired, completed, active),
-    actionLabel: completed ? messages.runtimeResourceRedownload : messages.runtimeResourceDownload,
+    statusLabel: componentStatusLabel(component, source, messages, sourceRequired),
+    actionLabel: actionKind === "detect"
+      ? component.availability === "ready"
+        ? messages.runtimeResourceDetectAgain
+        : messages.runtimeResourceDetect
+      : component.availability === "ready"
+        ? messages.runtimeResourceRedownload
+        : messages.runtimeResourceDownload,
+    actionKind,
     disabled,
+    busy,
+    indeterminate,
+    source,
+    sourceSelectable,
   };
 }
 
-function resourceStatusLabel(
-  status: ManagedRuntimeStatus,
+function componentStatusLabel(
+  component: RuntimeComponentState,
+  source: RuntimeSource,
   messages: MessageTree["settings"],
   sourceRequired: boolean,
-  completed: boolean,
-  active: boolean,
 ) {
-  if (status.status === "system_ready") {
-    return messages.runtimeStatusSystemReady;
-  }
-
-  if (completed) {
-    return messages.runtimeResourceReady;
-  }
-
-  if (sourceRequired) {
-    return messages.runtimeDownloadSourceRequired;
-  }
-
-  if (status.status === "unsupported") {
+  if (component.availability === "unsupported") {
     return messages.runtimeStatusUnsupported;
   }
-
-  if (status.status === "failed" || status.status === "repair_required") {
-    return messages.runtimeResourceFailed;
+  switch (component.operation.kind) {
+    case "detecting":
+      return messages.runtimeResourceDetecting;
+    case "waiting_for_python":
+      return messages.runtimeResourceWaitingPython;
+    case "downloading":
+    case "installing":
+      return messages.runtimeResourceDownloading;
+    case "validating":
+      return messages.runtimeResourceValidating;
+    case "failed":
+      return component.operation.lastError?.trim()
+        || (source === "system"
+          ? messages.runtimeResourceNotDetected
+          : messages.runtimeResourceFailed);
+    default:
+      break;
   }
-
-  if (active) {
-    return messages.runtimeResourceDownloading;
+  if (component.availability === "ready") {
+    return source === "system"
+      ? messages.runtimeResourceSystemSelected
+      : messages.runtimeResourceReady;
   }
-
-  return messages.runtimeResourcePending;
+  if (source === "managed" && sourceRequired) {
+    return messages.runtimeDownloadSourceRequired;
+  }
+  return source === "system"
+    ? messages.runtimeResourceNotDetected
+    : messages.runtimeResourcePending;
 }
 
-function activeResourceProgress(log: string) {
-  const lastStageProgress = Array.from(
-    log.matchAll(/\[runtime\] (?:staging|download) progress .*?\(([\d.]+)%\)/g),
-  ).at(-1)?.[1];
-
-  if (!lastStageProgress) {
-    return 18;
-  }
-
-  return Math.max(18, Math.min(96, Math.round(Number(lastStageProgress))));
-}
-
-function isResourceCompleted(id: RuntimeResourceId, status: ManagedRuntimeStatus, log: string) {
-  if (status.status === "ready" || status.status === "system_ready" || log.includes("[runtime] install completed.")) {
-    return true;
-  }
-
-  if (id === "python") {
-    return log.includes("[runtime] resolved python=") || log.includes("Validating Python runtime");
-  }
-
-  if (id === "ffmpeg") {
-    return log.includes("[runtime] resolved ffmpeg=") || log.includes("Validating ffmpeg runtime");
-  }
-
-  return false;
-}
-
-function isResourceActive(id: RuntimeResourceId, status: ManagedRuntimeStatus, log: string) {
-  if (status.status !== "installing") {
-    return false;
-  }
-
-  if (id === "python") {
-    return !isResourceCompleted("python", status, log);
-  }
-
-  if (id === "ffmpeg") {
-    return isResourceCompleted("python", status, log) && !isResourceCompleted("ffmpeg", status, log);
-  }
-
-  return isResourceCompleted("ffmpeg", status, log) && !isResourceCompleted("model", status, log);
+function isOperationActive(kind: RuntimeOperationKind) {
+  return kind !== "idle" && kind !== "failed";
 }

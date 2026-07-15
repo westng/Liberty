@@ -114,6 +114,16 @@ export type MessageTree = {
     runtimeResourcePython: string;
     runtimeResourceFfmpeg: string;
     runtimeResourceFunasr: string;
+    runtimeResourceSource: string;
+    runtimeResourceManaged: string;
+    runtimeResourceSystem: string;
+    runtimeResourceSystemSelected: string;
+    runtimeResourceDetect: string;
+    runtimeResourceDetectAgain: string;
+    runtimeResourceDetecting: string;
+    runtimeResourceNotDetected: string;
+    runtimeResourceWaitingPython: string;
+    runtimeResourceValidating: string;
     runtimeResourcePending: string;
     runtimeResourceDownloading: string;
     runtimeResourceReady: string;

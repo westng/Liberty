@@ -140,6 +140,27 @@ pub fn save_runtime_state(app: &AppHandle, state: &ManagedRuntimeState) -> Local
     runtime_state::save_runtime_state(&conn, state)
 }
 
+pub fn get_runtime_component_state(
+    app: &AppHandle,
+    platform_id: &str,
+    component: &str,
+    source: &str,
+) -> LocalResult<RuntimeComponentState> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    runtime_state::load_runtime_component_state(&conn, platform_id, component, source)
+}
+
+pub fn save_runtime_component_state(
+    app: &AppHandle,
+    platform_id: &str,
+    state: &RuntimeComponentState,
+) -> LocalResult<()> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    runtime_state::save_runtime_component_state(&conn, platform_id, state)
+}
+
 pub fn save_job_snapshot(app: &AppHandle, job: &MeetingJob) -> LocalResult<()> {
     init_database(app)?;
     let mut conn = open_connection(app)?;

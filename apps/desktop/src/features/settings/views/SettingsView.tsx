@@ -3,7 +3,11 @@ import { message, save as saveFile } from "@tauri-apps/plugin-dialog";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { accentColors, useSettingsForm } from "@/features/settings/application/useSettingsForm";
-import { useRuntimePanel } from "@/features/settings/application/useRuntimePanel";
+import {
+  useRuntimePanel,
+  type RuntimeResourceId,
+  type RuntimeResourceSource,
+} from "@/features/settings/application/useRuntimePanel";
 import { useDiagnosticsPanel } from "@/shared/services/system/diagnostics";
 import { exportDesktopPetDiagnosticLog } from "@/shared/services/tauri/system";
 import { getMessages } from "@/shared/i18n";
@@ -67,6 +71,39 @@ export default function SettingsView() {
 
   async function updateRuntimeDownloadSource(sourceId: string) {
     await setRuntimeDownloadSource(sourceId);
+  }
+
+  async function updateRuntimeResourceSource(
+    resourceId: RuntimeResourceId,
+    source: RuntimeResourceSource,
+  ) {
+    if (resourceId === "model") {
+      return;
+    }
+    setSaveError("");
+    try {
+      await store.setRuntimeComponentSource(resourceId, source);
+      await refreshRuntimePanel();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function runRuntimeResourceAction(
+    resourceId: RuntimeResourceId,
+    actionKind: "detect" | "install",
+  ) {
+    setSaveError("");
+    try {
+      if (actionKind === "detect" && resourceId !== "model") {
+        await store.detectRuntimeComponent(resourceId);
+      } else {
+        await store.installRuntimeComponent(resourceId);
+      }
+      await refreshRuntimePanel();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function exportPetDiagnosticLog() {
@@ -321,10 +358,31 @@ export default function SettingsView() {
                 <span className="settings-label">{resource.name}</span>
               </div>
               <div className="setting-control runtime-resource-control">
+                {resource.sourceSelectable && (
+                  <div className="runtime-resource-source">
+                    <select
+                      aria-label={`${resource.name} ${messages.runtimeResourceSource}`}
+                      value={resource.source}
+                      disabled={runtimeBusy || resource.busy}
+                      onChange={(event) => {
+                        void updateRuntimeResourceSource(
+                          resource.id,
+                          event.target.value as RuntimeResourceSource,
+                        );
+                      }}
+                    >
+                      <option value="managed">{messages.runtimeResourceManaged}</option>
+                      <option value="system">{messages.runtimeResourceSystem}</option>
+                    </select>
+                  </div>
+                )}
                 <div className="runtime-resource-progress">
                   <div className="runtime-resource-progress-copy">
                     <div className="runtime-progress-track">
-                      <span className="runtime-progress-bar" style={{ width: `${resource.percent}%` }}>
+                      <span
+                        className={`runtime-progress-bar${resource.indeterminate ? " runtime-progress-bar-indeterminate" : ""}`}
+                        style={{ width: `${resource.percent}%` }}
+                      >
                         {resource.percent > 0 && (
                           <img className="runtime-progress-media" src={progressBarUrl} alt="" aria-hidden="true" />
                         )}
@@ -337,7 +395,9 @@ export default function SettingsView() {
                   className="text-button runtime-resource-action"
                   type="button"
                   disabled={resource.disabled}
-                  onClick={installManagedRuntime}
+                  onClick={() => {
+                    void runRuntimeResourceAction(resource.id, resource.actionKind);
+                  }}
                 >
                   {resource.actionLabel}
                 </button>

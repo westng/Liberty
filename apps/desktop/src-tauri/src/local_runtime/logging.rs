@@ -10,18 +10,46 @@ use tauri::{AppHandle, Manager};
 use crate::local_db::LocalResult;
 
 pub fn runtime_platform_root(app: &AppHandle, platform_id: &str) -> LocalResult<PathBuf> {
-    let root = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|err| err.to_string())?
-        .join("runtime")
-        .join(platform_id);
+    let root = runtime_data_root(app)?.join("runtime").join(platform_id);
     fs::create_dir_all(&root).map_err(|err| err.to_string())?;
     Ok(root)
 }
 
-pub fn runtime_log_path(app: &AppHandle, platform_id: &str) -> LocalResult<PathBuf> {
-    Ok(runtime_platform_root(app, platform_id)?.join("install.log"))
+fn runtime_data_root(app: &AppHandle) -> LocalResult<PathBuf> {
+    if cfg!(debug_assertions) {
+        return Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .join(".liberty-runtime"));
+    }
+
+    app.path()
+        .app_local_data_dir()
+        .map_err(|err| err.to_string())
+}
+
+pub fn runtime_component_log_path(
+    app: &AppHandle,
+    platform_id: &str,
+    component: &str,
+) -> LocalResult<PathBuf> {
+    let logs_root = runtime_platform_root(app, platform_id)?.join("logs");
+    fs::create_dir_all(&logs_root).map_err(|err| err.to_string())?;
+    Ok(logs_root.join(format!("{component}.log")))
+}
+
+pub fn runtime_component_generation_root(
+    app: &AppHandle,
+    platform_id: &str,
+    component: &str,
+    generation: u64,
+) -> LocalResult<PathBuf> {
+    let root = runtime_platform_root(app, platform_id)?
+        .join("components")
+        .join(component)
+        .join("generations")
+        .join(generation.to_string());
+    fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+    Ok(root)
 }
 
 pub fn append_install_log(log_path: &Path, bytes: &[u8]) -> LocalResult<()> {

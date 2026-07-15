@@ -634,7 +634,7 @@ pub struct MeetingJob {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
     pub theme_mode: String,
     pub liquid_glass_style: String,
@@ -646,11 +646,68 @@ pub struct AppSettings {
     pub summary_template: String,
     pub concurrency: u32,
     pub python_path: String,
+    pub ffmpeg_path: String,
+    pub python_runtime_source: String,
+    pub ffmpeg_runtime_source: String,
     pub runner_script_path: String,
     pub local_asr_device: String,
     pub local_asr_threads: u32,
     pub local_asr_batch_size_seconds: u32,
     pub runtime_download_source: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeArtifactState {
+    pub generation_id: String,
+    pub artifact_version: String,
+    pub resolved_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeOperationState {
+    pub kind: String,
+    pub generation: u64,
+    pub phase: String,
+    pub progress: Option<u32>,
+    pub last_error: Option<String>,
+}
+
+impl Default for RuntimeOperationState {
+    fn default() -> Self {
+        Self {
+            kind: "idle".into(),
+            generation: 0,
+            phase: "idle".into(),
+            progress: None,
+            last_error: None,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeComponentState {
+    pub component: String,
+    pub source: Option<String>,
+    pub availability: String,
+    pub active_artifact: Option<RuntimeArtifactState>,
+    pub operation: RuntimeOperationState,
+    pub updated_at: String,
+}
+
+impl RuntimeComponentState {
+    pub fn unavailable(component: &str, source: Option<&str>) -> Self {
+        Self {
+            component: component.into(),
+            source: source.map(str::to_string),
+            availability: "unavailable".into(),
+            active_artifact: None,
+            operation: RuntimeOperationState::default(),
+            updated_at: unix_timestamp_millis().to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -669,6 +726,10 @@ pub struct ManagedRuntimeState {
     pub installed_at: Option<String>,
     pub updated_at: String,
     pub last_log_path: Option<String>,
+    pub python: RuntimeComponentState,
+    pub ffmpeg: RuntimeComponentState,
+    pub models: RuntimeComponentState,
+    pub shell_ready: bool,
 }
 
 impl ManagedRuntimeState {
@@ -686,6 +747,10 @@ impl ManagedRuntimeState {
             installed_at: None,
             updated_at: unix_timestamp_millis().to_string(),
             last_log_path: None,
+            python: RuntimeComponentState::unavailable("python", Some("managed")),
+            ffmpeg: RuntimeComponentState::unavailable("ffmpeg", Some("managed")),
+            models: RuntimeComponentState::unavailable("model", None),
+            shell_ready: false,
         }
     }
 }
@@ -703,6 +768,9 @@ impl Default for AppSettings {
             summary_template: "表格版会议纪要".into(),
             concurrency: 2,
             python_path: String::new(),
+            ffmpeg_path: String::new(),
+            python_runtime_source: "managed".into(),
+            ffmpeg_runtime_source: "managed".into(),
             runner_script_path: String::new(),
             local_asr_device: "auto".into(),
             local_asr_threads: 0,

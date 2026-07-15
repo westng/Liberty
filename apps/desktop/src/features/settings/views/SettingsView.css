@@ -185,6 +185,13 @@
   animation: runtime-progress-flow 1.8s linear infinite;
 }
 
+.runtime-progress-bar-indeterminate {
+  width: 36% !important;
+  animation:
+    runtime-progress-flow 1.8s linear infinite,
+    runtime-progress-slide 1.4s ease-in-out infinite alternate;
+}
+
 .runtime-progress-media {
   position: absolute;
   top: 50%;
@@ -205,6 +212,24 @@
   justify-content: flex-end;
   gap: 14px;
   min-width: 0;
+}
+
+.runtime-resource-source {
+  display: grid;
+  gap: 5px;
+  width: 180px;
+  min-width: 0;
+  flex: 0 0 180px;
+}
+
+.runtime-resource-source select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-md);
+  background: var(--native-control-bg, var(--bg-input));
+  color: var(--text-main);
 }
 
 .runtime-resource-progress {
@@ -246,9 +271,23 @@
   }
 }
 
+@keyframes runtime-progress-slide {
+  from {
+    transform: translateX(-12%);
+  }
+
+  to {
+    transform: translateX(178%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .runtime-progress-bar {
     animation: none;
+  }
+
+  .runtime-progress-bar-indeterminate {
+    transform: translateX(0);
   }
 }
 
@@ -312,6 +351,25 @@
     align-items: stretch;
     flex-direction: column;
     justify-content: flex-start;
+  }
+
+  .runtime-resource-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "label"
+      "control";
+    gap: 8px;
+  }
+
+  .runtime-resource-setting-row .runtime-resource-control {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+
+  .runtime-resource-source {
+    width: 100%;
+    flex-basis: auto;
   }
 
   .runtime-resource-progress {

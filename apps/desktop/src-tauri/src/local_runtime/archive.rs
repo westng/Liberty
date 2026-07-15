@@ -16,29 +16,6 @@ use crate::local_runtime::logging::append_install_log_line;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-pub fn reset_runtime_workspace(
-    runtime_root: &Path,
-    downloads_root: &Path,
-    python_root: &Path,
-    ffmpeg_root: &Path,
-    manifest_path: &Path,
-) -> LocalResult<()> {
-    fs::create_dir_all(runtime_root).map_err(|err| err.to_string())?;
-
-    for path in [downloads_root, python_root, ffmpeg_root] {
-        if path.exists() {
-            fs::remove_dir_all(path).map_err(|err| err.to_string())?;
-        }
-    }
-
-    if manifest_path.exists() {
-        fs::remove_file(manifest_path).map_err(|err| err.to_string())?;
-    }
-
-    fs::create_dir_all(downloads_root).map_err(|err| err.to_string())?;
-    fs::write(runtime_root.join("install.log"), []).map_err(|err| err.to_string())
-}
-
 pub fn download_remote_asset(
     download_url: &str,
     target_path: &Path,
@@ -55,6 +32,17 @@ pub fn download_remote_asset(
 
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    if target_path.is_file() && target_path.metadata().map(|meta| meta.len()).unwrap_or(0) > 0 {
+        append_install_log_line(
+            log_path,
+            &format!(
+                "[runtime] reusing downloaded asset {}",
+                target_path.display()
+            ),
+        )?;
+        return Ok(());
     }
 
     let temp_path = target_path.with_extension("download");
@@ -126,6 +114,13 @@ pub fn download_remote_asset(
         }
     }
 
+    if total_bytes > 0 && downloaded_bytes != total_bytes {
+        return Err(format!(
+            "{description} 下载不完整，期望 {} 字节，实际 {} 字节。",
+            total_bytes, downloaded_bytes
+        ));
+    }
+
     target.flush().map_err(|err| err.to_string())?;
     target.sync_all().map_err(|err| err.to_string())?;
     fs::rename(&temp_path, target_path).map_err(|err| err.to_string())
@@ -162,6 +157,7 @@ pub fn verify_bundled_asset_sha256(
         return Ok(());
     }
 
+    let _ = fs::remove_file(path);
     Err(format!(
         "运行时资源校验失败，期望 {expected}，实际 {digest}。"
     ))

@@ -11,6 +11,8 @@ const RUNTIME_MANIFEST_JSON: &str = include_str!("../../resources/runtime-manife
 pub struct RuntimeManifest {
     pub runtime_version: String,
     pub python_version: String,
+    pub model_set_version: String,
+    pub model_profile: String,
     #[serde(default)]
     pub download_sources: Vec<RuntimeDownloadSource>,
     pub platforms: Vec<PlatformRuntime>,
@@ -39,7 +41,6 @@ pub struct PlatformRuntime {
     pub ffmpeg_bundle: Option<BundledAsset>,
     #[serde(default)]
     pub ffmpeg_executable_candidates: Vec<String>,
-    pub models_bundle: Option<BundledAsset>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

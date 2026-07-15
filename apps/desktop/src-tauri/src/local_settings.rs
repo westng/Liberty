@@ -7,6 +7,11 @@ pub fn get_settings(app: AppHandle) -> LocalResult<AppSettings> {
 }
 
 #[tauri::command]
-pub fn save_settings(app: AppHandle, settings: AppSettings) -> LocalResult<()> {
+pub fn save_settings(app: AppHandle, mut settings: AppSettings) -> LocalResult<()> {
+    let stored = local_db::get_settings(&app)?;
+    settings.python_path = stored.python_path;
+    settings.ffmpeg_path = stored.ffmpeg_path;
+    settings.python_runtime_source = stored.python_runtime_source;
+    settings.ffmpeg_runtime_source = stored.ffmpeg_runtime_source;
     local_db::save_settings(&app, &settings)
 }

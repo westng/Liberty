@@ -1,10 +1,8 @@
 import { useSyncExternalStore } from "react";
 import {
   defaultSettings,
-  hasManualPythonOverride,
   isManagedRuntimeReady,
   normalizeSettings,
-  shouldAutoInstallManagedRuntime,
   shouldUseLocalDataSource,
 } from "@/features/meeting/application/settingsPolicy";
 import { hasActiveLocalJobs, mergeJobSnapshot } from "@/features/meeting/application/jobSnapshots";
@@ -22,6 +20,9 @@ import type {
   ManagedRuntimeStatus,
   MeetingJob,
   NewMeetingJobInput,
+  RuntimeComponentId,
+  RuntimeComponentState,
+  RuntimeSource,
   SettingsState,
 } from "@/shared/types/meeting";
 import type { RuntimeDownloadSourceOption } from "@/shared/services/tauri/runtime";
@@ -41,7 +42,28 @@ const initialRuntimeStatus: ManagedRuntimeStatus = {
   pythonVersion: "",
   status: "missing",
   updatedAt: "",
+  python: initialRuntimeComponent("python", "managed"),
+  ffmpeg: initialRuntimeComponent("ffmpeg", "managed"),
+  models: initialRuntimeComponent("model"),
+  shellReady: false,
 };
+
+function initialRuntimeComponent(
+  component: RuntimeComponentId,
+  source?: RuntimeSource,
+): RuntimeComponentState {
+  return {
+    component,
+    source,
+    availability: "unavailable" as const,
+    operation: {
+      kind: "idle" as const,
+      generation: 0,
+      phase: "idle",
+    },
+    updatedAt: "",
+  };
+}
 
 let state: MeetingState = {
   jobs: [],
@@ -58,7 +80,6 @@ const localRuntimeService = createLocalRuntimeService();
 const localSettingsService = createLocalSettingsService();
 let settingsLoadPromise: Promise<void> | null = null;
 let runtimeInstallPromise: Promise<ManagedRuntimeStatus> | null = null;
-let runtimeAutoInstallAttempted = false;
 const hydratedJobIds = new Set<string>();
 const localJobPolling = createPollingScheduler();
 const runtimeInstallPolling = createPollingScheduler();
@@ -86,7 +107,7 @@ function getApi() {
 }
 
 function getLocalMode() {
-  return isManagedRuntimeReady(state.runtimeStatus) || hasManualPythonOverride(state.settings);
+  return isManagedRuntimeReady(state.runtimeStatus);
 }
 
 async function refreshLocalJobs() {
@@ -114,7 +135,12 @@ function syncLocalPolling() {
 }
 
 function syncRuntimePolling() {
-  const shouldPoll = state.runtimeStatus.status === "installing";
+  const shouldPoll = [
+    state.runtimeStatus.python,
+    state.runtimeStatus.ffmpeg,
+    state.runtimeStatus.models,
+  ].some((component) =>
+    ["detecting", "downloading", "installing", "validating"].includes(component.operation.kind));
   runtimeInstallPolling.sync(shouldPoll, 1500, () => {
     void refreshRuntimeStatus();
     void refreshRuntimeInstallLog();
@@ -140,11 +166,11 @@ async function ensureSettingsLoaded(force = false) {
 
     await refreshRuntimeStatus();
     await refreshRuntimeDownloadSources();
+    await detectSelectedSystemComponents();
     setState({ settingsLoaded: true });
     applyAppearance(state.settings);
     syncLocalPolling();
     syncRuntimePolling();
-    maybeStartRuntimeAutoInstall();
 
     if (shouldUseLocalDataSource(state.settings)) {
       await refreshLocalJobs();
@@ -156,6 +182,22 @@ async function ensureSettingsLoaded(force = false) {
   return settingsLoadPromise;
 }
 
+async function detectSelectedSystemComponents() {
+  for (const component of ["python", "ffmpeg"] as const) {
+    const source = component === "python"
+      ? state.settings.pythonRuntimeSource
+      : state.settings.ffmpegRuntimeSource;
+    const componentState = state.runtimeStatus[component];
+    if (
+      source === "system"
+      && componentState.availability !== "ready"
+      && componentState.operation.kind !== "detecting"
+    ) {
+      setState({ runtimeStatus: await localRuntimeService.detectComponent(component) });
+    }
+  }
+}
+
 function replaceJob(job: MeetingJob) {
   setState({ jobs: [job, ...state.jobs.filter((item) => item.id !== job.id)] });
   return job;
@@ -163,30 +205,13 @@ function replaceJob(job: MeetingJob) {
 
 async function refreshRuntimeStatus() {
   try {
-    const managedStatus = await localRuntimeService.getStatus();
-    if (isManagedRuntimeReady(managedStatus) || managedStatus.status === "installing" || managedStatus.status === "unsupported") {
-      setState({ runtimeStatus: managedStatus });
-    } else {
-      try {
-        const systemStatus = await localRuntimeService.detectSystem();
-        setState({
-          runtimeStatus:
-            isManagedRuntimeReady(systemStatus) ||
-            (managedStatus.status === "missing" && Boolean(systemStatus.lastError?.trim()))
-              ? systemStatus
-              : managedStatus,
-        });
-      } catch {
-        setState({ runtimeStatus: managedStatus });
-      }
-    }
+    setState({ runtimeStatus: await localRuntimeService.getStatus() });
   } catch {
     setState({ runtimeStatus: initialRuntimeStatus });
   }
 
   syncLocalPolling();
   syncRuntimePolling();
-  maybeStartRuntimeAutoInstall();
 
   return state.runtimeStatus;
 }
@@ -209,21 +234,6 @@ async function refreshRuntimeDownloadSources() {
   }
 
   return state.runtimeDownloadSources;
-}
-
-function maybeStartRuntimeAutoInstall() {
-  if (!state.settingsLoaded || runtimeAutoInstallAttempted) {
-    return;
-  }
-
-  if (!shouldAutoInstallManagedRuntime(state.settings, state.runtimeStatus)) {
-    return;
-  }
-
-  runtimeAutoInstallAttempted = true;
-  void beginManagedRuntimeInstall().catch(() => {
-    runtimeAutoInstallAttempted = false;
-  });
 }
 
 async function beginManagedRuntimeInstall() {
@@ -423,15 +433,19 @@ async function renameSpeaker(id: string, fromSpeaker: string, toSpeaker: string)
 }
 
 async function saveSettings(next: SettingsState) {
-  const normalized = normalizeSettings(next);
+  const normalized = normalizeSettings({
+    ...next,
+    pythonPath: state.settings.pythonPath,
+    ffmpegPath: state.settings.ffmpegPath,
+    pythonRuntimeSource: state.settings.pythonRuntimeSource,
+    ffmpegRuntimeSource: state.settings.ffmpegRuntimeSource,
+  });
   setState({ settings: normalized });
   applyAppearance(normalized);
   await localSettingsService.saveSettings(normalized);
   await refreshRuntimeStatus();
   syncLocalPolling();
   syncRuntimePolling();
-  runtimeAutoInstallAttempted = hasManualPythonOverride(normalized) || Boolean(normalized.backendUrl.trim());
-  maybeStartRuntimeAutoInstall();
 
   if (shouldUseLocalDataSource(normalized)) {
     await refreshLocalJobs();
@@ -443,16 +457,46 @@ async function installManagedRuntime() {
   return beginManagedRuntimeInstall();
 }
 
+async function setRuntimeComponentSource(component: "python" | "ffmpeg", source: RuntimeSource) {
+  await ensureSettingsLoaded();
+  const runtimeStatus = await localRuntimeService.setComponentSource(component, source);
+  setState({
+    runtimeStatus,
+    settings: {
+      ...state.settings,
+      ...(component === "python"
+        ? { pythonRuntimeSource: source }
+        : { ffmpegRuntimeSource: source }),
+    },
+  });
+  syncRuntimePolling();
+  return runtimeStatus;
+}
+
+async function detectRuntimeComponent(component: "python" | "ffmpeg") {
+  await ensureSettingsLoaded();
+  setState({ runtimeStatus: await localRuntimeService.detectComponent(component) });
+  syncRuntimePolling();
+  return state.runtimeStatus;
+}
+
+async function installRuntimeComponent(component: RuntimeComponentId) {
+  await ensureSettingsLoaded();
+  setState({ runtimeStatus: await localRuntimeService.installComponent(component) });
+  await refreshRuntimeInstallLog();
+  syncRuntimePolling();
+  return state.runtimeStatus;
+}
+
 async function ensureManagedRuntimeReadyForLocalWork() {
   const api = getApi();
-  if (api || hasManualPythonOverride(state.settings)) {
+  if (api) {
     return;
   }
 
   const timeoutAt = Date.now() + 10 * 60 * 1000;
 
   if (state.runtimeStatus.status === "missing" || state.runtimeStatus.status === "repair_required") {
-    runtimeAutoInstallAttempted = true;
     await installManagedRuntime();
   }
 
@@ -552,6 +596,9 @@ const actions = {
   createJob,
   deleteJob,
   installManagedRuntime,
+  setRuntimeComponentSource,
+  detectRuntimeComponent,
+  installRuntimeComponent,
   renameSpeaker,
   retryJob,
   saveSettings,
@@ -571,7 +618,7 @@ export function useMeetingStore() {
   return {
     ...snapshot,
     api: getApi(),
-    localMode: isManagedRuntimeReady(snapshot.runtimeStatus) || hasManualPythonOverride(snapshot.settings),
+    localMode: isManagedRuntimeReady(snapshot.runtimeStatus),
     ...actions,
   };
 }

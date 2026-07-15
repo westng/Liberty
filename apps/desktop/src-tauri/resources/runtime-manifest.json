@@ -1,6 +1,8 @@
 {
   "runtimeVersion": "2026.06.05-client-download.1",
   "pythonVersion": "3.10.17",
+  "modelSetVersion": "paraformer-zh-2026.07.15.1",
+  "modelProfile": "paraformer",
   "downloadSources": [
     {
       "sourceId": "official",

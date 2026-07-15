@@ -14,6 +14,7 @@ from pathlib import Path
 def parse_args():
     parser = argparse.ArgumentParser(description="Warm up Liberty managed runtime models")
     parser.add_argument("--models-root", required=True)
+    parser.add_argument("--validate-only", action="store_true")
     return parser.parse_args()
 
 
@@ -32,12 +33,14 @@ def download(url: str, destination: Path):
         shutil.copyfileobj(response, output, length=1024 * 1024)
 
 
-def warmup_sherpa_onnx_models(models_root: Path):
+def warmup_sherpa_onnx_models(models_root: Path, validate_only: bool = False):
     model_root = models_root / "sherpa-onnx"
     marker_path = model_root / "tokens.txt"
     if marker_path.is_file():
-        log("Sherpa-ONNX models already exist.")
+        log("Sherpa-ONNX model validation passed." if validate_only else "Sherpa-ONNX models already exist.")
         return
+    if validate_only:
+        raise RuntimeError("Sherpa-ONNX 模型文件不完整。")
 
     url = os.getenv(
         "SHERPA_ONNX_MODEL_URL",
@@ -73,6 +76,16 @@ def warmup_sherpa_onnx_models(models_root: Path):
     log("Sherpa-ONNX model warmup completed.")
 
 
+def resolve_model_profile() -> str:
+    profile = str(os.getenv("FUNASR_PROFILE", "") or "").strip().lower()
+    if profile in {"sensevoice", "sensevoice-small"}:
+        return "sensevoice"
+    model_name = str(os.getenv("FUNASR_MODEL", "") or "").strip().lower()
+    if "sensevoice" in model_name:
+        return "sensevoice"
+    return "paraformer"
+
+
 def main():
     args = parse_args()
     models_root = Path(args.models_root)
@@ -80,34 +93,45 @@ def main():
 
     backend = os.getenv("LIBERTY_ASR_BACKEND", "funasr").strip().lower() or "funasr"
     if backend == "sherpa-onnx":
-        warmup_sherpa_onnx_models(models_root)
+        warmup_sherpa_onnx_models(models_root, args.validate_only)
         return
 
     os.environ.setdefault("MODELSCOPE_CACHE", str(models_root / "modelscope"))
     os.environ.setdefault("HF_HOME", str(models_root / "huggingface"))
     os.environ.setdefault("TORCH_HOME", str(models_root / "torch"))
+    if args.validate_only:
+        os.environ["MODELSCOPE_OFFLINE"] = "1"
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
-    log("Importing FunASR runtime...")
+    log("Validating FunASR models offline..." if args.validate_only else "Importing FunASR runtime...")
     from funasr import AutoModel
 
+    profile = resolve_model_profile()
+    default_model = "iic/SenseVoiceSmall" if profile == "sensevoice" else "paraformer-zh"
     common_kwargs = {
-        "model": os.getenv("FUNASR_MODEL", "paraformer-zh"),
+        "model": os.getenv("FUNASR_MODEL", default_model),
         "vad_model": os.getenv("FUNASR_VAD_MODEL", "fsmn-vad"),
-        "punc_model": os.getenv("FUNASR_PUNC_MODEL", "ct-punc"),
         "device": "cpu",
         "disable_update": True,
     }
+    if profile != "sensevoice":
+        common_kwargs["punc_model"] = os.getenv("FUNASR_PUNC_MODEL", "ct-punc")
 
-    log("Downloading default ASR/VAD/PUNC models...")
+    log(
+        f"Validating cached FunASR models for profile: {profile}"
+        if args.validate_only
+        else f"Downloading default FunASR models for profile: {profile}"
+    )
     AutoModel(**common_kwargs)
 
-    log("Downloading default speaker model...")
+    log("Validating cached speaker model..." if args.validate_only else "Downloading default speaker model...")
     AutoModel(
         **common_kwargs,
         spk_model=os.getenv("FUNASR_SPK_MODEL", "cam++"),
     )
 
-    log("Managed runtime warmup completed.")
+    log("Managed model validation completed." if args.validate_only else "Managed runtime warmup completed.")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,9 @@ export const defaultSettings: SettingsState = {
   summaryTemplate: "表格版会议纪要",
   concurrency: 2,
   pythonPath: "",
+  ffmpegPath: "",
+  pythonRuntimeSource: "managed",
+  ffmpegRuntimeSource: "managed",
   runnerScriptPath: "",
   localAsrDevice: "auto",
   localAsrThreads: 0,
@@ -41,6 +44,9 @@ export function normalizeSettings(settings?: Partial<SettingsState> | null): Set
         : merged.summaryTemplate.trim() || defaultSettings.summaryTemplate,
     concurrency: Math.min(8, Math.max(1, Number(merged.concurrency) || defaultSettings.concurrency)),
     pythonPath: merged.pythonPath.trim(),
+    ffmpegPath: merged.ffmpegPath.trim(),
+    pythonRuntimeSource: merged.pythonRuntimeSource === "system" ? "system" : "managed",
+    ffmpegRuntimeSource: merged.ffmpegRuntimeSource === "system" ? "system" : "managed",
     runnerScriptPath: merged.runnerScriptPath.trim(),
     localAsrDevice:
       merged.localAsrDevice === "cpu" || merged.localAsrDevice === "mps" || merged.localAsrDevice === "cuda"
@@ -64,35 +70,5 @@ export function shouldUseLocalDataSource(settings: SettingsState) {
 }
 
 export function isManagedRuntimeReady(runtimeStatus: ManagedRuntimeStatus) {
-  return (
-    (runtimeStatus.status === "ready" || runtimeStatus.status === "system_ready") &&
-    Boolean(runtimeStatus.pythonExecutablePath?.trim())
-  );
-}
-
-export function shouldAutoInstallManagedRuntime(
-  settings: SettingsState,
-  runtimeStatus: ManagedRuntimeStatus,
-) {
-  if (settings.backendUrl.trim()) {
-    return false;
-  }
-
-  if (hasManualPythonOverride(settings)) {
-    return false;
-  }
-
-  if (!settings.runtimeDownloadSource.trim()) {
-    return false;
-  }
-
-  if (runtimeStatus.status === "system_ready") {
-    return false;
-  }
-
-  if (runtimeStatus.status === "unsupported") {
-    return false;
-  }
-
-  return runtimeStatus.status === "missing" || runtimeStatus.status === "repair_required";
+  return runtimeStatus.shellReady;
 }

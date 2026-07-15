@@ -27,6 +27,9 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           summary_template TEXT NOT NULL,
           concurrency INTEGER NOT NULL DEFAULT 2,
           python_path TEXT NOT NULL,
+          ffmpeg_path TEXT NOT NULL DEFAULT '',
+          python_runtime_source TEXT NOT NULL DEFAULT 'managed',
+          ffmpeg_runtime_source TEXT NOT NULL DEFAULT 'managed',
           runner_script_path TEXT NOT NULL,
           local_asr_device TEXT NOT NULL DEFAULT 'auto',
           local_asr_threads INTEGER NOT NULL DEFAULT 0,
@@ -46,6 +49,23 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
           installed_at TEXT,
           updated_at TEXT NOT NULL,
           last_log_path TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS runtime_component_state (
+          platform_id TEXT NOT NULL,
+          component TEXT NOT NULL,
+          source TEXT NOT NULL,
+          availability TEXT NOT NULL DEFAULT 'unavailable',
+          active_generation_id TEXT,
+          artifact_version TEXT,
+          resolved_path TEXT,
+          operation_kind TEXT NOT NULL DEFAULT 'idle',
+          operation_generation INTEGER NOT NULL DEFAULT 0,
+          phase TEXT NOT NULL DEFAULT 'idle',
+          progress INTEGER,
+          last_error TEXT,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY(platform_id, component, source)
         );
 
         CREATE TABLE IF NOT EXISTS jobs (
@@ -321,6 +341,7 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         CREATE INDEX IF NOT EXISTS idx_pet_store_daily_limits_pet_date ON pet_store_daily_limits(pet_id, limit_date DESC);
         CREATE INDEX IF NOT EXISTS idx_pet_milestones_pet_id ON pet_milestone_counters(pet_id, counter_key);
         CREATE INDEX IF NOT EXISTS idx_runtime_state_status ON runtime_state(status);
+        CREATE INDEX IF NOT EXISTS idx_runtime_component_operation ON runtime_component_state(operation_kind, component);
         ",
     )
     .map_err(|err| err.to_string())?;
@@ -343,20 +364,127 @@ pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
         "ALTER TABLE app_settings ADD COLUMN local_asr_threads INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE app_settings ADD COLUMN local_asr_batch_size_seconds INTEGER NOT NULL DEFAULT 300",
         "ALTER TABLE app_settings ADD COLUMN runtime_download_source TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE app_settings ADD COLUMN ffmpeg_path TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE app_settings ADD COLUMN python_runtime_source TEXT NOT NULL DEFAULT 'managed'",
+        "ALTER TABLE app_settings ADD COLUMN ffmpeg_runtime_source TEXT NOT NULL DEFAULT 'managed'",
         "ALTER TABLE ai_model_configs ADD COLUMN api_key_ref TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE ai_summary_runs ADD COLUMN minutes_payload_json TEXT",
     ] {
         migrations::add_column_if_missing(conn, statement)?;
     }
 
+    migrate_runtime_source_settings(conn)?;
+
     migrate_pet_leveling_255(conn)?;
 
     Ok(())
 }
 
+fn migrate_runtime_source_settings(conn: &Connection) -> LocalResult<()> {
+    let migrated = conn
+        .query_row(
+            "SELECT value FROM app_meta WHERE key = 'runtime_sources_migrated'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok();
+    if migrated.is_some() {
+        return Ok(());
+    }
+
+    let transaction = conn
+        .unchecked_transaction()
+        .map_err(|err| err.to_string())?;
+    transaction
+        .execute(
+            "UPDATE app_settings
+             SET python_runtime_source = CASE
+                   WHEN TRIM(python_path) <> '' THEN 'system'
+                   ELSE 'managed'
+                 END,
+                 ffmpeg_runtime_source = CASE
+                   WHEN TRIM(ffmpeg_path) <> '' THEN 'system'
+                   ELSE 'managed'
+                 END
+             WHERE id = 1",
+            [],
+        )
+        .map_err(|err| err.to_string())?;
+    transaction
+        .execute(
+            "INSERT INTO app_meta(key, value)
+             VALUES('runtime_sources_migrated', '2026-07-15')",
+            [],
+        )
+        .map_err(|err| err.to_string())?;
+    transaction.commit().map_err(|err| err.to_string())
+}
+
 #[cfg(test)]
 pub(crate) fn apply_test_schema(conn: &Connection) -> LocalResult<()> {
     apply_schema(conn)
+}
+
+#[cfg(test)]
+mod runtime_source_tests {
+    use super::apply_test_schema;
+    use rusqlite::{params, Connection};
+
+    #[test]
+    fn migrates_legacy_paths_to_explicit_sources_only_once() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch(
+            "CREATE TABLE app_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                theme_mode TEXT NOT NULL,
+                liquid_glass_style TEXT NOT NULL,
+                accent_color TEXT NOT NULL,
+                locale TEXT NOT NULL,
+                backend_url TEXT NOT NULL,
+                api_token TEXT NOT NULL,
+                default_hotwords TEXT NOT NULL,
+                summary_template TEXT NOT NULL,
+                concurrency INTEGER NOT NULL,
+                python_path TEXT NOT NULL,
+                ffmpeg_path TEXT NOT NULL,
+                runner_script_path TEXT NOT NULL,
+                local_asr_device TEXT NOT NULL,
+                local_asr_threads INTEGER NOT NULL,
+                local_asr_batch_size_seconds INTEGER NOT NULL,
+                runtime_download_source TEXT NOT NULL
+            );
+            INSERT INTO app_settings VALUES (
+                1, 'auto', 'transparent', '#2f6dff', 'zh-CN', '', '', '', '', 2,
+                '/custom/python', '', '', 'auto', 0, 300, 'official'
+            );",
+        )
+        .expect("legacy settings");
+
+        apply_test_schema(&conn).expect("migrate schema");
+        let migrated = conn
+            .query_row(
+                "SELECT python_runtime_source, ffmpeg_runtime_source FROM app_settings WHERE id = 1",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .expect("migrated sources");
+        assert_eq!(migrated, ("system".into(), "managed".into()));
+
+        conn.execute(
+            "UPDATE app_settings SET python_runtime_source = ?1 WHERE id = 1",
+            params!["managed"],
+        )
+        .expect("user changes source");
+        apply_test_schema(&conn).expect("reapply schema");
+        let source = conn
+            .query_row(
+                "SELECT python_runtime_source FROM app_settings WHERE id = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("source after second apply");
+        assert_eq!(source, "managed");
+    }
 }
 
 fn migrate_pet_leveling_255(conn: &Connection) -> LocalResult<()> {
