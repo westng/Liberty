@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-pet-cosmetic-unlocks"
+description = "Enables the list_pet_cosmetic_unlocks command without any pre-configured scope."
+commands.allow = ["list_pet_cosmetic_unlocks"]
+
+[[permission]]
+identifier = "deny-list-pet-cosmetic-unlocks"
+description = "Denies the list_pet_cosmetic_unlocks command without any pre-configured scope."
+commands.deny = ["list_pet_cosmetic_unlocks"]

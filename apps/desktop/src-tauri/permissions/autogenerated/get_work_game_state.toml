@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-work-game-state"
+description = "Enables the get_work_game_state command without any pre-configured scope."
+commands.allow = ["get_work_game_state"]
+
+[[permission]]
+identifier = "deny-get-work-game-state"
+description = "Denies the get_work_game_state command without any pre-configured scope."
+commands.deny = ["get_work_game_state"]

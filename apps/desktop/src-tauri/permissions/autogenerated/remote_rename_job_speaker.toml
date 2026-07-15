@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-rename-job-speaker"
+description = "Enables the remote_rename_job_speaker command without any pre-configured scope."
+commands.allow = ["remote_rename_job_speaker"]
+
+[[permission]]
+identifier = "deny-remote-rename-job-speaker"
+description = "Denies the remote_rename_job_speaker command without any pre-configured scope."
+commands.deny = ["remote_rename_job_speaker"]

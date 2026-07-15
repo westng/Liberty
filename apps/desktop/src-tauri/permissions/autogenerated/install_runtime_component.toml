@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-install-runtime-component"
+description = "Enables the install_runtime_component command without any pre-configured scope."
+commands.allow = ["install_runtime_component"]
+
+[[permission]]
+identifier = "deny-install-runtime-component"
+description = "Denies the install_runtime_component command without any pre-configured scope."
+commands.deny = ["install_runtime_component"]

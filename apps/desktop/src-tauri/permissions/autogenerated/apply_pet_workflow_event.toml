@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-apply-pet-workflow-event"
+description = "Enables the apply_pet_workflow_event command without any pre-configured scope."
+commands.allow = ["apply_pet_workflow_event"]
+
+[[permission]]
+identifier = "deny-apply-pet-workflow-event"
+description = "Denies the apply_pet_workflow_event command without any pre-configured scope."
+commands.deny = ["apply_pet_workflow_event"]

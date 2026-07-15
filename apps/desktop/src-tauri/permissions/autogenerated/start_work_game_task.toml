@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-work-game-task"
+description = "Enables the start_work_game_task command without any pre-configured scope."
+commands.allow = ["start_work_game_task"]
+
+[[permission]]
+identifier = "deny-start-work-game-task"
+description = "Denies the start_work_game_task command without any pre-configured scope."
+commands.deny = ["start_work_game_task"]

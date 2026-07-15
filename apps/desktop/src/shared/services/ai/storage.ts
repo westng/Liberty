@@ -116,10 +116,10 @@ export function createDraftModelConfig(): AiModelConfig {
     id: crypto.randomUUID(),
     name: "",
     baseUrl: "",
-    apiKey: "",
     model: "",
     enabled: true,
     isDefault: false,
+    credentialPresent: false,
     createdAt: time,
     updatedAt: time,
   };

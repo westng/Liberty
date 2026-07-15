@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-pet-redeem-key-redemptions"
+description = "Enables the list_pet_redeem_key_redemptions command without any pre-configured scope."
+commands.allow = ["list_pet_redeem_key_redemptions"]
+
+[[permission]]
+identifier = "deny-list-pet-redeem-key-redemptions"
+description = "Denies the list_pet_redeem_key_redemptions command without any pre-configured scope."
+commands.deny = ["list_pet_redeem_key_redemptions"]

@@ -1,0 +1,653 @@
+.work-game-page {
+  position: relative;
+  height: calc(100vh - 94px);
+  min-height: 520px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: #9cc9e2;
+}
+
+.work-game-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(19, 24, 28, 0.34);
+  backdrop-filter: blur(4px);
+}
+
+.work-game-dialog {
+  width: min(430px, calc(100vw - 48px));
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 10px;
+  background: var(--native-panel-bg);
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.24);
+}
+
+.work-game-dialog h3,
+.work-game-dialog p {
+  margin: 0;
+}
+
+.work-game-dialog p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.work-game-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.work-game-empty {
+  display: grid;
+  min-height: 300px;
+  place-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.work-game-empty h3 {
+  margin: 0;
+}
+
+.work-game-hero {
+  position: absolute;
+  inset: 14px 14px auto;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.work-game-hero > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(24, 27, 29, 0.72);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(14, 18, 20, 0.2);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.work-game-hero h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.work-game-hero .native-back-link {
+  min-height: 30px;
+  margin: 0;
+  padding: 0 9px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.work-game-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.work-game-stat-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(24, 27, 29, 0.68);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 11px;
+  box-shadow: 0 10px 28px rgba(14, 18, 20, 0.16);
+  backdrop-filter: blur(14px);
+}
+
+.work-game-stat-strip strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.work-game-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.work-game-scene-viewport {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  cursor: grab;
+  touch-action: none;
+  background: #9cc9e2;
+}
+
+.work-game-scene-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.work-game-scene-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1536px;
+  height: 1024px;
+  transform-origin: 0 0;
+  transition: transform 0.18s ease-out;
+}
+
+.work-game-scene-viewport.is-dragging .work-game-scene-world {
+  transition: none;
+}
+
+.work-game-map-image {
+  position: absolute;
+  inset: 0;
+  width: 1536px;
+  height: 1024px;
+  object-fit: cover;
+  user-select: none;
+  pointer-events: none;
+}
+
+.work-game-hotspot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--hotspot-width);
+  height: var(--hotspot-height);
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: #fff8df;
+  cursor: pointer;
+  transform: translate3d(var(--hotspot-x), var(--hotspot-y), 0);
+  outline: none;
+  z-index: 6;
+}
+
+.work-game-hotspot::before {
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border: 3px solid rgba(255, 249, 213, 0);
+  border-radius: 28px;
+  background: rgba(255, 239, 174, 0);
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.work-game-hotspot:hover::before,
+.work-game-hotspot:focus-visible::before,
+.work-game-hotspot.selected::before {
+  border-color: rgba(255, 249, 213, 0);
+  background: rgba(255, 239, 174, 0);
+  box-shadow: none;
+}
+
+.work-game-hotspot-needsCare::before,
+.work-game-hotspot-claimable::before {
+  border-color: rgba(255, 249, 213, 0);
+  background: rgba(255, 239, 174, 0);
+  animation: none;
+}
+
+.work-game-job-marker {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 78px;
+  height: 78px;
+  margin: -39px 0 0 -39px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 14px 26px rgba(30, 38, 34, 0.2);
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.work-game-job-content {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  width: min(72%, 300px);
+  height: min(72%, 300px);
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 80%;
+  filter: drop-shadow(0 18px 18px rgba(31, 39, 30, 0.24));
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.work-game-job-content-mine {
+  width: 180px;
+  height: 180px;
+  filter: drop-shadow(0 14px 14px rgba(21, 25, 18, 0.26));
+}
+
+.work-game-job-content-mine-shallow-vein {
+  left: 46%;
+  top: 52%;
+  width: 176px;
+  height: 176px;
+}
+
+.work-game-job-content-mine-deep-vein {
+  left: 50%;
+  top: 54%;
+  width: 168px;
+  height: 168px;
+}
+
+.work-game-job-content-mine-glowing-vein {
+  left: 50%;
+  top: 50%;
+  width: 184px;
+  height: 184px;
+}
+
+.work-game-job-content-factory {
+  width: 138px;
+  height: 138px;
+  filter: drop-shadow(0 14px 14px rgba(21, 25, 18, 0.24));
+}
+
+.work-game-job-content-factory-basic-assembly {
+  left: 50%;
+  top: 62%;
+  width: 138px;
+  height: 138px;
+}
+
+.work-game-job-content-factory-rush-order {
+  left: 50%;
+  top: 62%;
+  width: 138px;
+  height: 138px;
+}
+
+.work-game-job-content-factory-precision-check {
+  left: 50%;
+  top: 62%;
+  width: 138px;
+  height: 138px;
+}
+
+.work-game-job-content-convenience-store {
+  width: 138px;
+  height: 138px;
+  filter: drop-shadow(0 14px 14px rgba(21, 25, 18, 0.24));
+}
+
+.work-game-job-content-convenience-store-day-shift,
+.work-game-job-content-convenience-store-evening-shift,
+.work-game-job-content-convenience-store-night-shift {
+  left: 50%;
+  top: 62%;
+  width: 138px;
+  height: 138px;
+}
+
+.work-game-job-occluder {
+  position: absolute;
+  user-select: none;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.work-game-job-occluder-store-counter {
+  left: 50%;
+  top: 70%;
+  width: 112px;
+  height: 56px;
+  border-radius: 0 0 8px 8px;
+  background:
+    linear-gradient(180deg, rgba(237, 188, 95, 0.95) 0%, rgba(180, 111, 47, 0.97) 68%, rgba(93, 137, 112, 0.96) 69%, rgba(56, 114, 100, 0.98) 100%);
+  box-shadow:
+    inset 0 5px 0 rgba(255, 223, 137, 0.28),
+    inset 0 -5px 0 rgba(80, 58, 36, 0.16);
+  clip-path: polygon(8% 0, 100% 10%, 92% 100%, 0 88%);
+  transform: translate(-43%, -50%) skewY(-7deg);
+}
+
+.work-game-hotspot:hover .work-game-job-content,
+.work-game-hotspot:focus-visible .work-game-job-content,
+.work-game-hotspot.selected .work-game-job-content {
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 14px 14px rgba(21, 25, 18, 0.26));
+}
+
+.work-game-hotspot-needsCare .work-game-job-content,
+.work-game-hotspot-claimable .work-game-job-content {
+  animation: none;
+}
+
+.work-game-job-marker-core {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(255, 255, 255, 0.88);
+  border-radius: 999px;
+  background: rgba(255, 226, 125, 0.82);
+  box-shadow: inset 0 -7px 0 rgba(65, 48, 30, 0.12);
+}
+
+.work-game-hotspot-running .work-game-job-marker-core {
+  background: rgba(123, 201, 255, 0.84);
+}
+
+.work-game-hotspot-needsCare .work-game-job-marker-core {
+  background: rgba(255, 182, 85, 0.9);
+  animation: work-game-marker-pulse 1.1s ease-in-out infinite;
+}
+
+.work-game-hotspot-claimable .work-game-job-marker-core {
+  background: rgba(152, 232, 107, 0.9);
+  animation: work-game-marker-pulse 1.1s ease-in-out infinite;
+}
+
+.work-game-hotspot-label {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(30, 33, 34, 0.68);
+  box-shadow: 0 12px 20px rgba(24, 24, 24, 0.2);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+}
+
+.work-game-hotspot:hover .work-game-hotspot-label,
+.work-game-hotspot:focus-visible .work-game-hotspot-label,
+.work-game-hotspot.selected .work-game-hotspot-label {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.work-game-hotspot-label strong,
+.work-game-hotspot-label em {
+  max-width: 128px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+}
+
+.work-game-hotspot-label strong {
+  font-size: 13px;
+}
+
+.work-game-hotspot-label em {
+  color: rgba(255, 247, 230, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.work-game-hotspot-progress {
+  position: absolute;
+  left: 34px;
+  right: 34px;
+  bottom: 64px;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(32, 36, 34, 0.26);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.work-game-hotspot:hover .work-game-hotspot-progress,
+.work-game-hotspot:focus-visible .work-game-hotspot-progress,
+.work-game-hotspot.selected .work-game-hotspot-progress {
+  opacity: 0;
+}
+
+.work-game-hotspot-progress span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #a7e2ff, #ffe082);
+}
+
+.work-game-map-effect {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  pointer-events: none;
+}
+
+.work-game-map-effect::before {
+  content: "+";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 244, 177, 0.9);
+  color: #4b583c;
+  font-size: 30px;
+  font-weight: 900;
+  animation: work-game-pop-float 1.18s ease-out both;
+}
+
+.work-game-hud {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 20;
+  width: min(390px, calc(100% - 28px));
+  pointer-events: none;
+}
+
+.work-game-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(24, 27, 29, 0.76);
+  color: #fff;
+  box-shadow: 0 18px 42px rgba(14, 18, 20, 0.24);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.work-game-panel .section-heading {
+  align-items: start;
+}
+
+.work-game-panel .section-heading h3 {
+  margin-top: 2px;
+  color: #fff;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.work-game-panel .eyebrow {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+}
+
+.work-game-status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.work-game-status-claimable,
+.work-game-status-needsCare {
+  background: #e9f7d5;
+  color: #254b2d;
+}
+
+.work-game-status-running {
+  background: #e9f2ff;
+  color: #26517c;
+}
+
+.work-game-action-stack {
+  display: grid;
+  gap: 9px;
+}
+
+.work-game-progress-card {
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.work-game-progress-card > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+}
+
+.work-game-progress-card strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.work-game-progress-card small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.work-game-progress {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(118, 128, 118, 0.2);
+}
+
+.work-game-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #86c5ff, #f6c96a);
+}
+
+.work-game-main-action {
+  width: 100%;
+  min-height: 38px;
+}
+
+@keyframes work-game-pop-float {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.82);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(0) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-42px) scale(0.88);
+  }
+}
+
+@keyframes work-game-ready-glow {
+  0%, 100% {
+    box-shadow: 0 12px 24px rgba(44, 35, 26, 0.16);
+  }
+  50% {
+    box-shadow: 0 16px 34px rgba(255, 222, 112, 0.32);
+  }
+}
+
+@keyframes work-game-marker-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes work-game-content-pulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+@media (max-width: 860px) {
+  .work-game-hero {
+    inset: 10px 10px auto;
+  }
+
+  .work-game-stat-strip {
+    display: none;
+  }
+
+  .work-game-hud {
+    left: 10px;
+    bottom: 10px;
+    width: min(360px, calc(100% - 20px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-game-hotspot-needsCare::before,
+  .work-game-hotspot-claimable::before,
+  .work-game-job-content,
+  .work-game-job-marker-core,
+  .work-game-map-effect::before {
+    animation: none !important;
+  }
+}

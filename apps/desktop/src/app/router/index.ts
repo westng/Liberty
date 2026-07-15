@@ -13,6 +13,12 @@ export type RouteConfig = {
 export const routes: RouteConfig[] = [
   {
     path: "/",
+    title: "工作台",
+    titleKey: "dashboard",
+    component: lazy(() => import("@/features/jobs/views/WorkDashboardView")),
+  },
+  {
+    path: "/jobs/new",
     title: "新建会议任务",
     titleKey: "newJob",
     component: lazy(() => import("@/features/jobs/views/NewJobView")),
@@ -34,6 +40,30 @@ export const routes: RouteConfig[] = [
     title: "结果工作台",
     titleKey: "workbench",
     component: lazy(() => import("@/features/jobs/views/WorkbenchView")),
+  },
+  {
+    path: "/results",
+    title: "结果中心",
+    titleKey: "results",
+    component: lazy(() => import("@/features/jobs/views/ResultsCenterView")),
+  },
+  {
+    path: "/work-market",
+    title: "牛马市场",
+    titleKey: "workMarket",
+    component: lazy(() => import("@/features/work-market/views/WorkMarketView")),
+  },
+  {
+    path: "/farm",
+    title: "农场种菜",
+    titleKey: "farm",
+    component: lazy(() => import("@/features/farm-work/views/FarmWorkView")),
+  },
+  {
+    path: "/work-game/:gameKey",
+    title: "打工小游戏",
+    titleKey: "workGame",
+    component: lazy(() => import("@/features/work-game/views/WorkGameView")),
   },
   {
     path: "/models",

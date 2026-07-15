@@ -1,14 +1,25 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Link, RouterProvider, useRouter } from "@/app/router/RouterContext";
 import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { usePetStore } from "@/features/pet/stores/usePetStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { applyDesktopPetState } from "@/shared/services/tauri/pet";
 import { getProcessMetrics, openExternalUrl } from "@/shared/services/tauri/system";
 import { applyAppearance, watchSystemThemeChange } from "@/shared/services/ui/appearance";
 import { navIconSvg, type NavIconKey } from "@/shared/services/ui/navIcons";
+import { listenForEntityChanges } from "@/shared/services/ui/windows";
+import {
+  getAppStatusNotification,
+  clearAppStatusNotification,
+  listenForForwardedAppStatus,
+  publishAppStatus,
+  runAppStatusAction,
+  subscribeAppStatus,
+} from "@/shared/services/ui/statusNotifications";
 import type { PetSettings, ProcessMetrics } from "@/shared/types/meeting";
 
 type NavItem = {
@@ -20,19 +31,29 @@ type NavItem = {
 function AppContent() {
   const router = useRouter();
   const store = useMeetingStore();
+  const aiStore = useAiStore();
   const petStore = usePetStore();
   const [processMetrics, setProcessMetrics] = useState<ProcessMetrics>({
     cpuPercent: 0,
     memoryMb: 0,
   });
   const [graphicsMemoryMb, setGraphicsMemoryMb] = useState(0);
+  const [appVersion, setAppVersion] = useState("");
   const [isWindowsTitlebar, setIsWindowsTitlebar] = useState(false);
+  const statusNotification = useSyncExternalStore(
+    subscribeAppStatus,
+    getAppStatusNotification,
+    getAppStatusNotification,
+  );
   const knownJobStatuses = useRef(new Map<string, string>());
   const didHydrateJobStatuses = useRef(false);
   const metricsPollingId = useRef<number | null>(null);
   const didRecordPetDailyOpen = useRef(false);
   const lastAppliedDesktopPetEnabled = useRef<boolean | null>(null);
   const latestSettings = useRef(store.settings);
+  const entityRevisions = useRef(new Map<string, string>());
+  const forwardedStatusIds = useRef(new Map<string, number>());
+  const [entityViewRevision, setEntityViewRevision] = useState(0);
   const messages = getMessages(store.settings.locale);
   const CurrentView = router.route.component;
   const isStandaloneRoute = Boolean(router.route.standalone);
@@ -43,9 +64,16 @@ function AppContent() {
         key: "work",
         title: store.settings.locale === "en-US" ? "Work" : "工作",
         items: [
-          { label: messages.nav.newJob, to: "/", icon: "plus" },
+          { label: messages.nav.dashboard, to: "/", icon: "dashboard" },
+          { label: messages.nav.newJob, to: "/jobs/new", icon: "plus" },
           { label: messages.nav.jobs, to: "/jobs", icon: "tray" },
+          { label: messages.nav.results, to: "/results", icon: "results" },
         ] satisfies NavItem[],
+      },
+      {
+        key: "work-games",
+        title: store.settings.locale === "en-US" ? "Work Games" : "打工",
+        items: [{ label: messages.nav.workMarket, to: "/work-market", icon: "market" }] satisfies NavItem[],
       },
       {
         key: "resources",
@@ -78,15 +106,11 @@ function AppContent() {
   );
   const currentModeLabel = store.localMode
     ? messages.shell.localMode
-    : store.settings.backendUrl
-      ? messages.shell.remoteMode
-      : messages.shell.mockModeShort;
+    : messages.shell.remoteMode;
   const desktopPetVisible = Boolean(petStore.settings?.desktopEnabled);
   const toolbarStatus = store.localMode
     ? messages.shell.localReady
-    : store.settings.backendUrl
-      ? messages.shell.remoteReady
-      : messages.shell.mockMode;
+    : messages.shell.remoteReady;
   const toolbarMetrics = [
     {
       key: "cpu",
@@ -109,6 +133,37 @@ function AppContent() {
   ).length;
 
   useEffect(() => {
+    if (isStandaloneRoute) {
+      return;
+    }
+    let active = true;
+
+    void getVersion()
+      .then((version) => {
+        if (active) {
+          setAppVersion(version);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAppVersion("dev");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isStandaloneRoute]);
+
+  useEffect(() => {
+    void store.ensureSettingsLoaded().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (isStandaloneRoute) {
+      return;
+    }
+
     const jobs = store.jobs.map((job) => ({
       id: job.id,
       title: job.title,
@@ -143,10 +198,52 @@ function AppContent() {
     }
 
     knownJobStatuses.current = nextStatuses;
-  }, [store.jobs]);
+  }, [isStandaloneRoute, store.jobs]);
 
   useEffect(() => {
-    void store.ensureSettingsLoaded();
+    if (isStandaloneRoute) {
+      return;
+    }
+
+    store.setGlobalEffectsEnabled(true);
+    let stopEntityChanges: (() => void) | null = null;
+    let stopForwardedStatus: (() => void) | null = null;
+    void listenForEntityChanges((event) => {
+      const revisionKey = `${event.entity}:${event.id}`;
+      const previousRevision = entityRevisions.current.get(revisionKey);
+      if (previousRevision && previousRevision >= event.revision) {
+        return;
+      }
+      entityRevisions.current.set(revisionKey, event.revision);
+      if (event.entity === "job" || event.entity === "summary") {
+        void store.refreshJob(event.id).catch(() => store.refreshJobs().then(() => undefined));
+      } else if (event.entity === "model" || event.entity === "template") {
+        void aiStore.reloadState().catch(() => undefined);
+      } else if (event.entity === "member") {
+        setEntityViewRevision((revision) => revision + 1);
+      }
+    }).then((unlisten) => {
+      stopEntityChanges = unlisten;
+    });
+    void listenForForwardedAppStatus((event) => {
+      const key = `${event.source}:${event.notificationId}`;
+      const localId = forwardedStatusIds.current.get(key);
+      if (event.kind === "clear") {
+        if (localId !== undefined) {
+          clearAppStatusNotification(localId);
+          forwardedStatusIds.current.delete(key);
+        }
+        return;
+      }
+      if (!event.notification) return;
+      if (localId !== undefined) clearAppStatusNotification(localId);
+      forwardedStatusIds.current.set(key, publishAppStatus(event.notification.message, {
+        tone: event.notification.tone,
+        durationMs: event.durationMs,
+      }));
+    }).then((unlisten) => {
+      stopForwardedStatus = unlisten;
+    });
     void initializeWindowTitlebar();
     void initializePetState();
     updateGraphicsMemoryEstimate();
@@ -163,6 +260,9 @@ function AppContent() {
     void refreshToolbarMetrics();
 
     return () => {
+      store.setGlobalEffectsEnabled(false);
+      stopEntityChanges?.();
+      stopForwardedStatus?.();
       window.removeEventListener("focus", syncToolbarMetricsPolling);
       window.removeEventListener("blur", syncToolbarMetricsPolling);
       document.removeEventListener("visibilitychange", syncToolbarMetricsPolling);
@@ -173,7 +273,7 @@ function AppContent() {
         metricsPollingId.current = null;
       }
     };
-  }, []);
+  }, [isStandaloneRoute]);
 
   useEffect(() => {
     latestSettings.current = store.settings;
@@ -181,8 +281,13 @@ function AppContent() {
   }, [store.settings]);
 
   function isActive(itemTo: string) {
+    if (itemTo === "/results") {
+      return router.path === "/results" || router.path.endsWith("/workbench");
+    }
+
     if (itemTo === "/jobs") {
-      return router.path.startsWith("/jobs");
+      return router.path === "/jobs"
+        || (router.path !== "/jobs/new" && /^\/jobs\/[^/]+$/.test(router.path));
     }
 
     return router.path === itemTo;
@@ -244,21 +349,28 @@ function AppContent() {
   }
 
   async function toggleToolbarPetDesktop() {
-    await petStore.loadPetState();
-    const current = petStore.settings;
-    if (!current) {
-      return;
-    }
+    await runAppStatusAction("togglePet", async () => {
+      await petStore.loadPetState();
+      const current = petStore.settings;
+      if (!current) {
+        return;
+      }
 
-    const savedSettings = await petStore.saveSettings({
-      ...current,
-      desktopEnabled: !current.desktopEnabled,
+      const savedSettings = await petStore.saveSettings({
+        ...current,
+        desktopEnabled: !current.desktopEnabled,
+      });
+      lastAppliedDesktopPetEnabled.current = null;
+      await syncDesktopPetState(savedSettings, "toolbar");
     });
-    lastAppliedDesktopPetEnabled.current = null;
-    await syncDesktopPetState(savedSettings, "toolbar");
   }
 
   async function notifyJobCompleted(job: { id: string; title: string }) {
+    publishAppStatus(formatMessage(messages.shell.jobCompletedBody, { title: job.title }), {
+      tone: "success",
+      durationMs: 7000,
+    });
+
     if (typeof window !== "undefined" && typeof Notification !== "undefined") {
       let permission = Notification.permission;
 
@@ -322,7 +434,7 @@ function AppContent() {
 
   const currentView = (
     <Suspense fallback={<div className="view-stack native-page" />}>
-      <CurrentView />
+      <CurrentView key={router.path === "/members" ? entityViewRevision : router.path} />
     </Suspense>
   );
 
@@ -453,10 +565,33 @@ function AppContent() {
         <section className="content-page">
           <div className={`content-shell ${isSettingsRoute ? "settings-content-shell" : ""}`}>
             <section className="content-body">
-              {currentView}
+              {store.settingsLoadError && !isStandaloneRoute ? (
+                <div className="note-block error-block" role="alert">
+                  <strong>{store.settingsLoadError}</strong>
+                  <div className="button-row">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void store
+                        .ensureSettingsLoaded(true)
+                        .then(() => store.setGlobalEffectsEnabled(true))
+                        .catch(() => undefined)}
+                    >
+                      重试加载设置
+                    </button>
+                  </div>
+                </div>
+              ) : currentView}
             </section>
           </div>
         </section>
+        <footer className="content-statusbar" data-tone={statusNotification?.tone ?? "idle"} role="status" aria-live="polite">
+          <span className="content-statusbar-message">
+            <span className="content-statusbar-dot" aria-hidden="true" />
+            <span>{statusNotification?.message ?? messages.shell.statusReady}</span>
+          </span>
+          <span className="content-statusbar-version">v{appVersion || "-"}</span>
+        </footer>
       </main>
     </div>
   );

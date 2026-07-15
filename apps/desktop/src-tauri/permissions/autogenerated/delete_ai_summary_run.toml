@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-ai-summary-run"
+description = "Enables the delete_ai_summary_run command without any pre-configured scope."
+commands.allow = ["delete_ai_summary_run"]
+
+[[permission]]
+identifier = "deny-delete-ai-summary-run"
+description = "Denies the delete_ai_summary_run command without any pre-configured scope."
+commands.deny = ["delete_ai_summary_run"]

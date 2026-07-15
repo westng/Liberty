@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-desktop-pet-drag"
+description = "Enables the start_desktop_pet_drag command without any pre-configured scope."
+commands.allow = ["start_desktop_pet_drag"]
+
+[[permission]]
+identifier = "deny-start-desktop-pet-drag"
+description = "Denies the start_desktop_pet_drag command without any pre-configured scope."
+commands.deny = ["start_desktop_pet_drag"]

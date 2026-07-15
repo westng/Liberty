@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-draw-pet-blind-box"
+description = "Enables the draw_pet_blind_box command without any pre-configured scope."
+commands.allow = ["draw_pet_blind_box"]
+
+[[permission]]
+identifier = "deny-draw-pet-blind-box"
+description = "Denies the draw_pet_blind_box command without any pre-configured scope."
+commands.deny = ["draw_pet_blind_box"]

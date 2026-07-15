@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-runtime-download-sources"
+description = "Enables the list_runtime_download_sources command without any pre-configured scope."
+commands.allow = ["list_runtime_download_sources"]
+
+[[permission]]
+identifier = "deny-list-runtime-download-sources"
+description = "Denies the list_runtime_download_sources command without any pre-configured scope."
+commands.deny = ["list_runtime_download_sources"]

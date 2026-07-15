@@ -8,12 +8,17 @@ use crate::local_db::{
     self, AppSettings, LocalResult, ManagedRuntimeState, RuntimeArtifactState,
     RuntimeComponentState, RuntimeOperationState,
 };
+use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     env, fs,
+    fs::File,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::AppHandle;
 
@@ -31,10 +36,7 @@ use paths::{
     resolve_ffmpeg_executable, resolve_managed_ffmpeg_path, resolve_python_executable,
     resolve_script_resource_path,
 };
-use process::{
-    run_command_with_log, run_command_with_log_timeout, validate_default_models_offline,
-    validate_ffmpeg_runtime, warmup_default_models,
-};
+use process::{run_command_with_log, run_command_with_log_timeout, validate_ffmpeg_runtime};
 
 static PYTHON_BUSY: AtomicBool = AtomicBool::new(false);
 static FFMPEG_BUSY: AtomicBool = AtomicBool::new(false);
@@ -45,6 +47,125 @@ const COMPONENT_FFMPEG: &str = "ffmpeg";
 const COMPONENT_MODEL: &str = "model";
 const SOURCE_MANAGED: &str = "managed";
 const SOURCE_SYSTEM: &str = "system";
+const MODELS_ACQUIRED_MARKER: &str = "models-acquired.json";
+const MODEL_DOWNLOAD_PROGRESS_BYTES: u64 = 64 * 1024 * 1024;
+const MODELSCOPE_CACHE_METADATA_SCRIPT: &str = r#"
+import json
+import os
+import pickle
+import sys
+import tempfile
+
+marker_path, models_root = sys.argv[1:3]
+with open(marker_path, "r", encoding="utf-8") as stream:
+    marker = json.load(stream)
+
+def atomic_pickle(path, value):
+    fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            pickle.dump(value, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_path, path)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+for model in marker["models"]:
+    model_root = os.path.join(models_root, *model["relativePath"].split("/"))
+    atomic_pickle(
+        os.path.join(model_root, ".msc"),
+        [{"Path": item["path"], "Revision": item["revision"]} for item in model["files"]],
+    )
+    atomic_pickle(os.path.join(model_root, ".mdl"), {"id": model["modelId"]})
+"#;
+
+const DEFAULT_FUNASR_MODELS: [(&str, &str, &str); 4] = [
+    (
+        "model",
+        "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+        "0141367fdc9b6ba58b0442ef34bceb56a6c1789c",
+    ),
+    (
+        "vad",
+        "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+        "f9a8b8274674755d925277e27063869038d41515",
+    ),
+    (
+        "punc",
+        "iic/punc_ct-transformer_cn-en-common-vocab471067-large",
+        "45ab6961ad58a973ce7785401b4e93a0aab907a3",
+    ),
+    (
+        "spk",
+        "iic/speech_campplus_sv_zh-cn_16k-common",
+        "a045b2afcaa9c3049c98a9215a2bc274407ab237",
+    ),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModelInstallAction {
+    Acquire,
+    WaitForPython,
+    Validate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquiredModelSet {
+    model_set_version: String,
+    model_profile: String,
+    models: Vec<AcquiredModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquiredModel {
+    role: String,
+    model_id: String,
+    revision: String,
+    relative_path: String,
+    files: Vec<AcquiredModelFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquiredModelFile {
+    path: String,
+    revision: String,
+    sha256: String,
+    size: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ModelScopeFilesResponse {
+    success: bool,
+    code: i64,
+    message: String,
+    data: ModelScopeFilesData,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ModelScopeFilesData {
+    files: Vec<ModelScopeFile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ModelScopeFile {
+    path: String,
+    revision: String,
+    sha256: String,
+    size: u64,
+    #[serde(rename = "Type")]
+    file_type: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct ResolvedPythonRuntime {
@@ -83,14 +204,22 @@ pub fn list_runtime_download_sources() -> LocalResult<Vec<RuntimeDownloadSourceO
 #[tauri::command]
 pub fn install_runtime(app: AppHandle) -> LocalResult<ManagedRuntimeState> {
     let settings = local_db::get_settings(&app)?;
-    if settings.python_runtime_source == SOURCE_MANAGED {
-        let _ = begin_component_install(&app, COMPONENT_PYTHON);
+    for component in runtime_install_components(&settings) {
+        let _ = begin_component_install(&app, component);
     }
-    if settings.ffmpeg_runtime_source == SOURCE_MANAGED {
-        let _ = begin_component_install(&app, COMPONENT_FFMPEG);
-    }
-    let _ = begin_component_install(&app, COMPONENT_MODEL);
     detect_runtime_state(&app)
+}
+
+fn runtime_install_components(settings: &AppSettings) -> Vec<&'static str> {
+    let mut components = Vec::with_capacity(3);
+    if settings.python_runtime_source == SOURCE_MANAGED {
+        components.push(COMPONENT_PYTHON);
+    }
+    components.push(COMPONENT_MODEL);
+    if settings.ffmpeg_runtime_source == SOURCE_MANAGED {
+        components.push(COMPONENT_FFMPEG);
+    }
+    components
 }
 
 #[tauri::command]
@@ -122,13 +251,7 @@ pub fn set_runtime_component_source(
 ) -> LocalResult<ManagedRuntimeState> {
     let component = normalize_selectable_component(&component)?;
     let source = normalize_source(&source)?;
-    let mut settings = local_db::get_settings(&app)?;
-    match component {
-        COMPONENT_PYTHON => settings.python_runtime_source = source.into(),
-        COMPONENT_FFMPEG => settings.ffmpeg_runtime_source = source.into(),
-        _ => unreachable!(),
-    }
-    local_db::save_settings(&app, &settings)?;
+    local_db::set_runtime_component_source(&app, component, source)?;
 
     if source == SOURCE_SYSTEM {
         begin_component_detection(&app, component)?;
@@ -307,6 +430,11 @@ fn detect_runtime_state(app: &AppHandle) -> LocalResult<ManagedRuntimeState> {
         .find_map(|component| component.operation.last_error.clone());
     state.updated_at = unix_timestamp_millis().to_string();
     local_db::save_runtime_state(app, &state)?;
+    if state.models.operation.kind == "waiting_for_python"
+        && model_can_start_with_python(&state.python)
+    {
+        let _ = begin_component_install(app, COMPONENT_MODEL);
+    }
 
     Ok(state)
 }
@@ -719,64 +847,38 @@ fn finish_system_detection_success(
     let platform_id = current_platform_id()?;
     let mut state =
         local_db::get_runtime_component_state(app, platform_id, component, SOURCE_SYSTEM)?;
-    let settings = local_db::get_settings(app)?;
-    if state.operation.generation != generation
-        || selected_source(&settings, component) != SOURCE_SYSTEM
-    {
+    if state.operation.generation != generation {
         return Ok(());
     }
+    let resolved_path = path.to_string_lossy().into_owned();
     state.availability = "ready".into();
     state.active_artifact = Some(RuntimeArtifactState {
         generation_id: format!("system-{generation}"),
         artifact_version: "system".into(),
-        resolved_path: path.to_string_lossy().into_owned(),
+        resolved_path: resolved_path.clone(),
     });
     state.operation.kind = "idle".into();
     state.operation.phase = "ready".into();
     state.operation.progress = Some(100);
     state.operation.last_error = None;
     state.updated_at = unix_timestamp_millis().to_string();
-    local_db::save_runtime_component_state(app, platform_id, &state)?;
-
-    let mut next_settings = settings;
-    match component {
-        COMPONENT_PYTHON => next_settings.python_path = path.to_string_lossy().into_owned(),
-        COMPONENT_FFMPEG => next_settings.ffmpeg_path = path.to_string_lossy().into_owned(),
-        _ => {}
-    }
-    local_db::save_settings(app, &next_settings)
+    local_db::publish_detected_runtime_path(
+        app,
+        platform_id,
+        &state,
+        &resolved_path,
+        SOURCE_SYSTEM,
+        generation,
+    )
+    .map(|_| ())
 }
 
 fn begin_component_install(app: &AppHandle, component: &str) -> LocalResult<()> {
     let component = normalize_component(component)?;
     let manifest = load_manifest()?;
-    let _ = selected_runtime_download_source(app, &manifest)?;
     let settings = local_db::get_settings(app)?;
     if component != COMPONENT_MODEL && selected_source(&settings, component) != SOURCE_MANAGED {
         return Err("选择本机环境时无需下载该组件，请执行重新检测。".into());
-    }
-
-    if component == COMPONENT_MODEL {
-        let python = selected_python_state(app, &settings)?;
-        if !model_can_start_with_python(&python) {
-            let platform_id = current_platform_id()?;
-            let mut models = local_db::get_runtime_component_state(
-                app,
-                platform_id,
-                COMPONENT_MODEL,
-                SOURCE_MANAGED,
-            )?;
-            if models.operation.kind != "waiting_for_python" {
-                models.operation.generation = models.operation.generation.saturating_add(1);
-            }
-            models.operation.kind = "waiting_for_python".into();
-            models.operation.phase = "waiting_for_python".into();
-            models.operation.progress = None;
-            models.operation.last_error = None;
-            models.updated_at = unix_timestamp_millis().to_string();
-            local_db::save_runtime_component_state(app, platform_id, &models)?;
-            return Ok(());
-        }
     }
 
     let platform_id = current_platform_id()?;
@@ -787,25 +889,64 @@ fn begin_component_install(app: &AppHandle, component: &str) -> LocalResult<()> 
     };
     let mut state = local_db::get_runtime_component_state(app, platform_id, component, source)?;
     let flag = component_busy_flag(component);
-    if flag.swap(true, Ordering::SeqCst) {
+    if flag.load(Ordering::SeqCst) {
         return Ok(());
     }
-    let generation = if state.operation.kind == "waiting_for_python" {
+    let can_retry_model_generation = component == COMPONENT_MODEL
+        && state.operation.kind == "failed"
+        && model_generation_can_retry(app, platform_id, state.operation.generation, &manifest);
+    let generation = if component == COMPONENT_MODEL
+        && (state.operation.kind == "waiting_for_python" || can_retry_model_generation)
+    {
         state.operation.generation
     } else {
         state.operation.generation.saturating_add(1)
     };
+    let action = if component == COMPONENT_MODEL {
+        let generation_root = model_generation_path(app, platform_id, generation)?;
+        model_install_action(
+            &generation_root,
+            &manifest,
+            &selected_python_state(app, &settings)?,
+        )
+    } else {
+        ModelInstallAction::Acquire
+    };
+    if action == ModelInstallAction::WaitForPython {
+        if state.operation.kind != "waiting_for_python" {
+            state.operation.generation = generation;
+            state.operation.kind = "waiting_for_python".into();
+            state.operation.phase = "waiting_for_python".into();
+            state.operation.progress = Some(100);
+            state.operation.last_error = None;
+            state.updated_at = unix_timestamp_millis().to_string();
+            local_db::save_runtime_component_state(app, platform_id, &state)?;
+            maybe_start_waiting_models(app)?;
+        }
+        return Ok(());
+    }
+    if component != COMPONENT_MODEL || action == ModelInstallAction::Acquire {
+        let _ = selected_runtime_download_source(app, &manifest)?;
+    }
+
+    if flag.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
     state.operation.generation = generation;
-    state.operation.kind = if component == COMPONENT_MODEL {
-        "installing".into()
+    state.operation.kind = if component == COMPONENT_MODEL && action == ModelInstallAction::Validate
+    {
+        "validating".into()
     } else {
         "downloading".into()
     };
-    state.operation.phase = if component == COMPONENT_MODEL {
-        "acquiring_models".into()
-    } else {
-        "downloading".into()
-    };
+    state.operation.phase =
+        if component == COMPONENT_MODEL && action == ModelInstallAction::Validate {
+            "validating_models".into()
+        } else if component == COMPONENT_MODEL {
+            "acquiring_models".into()
+        } else {
+            "downloading".into()
+        };
     state.operation.progress = None;
     state.operation.last_error = None;
     state.updated_at = unix_timestamp_millis().to_string();
@@ -814,45 +955,79 @@ fn begin_component_install(app: &AppHandle, component: &str) -> LocalResult<()> 
         return Err(error);
     }
 
-    spawn_component_install(app.clone(), component, generation);
+    spawn_component_install(app.clone(), component, generation, action);
     Ok(())
 }
 
-fn spawn_component_install(app: AppHandle, component: &'static str, generation: u64) {
+fn spawn_component_install(
+    app: AppHandle,
+    component: &'static str,
+    generation: u64,
+    action: ModelInstallAction,
+) {
     let flag = component_busy_flag(component);
     std::thread::spawn(move || {
-        let result = perform_component_install(&app, component, generation);
+        let result = perform_component_install(&app, component, generation, action);
         if let Err(error) = result {
+            let failure_phase = match (component, action) {
+                (COMPONENT_MODEL, ModelInstallAction::Acquire) => "model_acquisition_failed",
+                (COMPONENT_MODEL, ModelInstallAction::Validate) => "model_validation_failed",
+                _ => "install_failed",
+            };
             let _ = finish_component_failure(
                 &app,
                 component,
                 SOURCE_MANAGED,
                 generation,
-                "install_failed",
+                failure_phase,
                 &error,
             );
         }
         flag.store(false, Ordering::SeqCst);
+        if component == COMPONENT_MODEL {
+            let _ = maybe_start_waiting_models(&app);
+        }
     });
 }
 
-fn perform_component_install(app: &AppHandle, component: &str, generation: u64) -> LocalResult<()> {
+fn perform_component_install(
+    app: &AppHandle,
+    component: &str,
+    generation: u64,
+    action: ModelInstallAction,
+) -> LocalResult<()> {
     let manifest = load_manifest()?;
-    let download_source = selected_runtime_download_source(app, &manifest)?;
+    let download_source = if component != COMPONENT_MODEL || action == ModelInstallAction::Acquire {
+        Some(selected_runtime_download_source(app, &manifest)?)
+    } else {
+        None
+    };
     let platform = current_platform_manifest(&manifest)?;
     let platform_id = current_platform_id()?;
     let platform_root = runtime_platform_root(app, platform_id)?;
     let downloads_root = platform_root.join("downloads");
-    fs::create_dir_all(&downloads_root).map_err(|err| err.to_string())?;
+    if component != COMPONENT_MODEL {
+        fs::create_dir_all(&downloads_root).map_err(|err| err.to_string())?;
+    }
     let generation_root =
         runtime_component_generation_root(app, platform_id, component, generation)?;
     let log_path = runtime_component_log_path(app, platform_id, component)?;
-    fs::write(&log_path, []).map_err(|err| err.to_string())?;
+    if component != COMPONENT_MODEL || action == ModelInstallAction::Acquire || !log_path.is_file()
+    {
+        fs::write(&log_path, []).map_err(|err| err.to_string())?;
+    }
     append_runtime_header(&log_path, platform_id, &manifest)?;
-    append_install_log_line(
-        &log_path,
-        &format!("[runtime] download source={}", download_source.name_zh),
-    )?;
+    if let Some(download_source) = download_source.as_ref() {
+        append_install_log_line(
+            &log_path,
+            &format!("[runtime] download source={}", download_source.name_zh),
+        )?;
+    } else {
+        append_install_log_line(
+            &log_path,
+            "[runtime] model snapshots already acquired; validating offline",
+        )?;
+    }
 
     let (resolved_path, artifact_version) = match component {
         COMPONENT_PYTHON => {
@@ -866,7 +1041,9 @@ fn perform_component_install(app: &AppHandle, component: &str, generation: u64) 
             let executable = install_python_runtime(
                 app,
                 &platform,
-                &download_source,
+                download_source
+                    .as_ref()
+                    .ok_or_else(|| "Python 安装缺少下载源。".to_string())?,
                 platform_id,
                 &generation_root,
                 &downloads_root,
@@ -884,7 +1061,9 @@ fn perform_component_install(app: &AppHandle, component: &str, generation: u64) 
             )?;
             let executable = install_ffmpeg_runtime(
                 &platform,
-                &download_source,
+                download_source
+                    .as_ref()
+                    .ok_or_else(|| "FFmpeg 安装缺少下载源。".to_string())?,
                 &generation_root,
                 &downloads_root,
                 &log_path,
@@ -893,20 +1072,25 @@ fn perform_component_install(app: &AppHandle, component: &str, generation: u64) 
             (executable, manifest.runtime_version.clone())
         }
         COMPONENT_MODEL => {
-            let settings = local_db::get_settings(app)?;
-            let python = selected_python_state(app, &settings)?;
-            let python_path = active_component_path(&python)?;
             let models_root = generation_root.join("models");
             fs::create_dir_all(&models_root).map_err(|err| err.to_string())?;
-            let warmup_path = resolve_script_resource_path(app, "runtime_warmup.py")?;
-            warmup_default_models(
-                Path::new(&python_path),
-                &warmup_path,
-                &models_root,
-                platform.asr_backend.as_deref().unwrap_or("funasr"),
-                download_source.model_endpoint.as_deref(),
-                &log_path,
-            )?;
+            if action == ModelInstallAction::Acquire {
+                acquire_default_models(
+                    &manifest,
+                    download_source
+                        .as_ref()
+                        .ok_or_else(|| "模型获取缺少下载源。".to_string())?,
+                    &models_root,
+                    &generation_root,
+                    &log_path,
+                )?;
+            }
+            let settings = local_db::get_settings(app)?;
+            let python = selected_python_state(app, &settings)?;
+            if !model_can_start_with_python(&python) {
+                persist_models_waiting_for_python(app, generation)?;
+                return Ok(());
+            }
             update_component_phase(
                 app,
                 component,
@@ -914,9 +1098,9 @@ fn perform_component_install(app: &AppHandle, component: &str, generation: u64) 
                 "validating",
                 "validating_models",
             )?;
-            validate_default_models_offline(
-                Path::new(&python_path),
-                &warmup_path,
+            validate_acquired_models(
+                app,
+                Path::new(&active_component_path(&python)?),
                 &models_root,
                 platform.asr_backend.as_deref().unwrap_or("funasr"),
                 &log_path,
@@ -984,6 +1168,594 @@ fn maybe_start_waiting_models(app: &AppHandle) -> LocalResult<()> {
 
 fn model_can_start_with_python(python: &RuntimeComponentState) -> bool {
     python.availability == "ready" && python.active_artifact.is_some()
+}
+
+fn model_install_action(
+    generation_root: &Path,
+    manifest: &RuntimeManifest,
+    python: &RuntimeComponentState,
+) -> ModelInstallAction {
+    if !models_acquired(generation_root, manifest) {
+        return ModelInstallAction::Acquire;
+    }
+    if model_can_start_with_python(python) {
+        ModelInstallAction::Validate
+    } else {
+        ModelInstallAction::WaitForPython
+    }
+}
+
+fn models_acquired(generation_root: &Path, manifest: &RuntimeManifest) -> bool {
+    read_acquired_model_set(generation_root).is_some_and(|set| {
+        validate_acquired_model_set(generation_root, manifest, &set, None).is_ok()
+    })
+}
+
+fn model_generation_can_retry(
+    app: &AppHandle,
+    platform_id: &str,
+    generation: u64,
+    manifest: &RuntimeManifest,
+) -> bool {
+    model_generation_path(app, platform_id, generation)
+        .ok()
+        .is_some_and(|generation_root| {
+            read_acquired_model_set(&generation_root).map_or_else(
+                || generation_root.join("models").is_dir(),
+                |set| validate_acquired_model_metadata(manifest, &set).is_ok(),
+            )
+        })
+}
+
+fn model_generation_path(
+    app: &AppHandle,
+    platform_id: &str,
+    generation: u64,
+) -> LocalResult<PathBuf> {
+    Ok(runtime_platform_root(app, platform_id)?
+        .join("components")
+        .join(COMPONENT_MODEL)
+        .join("generations")
+        .join(generation.to_string()))
+}
+
+fn read_acquired_model_set(generation_root: &Path) -> Option<AcquiredModelSet> {
+    fs::read(generation_root.join(MODELS_ACQUIRED_MARKER))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+}
+
+fn acquire_default_models(
+    manifest: &RuntimeManifest,
+    download_source: &RuntimeDownloadSource,
+    models_root: &Path,
+    generation_root: &Path,
+    log_path: &Path,
+) -> LocalResult<()> {
+    if manifest.model_profile != "paraformer" {
+        return Err(format!(
+            "当前模型获取器不支持模型配置：{}",
+            manifest.model_profile
+        ));
+    }
+    let endpoint = download_source
+        .model_endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "当前下载源没有配置 ModelScope 地址。".to_string())?;
+    if !endpoint.to_ascii_lowercase().starts_with("https://") {
+        return Err("ModelScope 地址必须使用 HTTPS。".into());
+    }
+    let acquired_marker = generation_root.join(MODELS_ACQUIRED_MARKER);
+    if acquired_marker.exists() {
+        fs::remove_file(&acquired_marker).map_err(|err| err.to_string())?;
+    }
+
+    append_install_log_line(
+        log_path,
+        "[runtime] acquiring default FunASR model snapshots",
+    )?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(60 * 30))
+        .build()
+        .map_err(|err| err.to_string())?;
+    let mut acquired_models = Vec::with_capacity(DEFAULT_FUNASR_MODELS.len());
+
+    for (role, model_id, revision) in DEFAULT_FUNASR_MODELS {
+        let relative_path = model_cache_relative_path(model_id)?;
+        let model_root = models_root.join(&relative_path);
+        let files = fetch_modelscope_files(&client, endpoint, model_id, revision)?;
+        append_install_log_line(
+            log_path,
+            &format!(
+                "[runtime] acquiring model role={role} id={model_id} files={}",
+                files.len()
+            ),
+        )?;
+        fs::create_dir_all(&model_root).map_err(|err| err.to_string())?;
+
+        let mut acquired_files = Vec::with_capacity(files.len());
+        for file in files {
+            let relative_file_path = safe_model_relative_path(&file.path)?;
+            let target_path = model_root.join(&relative_file_path);
+            download_modelscope_file(&client, endpoint, model_id, &file, &target_path, log_path)?;
+            acquired_files.push(AcquiredModelFile {
+                path: path_to_forward_slashes(&relative_file_path)?,
+                revision: file.revision,
+                sha256: file.sha256.to_ascii_lowercase(),
+                size: file.size,
+            });
+        }
+
+        acquired_models.push(AcquiredModel {
+            role: role.into(),
+            model_id: model_id.into(),
+            revision: revision.into(),
+            relative_path: path_to_forward_slashes(&relative_path)?,
+            files: acquired_files,
+        });
+    }
+
+    let acquired_set = AcquiredModelSet {
+        model_set_version: manifest.model_set_version.clone(),
+        model_profile: manifest.model_profile.clone(),
+        models: acquired_models,
+    };
+    validate_acquired_model_set(generation_root, manifest, &acquired_set, None)?;
+    write_json_atomically(&acquired_marker, &acquired_set)?;
+    append_install_log_line(log_path, "[runtime] default model snapshots acquired")
+}
+
+fn fetch_modelscope_files(
+    client: &Client,
+    endpoint: &str,
+    model_id: &str,
+    revision: &str,
+) -> LocalResult<Vec<ModelScopeFile>> {
+    validate_model_id(model_id)?;
+    validate_model_revision(revision)?;
+    let url = format!(
+        "{}/api/v1/models/{model_id}/repo/files",
+        endpoint.trim_end_matches('/')
+    );
+    let response = client
+        .get(url)
+        .query(&[("Revision", revision), ("Recursive", "true")])
+        .send()
+        .map_err(|err| err.to_string())?
+        .error_for_status()
+        .map_err(|err| err.to_string())?
+        .json::<ModelScopeFilesResponse>()
+        .map_err(|err| err.to_string())?;
+    if !response.success || response.code != 200 {
+        return Err(format!(
+            "ModelScope 模型清单请求失败：{} ({})",
+            response.message, response.code
+        ));
+    }
+
+    let mut seen_paths = HashSet::new();
+    let mut files = Vec::new();
+    for file in response.data.files {
+        if file.file_type != "blob" {
+            continue;
+        }
+        let path = safe_model_relative_path(&file.path)?;
+        let normalized_path = path_to_forward_slashes(&path)?;
+        if !seen_paths.insert(normalized_path.clone()) {
+            return Err(format!(
+                "ModelScope 模型清单包含重复文件：{normalized_path}"
+            ));
+        }
+        validate_model_revision(&file.revision).map_err(|error| {
+            format!("ModelScope 模型文件 revision 无效：{normalized_path}: {error}")
+        })?;
+        if !valid_sha256(&file.sha256) {
+            return Err(format!(
+                "ModelScope 模型文件缺少有效 SHA-256：{normalized_path}"
+            ));
+        }
+        files.push(ModelScopeFile {
+            path: normalized_path,
+            revision: file.revision,
+            sha256: file.sha256.to_ascii_lowercase(),
+            size: file.size,
+            file_type: file.file_type,
+        });
+    }
+    if files.is_empty() {
+        return Err(format!("ModelScope 模型清单没有可下载文件：{model_id}"));
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(files)
+}
+
+fn download_modelscope_file(
+    client: &Client,
+    endpoint: &str,
+    model_id: &str,
+    model_file: &ModelScopeFile,
+    target_path: &Path,
+    log_path: &Path,
+) -> LocalResult<()> {
+    if target_path.is_file() && verify_model_file_size(target_path, model_file.size).is_ok() {
+        match verify_bundled_asset_sha256(target_path, &model_file.sha256, log_path) {
+            Ok(()) => {
+                append_install_log_line(
+                    log_path,
+                    &format!("[runtime] reusing verified model file {}", model_file.path),
+                )?;
+                return Ok(());
+            }
+            Err(error) => append_install_log_line(
+                log_path,
+                &format!(
+                    "[runtime] cached model file rejected {}: {error}",
+                    model_file.path
+                ),
+            )?,
+        }
+    }
+    if target_path.exists() {
+        fs::remove_file(target_path).map_err(|err| err.to_string())?;
+    }
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    let url = format!(
+        "{}/api/v1/models/{model_id}/repo",
+        endpoint.trim_end_matches('/')
+    );
+    append_install_log_line(
+        log_path,
+        &format!(
+            "[runtime] downloading model file {} ({} MB)",
+            model_file.path,
+            bytes_to_mb(model_file.size)
+        ),
+    )?;
+    let mut response = client
+        .get(url)
+        .query(&[
+            ("Revision", model_file.revision.as_str()),
+            ("FilePath", model_file.path.as_str()),
+        ])
+        .send()
+        .map_err(|err| err.to_string())?
+        .error_for_status()
+        .map_err(|err| err.to_string())?;
+    if let Some(content_length) = response.content_length() {
+        if content_length != model_file.size {
+            return Err(format!(
+                "模型文件大小与清单不一致：{}，期望 {}，响应 {}。",
+                model_file.path, model_file.size, content_length
+            ));
+        }
+    }
+
+    let file_name = target_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("模型文件缺少有效文件名：{}", model_file.path))?;
+    let temp_path = target_path.with_file_name(format!("{file_name}.download"));
+    let _ = fs::remove_file(&temp_path);
+    let mut target = File::create(&temp_path).map_err(|err| err.to_string())?;
+    let mut buffer = vec![0u8; 1024 * 1024];
+    let mut downloaded_bytes = 0u64;
+    let mut last_logged_bytes = 0u64;
+    let mut last_log_at = Instant::now();
+    let download_result = (|| -> LocalResult<()> {
+        loop {
+            let read = response.read(&mut buffer).map_err(|err| err.to_string())?;
+            if read == 0 {
+                break;
+            }
+            target
+                .write_all(&buffer[..read])
+                .map_err(|err| err.to_string())?;
+            downloaded_bytes = downloaded_bytes.saturating_add(read as u64);
+            if downloaded_bytes.saturating_sub(last_logged_bytes) >= MODEL_DOWNLOAD_PROGRESS_BYTES
+                || last_log_at.elapsed() >= Duration::from_secs(5)
+            {
+                append_install_log_line(
+                    log_path,
+                    &format!(
+                        "[runtime] model file progress {} / {} MB",
+                        bytes_to_mb(downloaded_bytes),
+                        bytes_to_mb(model_file.size)
+                    ),
+                )?;
+                last_logged_bytes = downloaded_bytes;
+                last_log_at = Instant::now();
+            }
+        }
+        target.flush().map_err(|err| err.to_string())?;
+        target.sync_all().map_err(|err| err.to_string())?;
+        Ok(())
+    })();
+    drop(target);
+    if let Err(error) = download_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error);
+    }
+    if downloaded_bytes != model_file.size {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!(
+            "模型文件下载不完整：{}，期望 {} 字节，实际 {} 字节。",
+            model_file.path, model_file.size, downloaded_bytes
+        ));
+    }
+    verify_bundled_asset_sha256(&temp_path, &model_file.sha256, log_path)?;
+    fs::rename(&temp_path, target_path).map_err(|err| err.to_string())
+}
+
+fn validate_acquired_models(
+    app: &AppHandle,
+    python_executable: &Path,
+    models_root: &Path,
+    asr_backend: &str,
+    log_path: &Path,
+) -> LocalResult<()> {
+    let generation_root = models_root
+        .parent()
+        .ok_or_else(|| "模型目录缺少 generation 根目录。".to_string())?;
+    let manifest = load_manifest()?;
+    let acquired_set = read_acquired_model_set(generation_root)
+        .ok_or_else(|| "模型获取 marker 缺失或无效。".to_string())?;
+    validate_acquired_model_set(generation_root, &manifest, &acquired_set, Some(log_path))?;
+
+    let model_paths = DEFAULT_FUNASR_MODELS
+        .iter()
+        .map(|(role, _, _)| {
+            let model = acquired_set
+                .models
+                .iter()
+                .find(|model| model.role == *role)
+                .ok_or_else(|| format!("模型获取 marker 缺少角色：{role}"))?;
+            Ok((*role, models_root.join(&model.relative_path)))
+        })
+        .collect::<LocalResult<Vec<_>>>()?;
+    let warmup_path = resolve_script_resource_path(app, "runtime_warmup.py")?;
+    let mut command = Command::new(python_executable);
+    command
+        .env("PYTHONUTF8", "1")
+        .env("LIBERTY_ASR_BACKEND", asr_backend)
+        .env("FUNASR_PROFILE", &manifest.model_profile)
+        .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
+        .env("HF_HOME", models_root.join("huggingface"))
+        .env("TORCH_HOME", models_root.join("torch"))
+        .env("MODELSCOPE_OFFLINE", "1")
+        .env("HF_HUB_OFFLINE", "1")
+        .env("TRANSFORMERS_OFFLINE", "1")
+        .arg(warmup_path)
+        .arg("--models-root")
+        .arg(models_root)
+        .arg("--validate-only");
+    for (role, path) in model_paths {
+        let variable = match role {
+            "model" => "FUNASR_MODEL",
+            "vad" => "FUNASR_VAD_MODEL",
+            "punc" => "FUNASR_PUNC_MODEL",
+            "spk" => "FUNASR_SPK_MODEL",
+            _ => return Err(format!("不支持的模型角色：{role}")),
+        };
+        command.env(variable, path);
+    }
+    run_command_with_log_timeout(
+        &mut command,
+        log_path,
+        "Validating acquired ASR models offline",
+        Duration::from_secs(10 * 60),
+    )?;
+
+    let mut publish_command = Command::new(python_executable);
+    publish_command
+        .env("PYTHONUTF8", "1")
+        .arg("-c")
+        .arg(MODELSCOPE_CACHE_METADATA_SCRIPT)
+        .arg(generation_root.join(MODELS_ACQUIRED_MARKER))
+        .arg(models_root);
+    run_command_with_log_timeout(
+        &mut publish_command,
+        log_path,
+        "Publishing ModelScope cache metadata",
+        Duration::from_secs(60),
+    )
+}
+
+fn validate_acquired_model_set(
+    generation_root: &Path,
+    manifest: &RuntimeManifest,
+    acquired_set: &AcquiredModelSet,
+    checksum_log_path: Option<&Path>,
+) -> LocalResult<()> {
+    validate_acquired_model_metadata(manifest, acquired_set)?;
+    let models_root = generation_root.join("models");
+    for model in &acquired_set.models {
+        let model_root = models_root.join(safe_model_relative_path(&model.relative_path)?);
+        if !model_root.is_dir() {
+            return Err(format!("模型目录不存在：{}", model_root.display()));
+        }
+        for file in &model.files {
+            let relative_file_path = safe_model_relative_path(&file.path)?;
+            let path = model_root.join(relative_file_path);
+            verify_model_file_size(&path, file.size)?;
+            if let Some(log_path) = checksum_log_path {
+                verify_bundled_asset_sha256(&path, &file.sha256, log_path)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_acquired_model_metadata(
+    manifest: &RuntimeManifest,
+    acquired_set: &AcquiredModelSet,
+) -> LocalResult<()> {
+    if acquired_set.model_set_version != manifest.model_set_version
+        || acquired_set.model_profile != manifest.model_profile
+    {
+        return Err("模型获取 marker 与当前 manifest 不匹配。".into());
+    }
+    if acquired_set.models.len() != DEFAULT_FUNASR_MODELS.len() {
+        return Err("模型获取 marker 未包含完整的默认模型集合。".into());
+    }
+
+    let mut roles = HashSet::new();
+    for model in &acquired_set.models {
+        if !roles.insert(model.role.as_str()) {
+            return Err(format!("模型获取 marker 包含重复角色：{}", model.role));
+        }
+        let (expected_model_id, expected_revision) = DEFAULT_FUNASR_MODELS
+            .iter()
+            .find_map(|(role, model_id, revision)| {
+                (*role == model.role).then_some((*model_id, *revision))
+            })
+            .ok_or_else(|| format!("模型获取 marker 包含未知角色：{}", model.role))?;
+        if model.model_id != expected_model_id
+            || model.revision != expected_revision
+            || model.files.is_empty()
+            || !model.files.iter().any(|file| file.size > 0)
+        {
+            return Err(format!(
+                "模型获取 marker 的 {} 模型信息不完整。",
+                model.role
+            ));
+        }
+        let relative_model_path = safe_model_relative_path(&model.relative_path)?;
+        let expected_model_path = model_cache_relative_path(&model.model_id)?;
+        if relative_model_path != expected_model_path {
+            return Err(format!("模型获取 marker 的 {} 目录不匹配。", model.role));
+        }
+
+        let mut file_paths = HashSet::new();
+        for file in &model.files {
+            let relative_file_path = safe_model_relative_path(&file.path)?;
+            let normalized_path = path_to_forward_slashes(&relative_file_path)?;
+            if !file_paths.insert(normalized_path.clone()) {
+                return Err(format!("模型 marker 包含重复文件：{normalized_path}"));
+            }
+            if validate_model_revision(&file.revision).is_err() || !valid_sha256(&file.sha256) {
+                return Err(format!("模型 marker 文件信息无效：{normalized_path}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn model_cache_relative_path(model_id: &str) -> LocalResult<PathBuf> {
+    validate_model_id(model_id)?;
+    Ok(PathBuf::from("modelscope").join("models").join(model_id))
+}
+
+fn validate_model_id(model_id: &str) -> LocalResult<()> {
+    let parts = model_id.split('/').collect::<Vec<_>>();
+    if parts.len() != 2
+        || parts.iter().any(|part| {
+            part.is_empty()
+                || matches!(*part, "." | "..")
+                || !part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        })
+    {
+        return Err(format!("无效的 ModelScope 模型 ID：{model_id}"));
+    }
+    Ok(())
+}
+
+fn validate_model_revision(revision: &str) -> LocalResult<()> {
+    if revision.len() == 40
+        && revision
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        Ok(())
+    } else {
+        Err("ModelScope 模型 revision 必须是固定的 40 位提交哈希。".into())
+    }
+}
+
+fn safe_model_relative_path(value: &str) -> LocalResult<PathBuf> {
+    let path = Path::new(value);
+    if value.trim().is_empty()
+        || value.contains('\\')
+        || value
+            .split('/')
+            .any(|component| component.is_empty() || matches!(component, "." | ".."))
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(format!("模型文件路径不安全：{value}"));
+    }
+    Ok(path.to_path_buf())
+}
+
+fn path_to_forward_slashes(path: &Path) -> LocalResult<String> {
+    let parts = path
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(value) => value
+                .to_str()
+                .map(str::to_string)
+                .ok_or_else(|| "模型路径包含无效字符。".to_string()),
+            _ => Err("模型路径不是安全相对路径。".to_string()),
+        })
+        .collect::<LocalResult<Vec<_>>>()?;
+    Ok(parts.join("/"))
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn verify_model_file_size(path: &Path, expected_size: u64) -> LocalResult<()> {
+    if !path.is_file() || path.metadata().map_err(|err| err.to_string())?.len() != expected_size {
+        return Err(format!("模型文件大小不匹配：{}", path.display()));
+    }
+    Ok(())
+}
+
+fn write_json_atomically<T: Serialize>(path: &Path, value: &T) -> LocalResult<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "marker 缺少父目录。".to_string())?;
+    fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    let temp_path = path.with_extension("tmp");
+    let mut file = File::create(&temp_path).map_err(|err| err.to_string())?;
+    let payload = serde_json::to_vec_pretty(value).map_err(|err| err.to_string())?;
+    file.write_all(&payload).map_err(|err| err.to_string())?;
+    file.flush().map_err(|err| err.to_string())?;
+    file.sync_all().map_err(|err| err.to_string())?;
+    drop(file);
+    if path.exists() {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("marker 已存在，拒绝覆盖：{}", path.display()));
+    }
+    fs::rename(&temp_path, path).map_err(|err| err.to_string())
+}
+
+fn bytes_to_mb(value: u64) -> String {
+    format!("{:.1}", value as f64 / 1024.0 / 1024.0)
+}
+
+fn persist_models_waiting_for_python(app: &AppHandle, generation: u64) -> LocalResult<()> {
+    let platform_id = current_platform_id()?;
+    let mut state =
+        local_db::get_runtime_component_state(app, platform_id, COMPONENT_MODEL, SOURCE_MANAGED)?;
+    if state.operation.generation != generation {
+        return Ok(());
+    }
+    state.operation.kind = "waiting_for_python".into();
+    state.operation.phase = "waiting_for_python".into();
+    state.operation.progress = Some(100);
+    state.operation.last_error = None;
+    state.updated_at = unix_timestamp_millis().to_string();
+    local_db::save_runtime_component_state(app, platform_id, &state)
 }
 
 fn update_component_phase(
@@ -1175,7 +1947,14 @@ fn install_python_runtime(
             log_path,
             "[runtime] existing Python dependencies are incomplete, reinstalling dependencies",
         )?;
-        install_python_dependencies(app, &python_executable, download_source, backend, log_path)?;
+        install_python_dependencies(
+            app,
+            &python_executable,
+            download_source,
+            platform_id,
+            backend,
+            log_path,
+        )?;
         validate_python_runtime(app, &python_executable, backend, log_path)?;
         return Ok(python_executable);
     }
@@ -1205,7 +1984,14 @@ fn install_python_runtime(
         &format!("[runtime] resolved python={}", python_executable.display()),
     )?;
 
-    install_python_dependencies(app, &python_executable, download_source, backend, log_path)?;
+    install_python_dependencies(
+        app,
+        &python_executable,
+        download_source,
+        platform_id,
+        backend,
+        log_path,
+    )?;
     validate_python_runtime(app, &python_executable, backend, log_path)?;
 
     Ok(python_executable)
@@ -1355,10 +2141,21 @@ fn install_python_dependencies(
     app: &AppHandle,
     python_executable: &Path,
     download_source: &RuntimeDownloadSource,
+    platform_id: &str,
     backend: &str,
     log_path: &Path,
 ) -> LocalResult<()> {
-    let requirements_path = resolve_script_resource_path(app, "requirements.txt")?;
+    let lock_file = match platform_id {
+        "darwin-aarch64" => "requirements-lock-darwin-aarch64.txt",
+        "darwin-x64" => "requirements-lock-darwin-x64.txt",
+        "windows-x64" => "requirements-lock-windows-x64.txt",
+        _ => {
+            return Err(format!(
+                "当前平台没有经过验证的 Python 依赖锁：{platform_id}"
+            ))
+        }
+    };
+    let requirements_path = resolve_script_resource_path(app, lock_file)?;
     let mut command = Command::new(python_executable);
     command
         .env("PYTHONUTF8", "1")
@@ -1367,7 +2164,9 @@ fn install_python_dependencies(
         .arg("pip")
         .arg("install")
         .arg("--disable-pip-version-check")
-        .arg("--no-input");
+        .arg("--no-input")
+        .arg("--require-hashes")
+        .arg("--no-build-isolation");
     if let Some(index_url) = download_source
         .pip_index_url
         .as_deref()
@@ -1423,10 +2222,77 @@ fn unsupported_runtime_state(
 
 #[cfg(test)]
 mod tests {
-    use super::{aggregate_runtime_status, model_can_start_with_python};
-    use crate::local_db::{
-        ManagedRuntimeState, RuntimeArtifactState, RuntimeComponentState, RuntimeOperationState,
+    use super::{
+        aggregate_runtime_status, load_manifest, model_cache_relative_path,
+        model_can_start_with_python, model_install_action, path_to_forward_slashes,
+        runtime_install_components, safe_model_relative_path, write_json_atomically, AcquiredModel,
+        AcquiredModelFile, AcquiredModelSet, ModelInstallAction, COMPONENT_FFMPEG, COMPONENT_MODEL,
+        COMPONENT_PYTHON, DEFAULT_FUNASR_MODELS, MODELS_ACQUIRED_MARKER,
     };
+    use crate::local_db::{
+        AppSettings, ManagedRuntimeState, RuntimeArtifactState, RuntimeComponentState,
+        RuntimeOperationState,
+    };
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn acquired_models_fixture() -> (PathBuf, AcquiredModelSet) {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let generation_root = std::env::temp_dir().join(format!(
+            "liberty-acquired-models-{}-{unique}",
+            std::process::id()
+        ));
+        let models_root = generation_root.join("models");
+        let mut models = Vec::new();
+        for (role, model_id, revision) in DEFAULT_FUNASR_MODELS {
+            let relative_path = model_cache_relative_path(model_id).expect("model path");
+            let model_root = models_root.join(&relative_path);
+            fs::create_dir_all(&model_root).expect("model root");
+            let contents = role.as_bytes();
+            fs::write(model_root.join("config.yaml"), contents).expect("model file");
+            models.push(AcquiredModel {
+                role: role.into(),
+                model_id: model_id.into(),
+                revision: revision.into(),
+                relative_path: path_to_forward_slashes(&relative_path).expect("relative path"),
+                files: vec![AcquiredModelFile {
+                    path: "config.yaml".into(),
+                    revision: revision.into(),
+                    sha256: "a".repeat(64),
+                    size: contents.len() as u64,
+                }],
+            });
+        }
+        let manifest = load_manifest().expect("runtime manifest");
+        let acquired_set = AcquiredModelSet {
+            model_set_version: manifest.model_set_version,
+            model_profile: manifest.model_profile,
+            models,
+        };
+        write_json_atomically(&generation_root.join(MODELS_ACQUIRED_MARKER), &acquired_set)
+            .expect("acquired marker");
+        (generation_root, acquired_set)
+    }
+
+    #[test]
+    fn batch_install_starts_models_before_ffmpeg() {
+        let settings = AppSettings {
+            python_runtime_source: "managed".into(),
+            ffmpeg_runtime_source: "managed".into(),
+            ..AppSettings::default()
+        };
+
+        assert_eq!(
+            runtime_install_components(&settings),
+            [COMPONENT_PYTHON, COMPONENT_MODEL, COMPONENT_FFMPEG]
+        );
+    }
 
     #[test]
     fn model_uses_ready_python_even_while_python_redownloads() {
@@ -1446,6 +2312,59 @@ mod tests {
         };
 
         assert!(model_can_start_with_python(&python));
+    }
+
+    #[test]
+    fn acquired_models_wait_then_validate_without_reacquiring() {
+        let (generation_root, _) = acquired_models_fixture();
+        let manifest = load_manifest().expect("runtime manifest");
+        let unavailable_python = RuntimeComponentState::unavailable("python", Some("managed"));
+
+        assert_eq!(
+            model_install_action(&generation_root, &manifest, &unavailable_python),
+            ModelInstallAction::WaitForPython
+        );
+
+        let mut ready_python = unavailable_python;
+        ready_python.availability = "ready".into();
+        ready_python.active_artifact = Some(RuntimeArtifactState {
+            generation_id: "1".into(),
+            artifact_version: "runtime".into(),
+            resolved_path: "/runtime/python".into(),
+        });
+        assert_eq!(
+            model_install_action(&generation_root, &manifest, &ready_python),
+            ModelInstallAction::Validate
+        );
+
+        fs::remove_dir_all(generation_root).expect("remove fixture");
+    }
+
+    #[test]
+    fn incomplete_acquired_marker_requires_acquisition() {
+        let (generation_root, acquired_set) = acquired_models_fixture();
+        let manifest = load_manifest().expect("runtime manifest");
+        let python = RuntimeComponentState::unavailable("python", Some("managed"));
+        let missing_file = generation_root
+            .join("models")
+            .join(&acquired_set.models[0].relative_path)
+            .join(&acquired_set.models[0].files[0].path);
+        fs::remove_file(missing_file).expect("remove model file");
+
+        assert_eq!(
+            model_install_action(&generation_root, &manifest, &python),
+            ModelInstallAction::Acquire
+        );
+
+        fs::remove_dir_all(generation_root).expect("remove fixture");
+    }
+
+    #[test]
+    fn model_paths_reject_escape_components() {
+        for path in ["../model", "/model", "model\\file", "model//file"] {
+            assert!(safe_model_relative_path(path).is_err(), "accepted {path}");
+        }
+        assert!(safe_model_relative_path("model/config.yaml").is_ok());
     }
 
     #[test]

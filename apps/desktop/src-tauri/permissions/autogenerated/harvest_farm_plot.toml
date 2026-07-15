@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-harvest-farm-plot"
+description = "Enables the harvest_farm_plot command without any pre-configured scope."
+commands.allow = ["harvest_farm_plot"]
+
+[[permission]]
+identifier = "deny-harvest-farm-plot"
+description = "Denies the harvest_farm_plot command without any pre-configured scope."
+commands.deny = ["harvest_farm_plot"]

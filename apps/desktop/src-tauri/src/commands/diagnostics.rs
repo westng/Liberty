@@ -7,7 +7,8 @@ use crate::{
 };
 use serde::Serialize;
 use std::{fs, path::Path};
-use tauri::AppHandle;
+use tauri::{AppHandle, Webview};
+use tauri_plugin_fs::FsExt;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,7 +64,11 @@ pub fn get_diagnostics(app: AppHandle) -> LocalResult<DiagnosticsReport> {
 }
 
 #[tauri::command]
-pub fn export_desktop_pet_diagnostic_log(app: AppHandle, file_path: String) -> LocalResult<()> {
+pub fn export_desktop_pet_diagnostic_log(
+    app: AppHandle,
+    webview: Webview,
+    file_path: String,
+) -> LocalResult<()> {
     let trimmed_path = file_path.trim();
     if trimmed_path.is_empty() {
         return Err("导出路径不能为空。".into());
@@ -75,6 +80,9 @@ pub fn export_desktop_pet_diagnostic_log(app: AppHandle, file_path: String) -> L
     }
 
     let target_path = Path::new(trimmed_path);
+    if !webview.fs_scope().is_allowed(target_path) {
+        return Err("导出失败：目标路径未经保存对话框授权。".into());
+    }
     if let Some(parent) = target_path
         .parent()
         .filter(|path| !path.as_os_str().is_empty())

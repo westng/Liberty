@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hide-desktop-pet"
+description = "Enables the hide_desktop_pet command without any pre-configured scope."
+commands.allow = ["hide_desktop_pet"]
+
+[[permission]]
+identifier = "deny-hide-desktop-pet"
+description = "Denies the hide_desktop_pet command without any pre-configured scope."
+commands.deny = ["hide_desktop_pet"]

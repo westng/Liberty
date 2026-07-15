@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "template-editor-capability",
+  "description": "Template editor can manage summary templates without reading AI model credentials.",
+  "windows": ["template-editor"],
+  "permissions": [
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "dialog:allow-confirm",
+    "allow-destroy-current-window",
+    "allow-set-current-window-theme",
+    "allow-set-current-window-title",
+    "allow-get-ui-preferences",
+    "allow-list-ai-templates",
+    "allow-save-ai-template",
+    "allow-delete-ai-template"
+  ]
+}

@@ -1,26 +1,36 @@
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import MeetingNotesPanel from "@/shared/components/MeetingNotesPanel";
 import StatusBadge from "@/shared/components/StatusBadge";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { getMessages } from "@/shared/i18n";
 import { createEmptyMeetingSummary } from "@/shared/services/ai/storage";
+import { closeCurrentWindow } from "@/shared/services/tauri/window";
+import type { ProcessingMode } from "@/shared/types/meeting";
 
 export default function MeetingNotesView() {
   const meetingStore = useMeetingStore();
   const messages = getMessages(meetingStore.settings.locale).notes;
   const commonMessages = getMessages(meetingStore.settings.locale).common;
-  const jobId = new URLSearchParams(window.location.search).get("jobId") ?? "";
-  const job = meetingStore.getJobById(jobId);
+  const query = new URLSearchParams(window.location.search);
+  const jobId = query.get("jobId")?.trim() ?? "";
+  const windowScopeToken = query.get("scopeToken")?.trim() ?? "";
+  const source = parseJobSource(query.get("source"));
+  const job = meetingStore.getJobById(jobId, source ?? undefined);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    if (jobId) {
-      void meetingStore.refreshJob(jobId);
+    if (!jobId || !source || !windowScopeToken) {
+      setLoadError("capability_unavailable: 独立窗口需要有效的任务作用域。");
+      return;
     }
-  }, [jobId]);
+    void meetingStore
+      .refreshJobResult({ jobId, source, windowScopeToken })
+      .then(() => setLoadError(""))
+      .catch((error) => setLoadError(error instanceof Error ? error.message : String(error)));
+  }, [jobId, source, windowScopeToken]);
 
   async function closeWindow() {
-    await getCurrentWebviewWindow().close();
+    await closeCurrentWindow();
   }
 
   return (
@@ -41,6 +51,7 @@ export default function MeetingNotesView() {
       </article>
 
       <article className="surface summary-window-result meeting-notes-result">
+        {loadError && <div className="note-block error-block">{loadError}</div>}
         <div className="section-heading summary-centered-heading">
           <h3>{messages.sectionTitle}</h3>
           <StatusBadge status={job?.summaryStatus || "idle"} />
@@ -50,4 +61,8 @@ export default function MeetingNotesView() {
       </article>
     </section>
   );
+}
+
+function parseJobSource(value: string | null): ProcessingMode | null {
+  return value === "local" || value === "remote" ? value : null;
 }

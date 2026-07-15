@@ -4,24 +4,60 @@ import { useEffect, useState } from "react";
 import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
-import type { AiModelConfig } from "@/shared/types/meeting";
+import { publishEntityChanged } from "@/shared/services/ui/windows";
+import { destroyCurrentWindow, setCurrentWindowTitle } from "@/shared/services/tauri/window";
+import type { AiModelConfig, AiModelCredentialUpdate } from "@/shared/types/meeting";
+
+type StoredCredentialAction = "keep" | "clear";
 
 export default function ModelEditorView() {
   const aiStore = useAiStore();
   const meetingStore = useMeetingStore();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AiModelConfig>(() => aiStore.createModel());
+  const [apiKey, setApiKey] = useState("");
+  const [storedCredentialAction, setStoredCredentialAction] = useState<StoredCredentialAction>("keep");
   const [errorMessage, setErrorMessage] = useState("");
+  const [dirty, setDirty] = useState(false);
   const messages = getMessages(meetingStore.settings.locale).models;
   const commonMessages = getMessages(meetingStore.settings.locale).common;
   const selectedModel = selectedId ? aiStore.getModelById(selectedId) ?? null : null;
 
   useEffect(() => {
-    void initialize();
+    void initialize().catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWindow().onCloseRequested(async (event) => {
+      if (!dirty) {
+        return;
+      }
+      event.preventDefault();
+      const shouldClose = await confirm(messages.reset, {
+        title: commonMessages.closeWindow,
+        kind: "warning",
+        okLabel: commonMessages.closeWindow,
+        cancelLabel: commonMessages.cancel,
+      });
+      if (shouldClose) {
+        await destroyCurrentWindow();
+      }
+    }).then((stop) => {
+      if (active) unlisten = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [dirty, messages, commonMessages]);
+
   async function initialize() {
-    await aiStore.ensureLoaded();
+    await aiStore.ensureModelsLoaded();
     const modelId = new URLSearchParams(window.location.search).get("id");
 
     if (modelId) {
@@ -29,6 +65,9 @@ export default function ModelEditorView() {
       if (model) {
         setSelectedId(model.id);
         setDraft({ ...model });
+        setApiKey("");
+        setStoredCredentialAction("keep");
+        setDirty(false);
         await syncWindowTitle(true);
         return;
       }
@@ -36,11 +75,40 @@ export default function ModelEditorView() {
 
     setSelectedId(null);
     setDraft(aiStore.createModel());
+    setApiKey("");
+    setStoredCredentialAction("keep");
+    setDirty(false);
     await syncWindowTitle(false);
   }
 
   function patchDraft(patch: Partial<AiModelConfig>) {
     setDraft((current) => ({ ...current, ...patch }));
+    setDirty(true);
+  }
+
+  function updateApiKey(value: string) {
+    setApiKey(value);
+    setStoredCredentialAction("keep");
+    setDirty(true);
+  }
+
+  function clearCredential() {
+    setApiKey("");
+    setStoredCredentialAction("clear");
+    setDirty(true);
+  }
+
+  function keepCredential() {
+    setStoredCredentialAction("keep");
+    setDirty(true);
+  }
+
+  function credentialUpdate(): AiModelCredentialUpdate {
+    const value = apiKey.trim();
+    if (value) {
+      return { action: "set", value };
+    }
+    return { action: storedCredentialAction };
   }
 
   function validateDraft() {
@@ -50,7 +118,7 @@ export default function ModelEditorView() {
     if (!draft.baseUrl.trim()) {
       return messages.validationBaseUrl;
     }
-    if (!selectedId && !draft.apiKey.trim()) {
+    if (!selectedId && !apiKey.trim()) {
       return messages.validationApiKey;
     }
     if (!draft.model.trim()) {
@@ -61,7 +129,7 @@ export default function ModelEditorView() {
 
   async function syncWindowTitle(isEdit: boolean) {
     try {
-      await getCurrentWindow().setTitle(isEdit ? messages.editorEditTitle : messages.editorNewTitle);
+      await setCurrentWindowTitle(isEdit ? messages.editorEditTitle : messages.editorNewTitle);
     } catch {
       // ignore
     }
@@ -76,22 +144,33 @@ export default function ModelEditorView() {
       return;
     }
 
-    await aiStore.saveModel({
-      ...draft,
-      name: draft.name.trim(),
-      baseUrl: draft.baseUrl.trim(),
-      apiKey: draft.apiKey.trim(),
-      model: draft.model.trim(),
-    });
-
-    setSelectedId(draft.id);
-    setDraft({ ...(aiStore.getModelById(draft.id) ?? draft) });
-    setErrorMessage("");
-    await syncWindowTitle(true);
-    await message(
-      formatMessage(isEditing ? messages.saveSuccessUpdated : messages.saveSuccessCreated, { name: draft.name }),
-      { title: messages.title, kind: "info" },
-    );
+    try {
+      await aiStore.saveModel({
+        id: draft.id,
+        name: draft.name.trim(),
+        baseUrl: draft.baseUrl.trim(),
+        model: draft.model.trim(),
+        enabled: draft.enabled,
+        isDefault: draft.isDefault,
+        createdAt: draft.createdAt,
+        updatedAt: draft.updatedAt,
+        credential: credentialUpdate(),
+      });
+      setSelectedId(draft.id);
+      setDraft({ ...(aiStore.getModelById(draft.id) ?? draft) });
+      setApiKey("");
+      setStoredCredentialAction("keep");
+      setDirty(false);
+      setErrorMessage("");
+      await publishEntityChanged({ entity: "model", id: draft.id, action: "saved" }).catch(() => undefined);
+      await syncWindowTitle(true);
+      await message(
+        formatMessage(isEditing ? messages.saveSuccessUpdated : messages.saveSuccessCreated, { name: draft.name }),
+        { title: messages.title, kind: "info" },
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function removeModel() {
@@ -109,13 +188,30 @@ export default function ModelEditorView() {
       return;
     }
 
-    await aiStore.deleteModel(selectedModel.id);
-    resetDraft();
+    try {
+      await aiStore.deleteModel(selectedModel.id);
+      await publishEntityChanged({ entity: "model", id: selectedModel.id, action: "deleted" }).catch(() => undefined);
+      resetDraft(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
-  function resetDraft() {
+  async function resetDraft(force = false) {
+    if (!force && dirty) {
+      const confirmed = await confirm(messages.reset, {
+        title: messages.reset,
+        kind: "warning",
+        okLabel: messages.reset,
+        cancelLabel: commonMessages.cancel,
+      });
+      if (!confirmed) return;
+    }
     setSelectedId(null);
     setDraft(aiStore.createModel());
+    setApiKey("");
+    setStoredCredentialAction("keep");
+    setDirty(false);
     setErrorMessage("");
     void syncWindowTitle(false);
   }
@@ -145,7 +241,30 @@ export default function ModelEditorView() {
             </div>
             <div className="field">
               <label htmlFor="model-api-key">{messages.apiKey}</label>
-              <input id="model-api-key" value={draft.apiKey} onChange={(event) => patchDraft({ apiKey: event.target.value })} type="password" placeholder={messages.apiKeyPlaceholder} autoComplete="off" />
+              <input
+                id="model-api-key"
+                value={apiKey}
+                onChange={(event) => updateApiKey(event.target.value)}
+                type="password"
+                placeholder={selectedId ? messages.apiKeyKeepPlaceholder : messages.apiKeyPlaceholder}
+                autoComplete="new-password"
+              />
+              {selectedId && storedCredentialAction === "clear" ? (
+                <p className="field-copy danger-text">{messages.credentialClearPending}</p>
+              ) : selectedId && draft.credentialPresent ? (
+                <p className="field-copy">{messages.credentialStored}</p>
+              ) : selectedId ? (
+                <p className="field-copy">{messages.credentialMissing}</p>
+              ) : null}
+              {selectedId && draft.credentialPresent && !apiKey.trim() && (
+                <button
+                  className={storedCredentialAction === "clear" ? "text-button" : "text-button danger-text"}
+                  type="button"
+                  onClick={storedCredentialAction === "clear" ? keepCredential : clearCredential}
+                >
+                  {storedCredentialAction === "clear" ? messages.keepCredential : messages.clearCredential}
+                </button>
+              )}
             </div>
             <div className="field">
               <label htmlFor="model-id">{messages.model}</label>
@@ -171,7 +290,7 @@ export default function ModelEditorView() {
           <button className="primary-button" type="button" onClick={save}>
             {messages.save}
           </button>
-          <button className="secondary-button" type="button" onClick={resetDraft}>
+          <button className="secondary-button" type="button" onClick={() => void resetDraft()}>
             {messages.reset}
           </button>
           {selectedId && (

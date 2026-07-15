@@ -1,14 +1,25 @@
 import type { MeetingJob } from "@/shared/types/meeting";
 
-const activeLocalStatuses = new Set([
+const activeStatuses = new Set([
   "queued",
   "transcribing",
   "speaker_processing",
   "summarizing",
 ]);
 
-export function hasActiveLocalJobs(jobs: MeetingJob[]) {
-  return jobs.some((job) => activeLocalStatuses.has(job.overallStatus));
+export function hasActiveJobs(jobs: MeetingJob[]) {
+  return jobs.some((job) => activeStatuses.has(job.overallStatus));
+}
+
+function hasSummaryContent(job: MeetingJob) {
+  return Boolean(
+    job.summary.overview
+    || job.summary.topics.length
+    || job.summary.decisions.length
+    || job.summary.actionItems.length
+    || job.summary.risks?.length
+    || job.summary.followUps?.length,
+  );
 }
 
 export function mergeJobSnapshot(
@@ -20,14 +31,21 @@ export function mergeJobSnapshot(
     return incoming;
   }
 
+  const hasIncomingSummary = incoming.summaryRuns.length > 0 || hasSummaryContent(incoming);
+  const shouldPreserveSummary = !hasIncomingSummary
+    && incoming.activeSummaryRunId === existing.activeSummaryRunId;
+
   return {
     ...existing,
     ...incoming,
-    transcriptSegments: existing.transcriptSegments,
-    speakerSegments: existing.speakerSegments,
-    summaryRuns: existing.summaryRuns,
-    processLog: existing.processLog,
-    summary: existing.summary,
-    activeSummaryRunId: existing.activeSummaryRunId,
+    transcriptSegments: incoming.transcriptSegments.length
+      ? incoming.transcriptSegments
+      : existing.transcriptSegments,
+    speakerSegments: incoming.speakerSegments.length
+      ? incoming.speakerSegments
+      : existing.speakerSegments,
+    summaryRuns: shouldPreserveSummary ? existing.summaryRuns : incoming.summaryRuns,
+    processLog: incoming.processLog ?? existing.processLog,
+    summary: shouldPreserveSummary ? existing.summary : incoming.summary,
   } satisfies MeetingJob;
 }

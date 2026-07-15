@@ -1,14 +1,15 @@
 use crate::infrastructure::{
     ids, migrations,
     repositories::{
-        ai_models, ai_summary_runs, ai_templates, job_events, members, pet, pet_blind_box,
-        pet_check_in, pet_redeem_key, pet_store, runtime_state, settings,
+        ai_models, ai_summary_runs, ai_templates, farm, job_events, members, pet, pet_blind_box,
+        pet_check_in, pet_redeem_key, pet_store, runtime_state, settings, work_game,
     },
 };
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Transaction, TransactionBehavior};
 use std::{
+    collections::HashSet,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::Duration,
 };
@@ -16,44 +17,80 @@ use tauri::{AppHandle, Manager};
 
 pub type LocalResult<T> = Result<T, String>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalJobRunRecord {
+    pub job_id: String,
+    pub attempt_id: u64,
+    pub lease_token: u64,
+    pub status: String,
+    pub pid: Option<u32>,
+    pub process_identity: Option<String>,
+    pub heartbeat_at_ms: Option<u64>,
+    pub started_at_ms: Option<u64>,
+    pub output_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalJobRunLease {
+    pub attempt_id: u64,
+    pub lease_token: u64,
+    pub output_dir: String,
+}
+
 const MAX_DAILY_INTERACTION_PER_SOURCE: i64 = 20;
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-static INIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static INITIALIZED_DATABASES: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 pub use model::*;
 
+mod job_deletion_model;
+mod job_deletions;
 mod jobs;
 mod legacy;
 mod model;
 mod pet_growth;
 pub(crate) mod pet_leveling;
 mod progress;
-mod schema;
+pub(crate) mod schema;
+
+pub use job_deletion_model::{JobDeletionOperation, JobDeletionPhase};
 
 pub fn init_database(app: &AppHandle) -> LocalResult<()> {
-    let _guard = INIT_LOCK
-        .get_or_init(|| Mutex::new(()))
+    let path = database_path(app)?;
+    let mut initialized = INITIALIZED_DATABASES
+        .get_or_init(|| Mutex::new(HashSet::new()))
         .lock()
         .map_err(|err| format!("本地数据库初始化锁异常: {err}"))?;
-    let mut conn = open_connection(app)?;
+    if initialized.contains(&path) {
+        return Ok(());
+    }
+
+    let mut conn = open_connection_at_path(&path)?;
     schema::apply_schema(&conn)?;
     migrations::ensure_schema_version(&conn)?;
     schema::seed_builtin_templates(&conn)?;
     legacy::import_legacy_jobs(app, &mut conn)?;
+    initialized.insert(path);
     Ok(())
 }
 
 pub fn open_connection(app: &AppHandle) -> LocalResult<Connection> {
     let path = database_path(app)?;
-    let conn = Connection::open(&path)
+    open_connection_at_path(&path)
+}
+
+fn open_connection_at_path(path: &Path) -> LocalResult<Connection> {
+    let conn = Connection::open(path)
         .map_err(|err| format!("无法打开本地数据库 {}: {err}", path.display()))?;
     conn.busy_timeout(SQLITE_BUSY_TIMEOUT)
         .map_err(|err| format!("无法设置本地数据库等待超时 {}: {err}", path.display()))?;
     conn.execute_batch(
         "
+        PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
         PRAGMA busy_timeout = 5000;
+        PRAGMA synchronous = NORMAL;
         ",
     )
     .map_err(|err| format!("无法初始化本地数据库连接 {}: {err}", path.display()))?;
@@ -80,16 +117,15 @@ pub fn jobs_root(app: &AppHandle) -> LocalResult<PathBuf> {
     Ok(root)
 }
 
-pub fn job_dir(app: &AppHandle, job_id: &str) -> LocalResult<PathBuf> {
-    Ok(jobs_root(app)?.join(job_id))
-}
-
 pub fn list_jobs(app: &AppHandle) -> LocalResult<Vec<MeetingJob>> {
     init_database(app)?;
     let conn = open_connection(app)?;
     let mut stmt = conn
         .prepare(
             "SELECT id FROM jobs
+             WHERE NOT EXISTS (
+               SELECT 1 FROM job_deletion_ops WHERE job_deletion_ops.job_id = jobs.id
+             )
              ORDER BY datetime(created_at) DESC, created_at DESC",
         )
         .map_err(|err| err.to_string())?;
@@ -117,10 +153,77 @@ pub fn get_settings(app: &AppHandle) -> LocalResult<AppSettings> {
     settings::load_settings(&conn)
 }
 
-pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> LocalResult<()> {
+pub fn get_settings_snapshot(app: &AppHandle) -> LocalResult<AppSettingsSnapshot> {
     init_database(app)?;
     let conn = open_connection(app)?;
-    settings::save_settings(&conn, settings)
+    let (settings, settings_revision) = settings::load_settings_with_revision(&conn)?;
+    Ok(AppSettingsSnapshot {
+        settings,
+        settings_revision: Some(settings_revision),
+    })
+}
+
+pub fn get_ui_preferences(app: &AppHandle) -> LocalResult<UiPreferences> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    settings::load_ui_preferences(&conn)
+}
+
+pub fn set_runtime_component_source(
+    app: &AppHandle,
+    component: &str,
+    source: &str,
+) -> LocalResult<i64> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    settings::set_runtime_component_source(&conn, component, source)
+}
+
+pub fn publish_detected_runtime_path(
+    app: &AppHandle,
+    platform_id: &str,
+    state: &RuntimeComponentState,
+    path: &str,
+    expected_source: &str,
+    expected_generation: u64,
+) -> LocalResult<Option<i64>> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| error.to_string())?;
+    let revision = settings::publish_detected_runtime_path(
+        &tx,
+        platform_id,
+        &state.component,
+        path,
+        expected_source,
+        expected_generation,
+    )?;
+    if revision.is_none() {
+        return Ok(None);
+    }
+    runtime_state::save_runtime_component_state(&tx, platform_id, state)?;
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(revision)
+}
+
+pub fn save_settings_snapshot(
+    app: &AppHandle,
+    snapshot: &AppSettingsSnapshot,
+) -> LocalResult<AppSettingsSnapshot> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    let expected_revision = match snapshot.settings_revision {
+        Some(revision) => revision,
+        None => settings::load_settings_with_revision(&conn)?.1,
+    };
+    settings::save_settings_if_revision(&conn, &snapshot.settings, expected_revision)?;
+    let (settings, settings_revision) = settings::load_settings_with_revision(&conn)?;
+    Ok(AppSettingsSnapshot {
+        settings,
+        settings_revision: Some(settings_revision),
+    })
 }
 
 pub fn get_runtime_state(
@@ -161,76 +264,710 @@ pub fn save_runtime_component_state(
     runtime_state::save_runtime_component_state(&conn, platform_id, state)
 }
 
+pub fn get_work_market_state(app: &AppHandle) -> LocalResult<WorkMarketState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = farm::work_market_state_tx(&tx, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn get_farm_state(app: &AppHandle) -> LocalResult<FarmState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = farm::state_tx(&tx, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn plant_farm_crop(app: &AppHandle, plot_id: &str, crop_key: &str) -> LocalResult<FarmState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = farm::plant_crop_tx(&tx, plot_id, crop_key, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn water_farm_plot(app: &AppHandle, plot_id: &str) -> LocalResult<FarmState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = farm::water_plot_tx(&tx, plot_id, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn harvest_farm_plot(app: &AppHandle, plot_id: &str) -> LocalResult<FarmHarvestResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let (state, harvest) = farm::harvest_plot_tx(&tx, plot_id, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(FarmHarvestResult { state, harvest })
+}
+
+pub fn list_farm_harvest_ledger(
+    app: &AppHandle,
+    limit: usize,
+) -> LocalResult<Vec<FarmHarvestLedgerEntry>> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    farm::state_tx(&tx, &now)?;
+    let entries = farm::list_harvest_ledger_tx(&tx, limit)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(entries)
+}
+
+pub fn get_work_game_state(app: &AppHandle, game_key: &str) -> LocalResult<WorkGameState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = work_game::state_tx(&tx, game_key, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn start_work_game_task(
+    app: &AppHandle,
+    game_key: &str,
+    task_id: &str,
+    job_key: &str,
+) -> LocalResult<WorkGameState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = work_game::start_task_tx(&tx, game_key, task_id, job_key, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn care_work_game_task(
+    app: &AppHandle,
+    game_key: &str,
+    task_id: &str,
+) -> LocalResult<WorkGameState> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let state = work_game::care_task_tx(&tx, game_key, task_id, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(state)
+}
+
+pub fn claim_work_game_task(
+    app: &AppHandle,
+    game_key: &str,
+    task_id: &str,
+) -> LocalResult<WorkGameClaimResult> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    let result = work_game::claim_task_tx(&tx, game_key, task_id, &now)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(result)
+}
+
 pub fn save_job_snapshot(app: &AppHandle, job: &MeetingJob) -> LocalResult<()> {
     init_database(app)?;
     let mut conn = open_connection(app)?;
     let tx = conn.transaction().map_err(|err| err.to_string())?;
     jobs::save_job_snapshot_tx(&tx, job)?;
+    if job.source == "local" {
+        insert_queued_job_run_tx(&tx, &job.id)?;
+    }
     job_events::append_job_event_tx(&tx, &job.id, "created", "任务已创建。", None)?;
     tx.commit().map_err(|err| err.to_string())
 }
 
-pub fn update_job_statuses(
+pub fn list_recoverable_local_job_runs(app: &AppHandle) -> LocalResult<Vec<LocalJobRunRecord>> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    ensure_recoverable_job_run_rows(&conn)?;
+    list_recoverable_local_job_runs_on_connection(&conn)
+}
+
+pub fn begin_local_job_run(
     app: &AppHandle,
     job_id: &str,
-    asr_status: &str,
-    summary_status: &str,
-    overall_status: &str,
-    failure_reason: Option<&str>,
-) -> LocalResult<()> {
+    started_at_ms: u64,
+) -> LocalResult<LocalJobRunLease> {
     init_database(app)?;
     let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
+    begin_local_job_run_on_connection(&mut conn, job_id, started_at_ms)
+}
+
+pub fn requeue_recovered_local_job_run(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    requeue_recovered_local_job_run_on_connection(&mut conn, job_id, attempt_id, lease_token)
+}
+
+pub fn fence_local_job_run(app: &AppHandle, job_id: &str) -> LocalResult<()> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    tx.execute(
+        "INSERT INTO job_runs (job_id, attempt_id, lease_token, status)
+         VALUES (?1, 0, 1, 'fenced')
+         ON CONFLICT(job_id) DO UPDATE SET
+           lease_token = job_runs.lease_token + 1,
+           status = 'fenced',
+           pid = NULL,
+           process_identity = NULL,
+           heartbeat_at_ms = NULL,
+           finished_at_ms = NULL,
+           output_dir = NULL",
+        params![job_id],
+    )
+    .map_err(|err| err.to_string())?;
+    tx.commit().map_err(|err| err.to_string())
+}
+
+pub fn attach_local_job_process(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    pid: u32,
+    process_identity: &str,
+    heartbeat_at_ms: u64,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    let updated = conn
+        .execute(
+            "UPDATE job_runs
+             SET pid = ?4,
+                 process_identity = ?5,
+                 heartbeat_at_ms = ?6
+             WHERE job_id = ?1
+               AND attempt_id = ?2
+               AND lease_token = ?3
+               AND status = 'running'",
+            params![
+                job_id,
+                as_sql_i64(attempt_id, "attempt_id")?,
+                as_sql_i64(lease_token, "lease_token")?,
+                i64::from(pid),
+                process_identity,
+                as_sql_i64(heartbeat_at_ms, "heartbeat_at_ms")?
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(updated == 1)
+}
+
+pub fn heartbeat_local_job_run(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    pid: Option<u32>,
+    heartbeat_at_ms: u64,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    let updated = conn
+        .execute(
+            "UPDATE job_runs
+             SET heartbeat_at_ms = ?5
+             WHERE job_id = ?1
+               AND attempt_id = ?2
+               AND lease_token = ?3
+               AND status = 'running'
+               AND (?4 IS NULL OR pid = ?4)",
+            params![
+                job_id,
+                as_sql_i64(attempt_id, "attempt_id")?,
+                as_sql_i64(lease_token, "lease_token")?,
+                pid.map(i64::from),
+                as_sql_i64(heartbeat_at_ms, "heartbeat_at_ms")?
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(updated == 1)
+}
+
+pub fn is_current_local_job_run(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    is_current_local_job_run_on_connection(&conn, job_id, attempt_id, lease_token)
+}
+
+pub fn update_local_job_process_log(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    process_log: &str,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    let updated = conn
+        .execute(
+            "UPDATE jobs
+             SET process_log = ?4
+             WHERE id = ?1
+               AND EXISTS (
+                 SELECT 1 FROM job_runs
+                 WHERE job_id = ?1
+                   AND attempt_id = ?2
+                   AND lease_token = ?3
+                   AND status = 'running'
+               )",
+            params![
+                job_id,
+                as_sql_i64(attempt_id, "attempt_id")?,
+                as_sql_i64(lease_token, "lease_token")?,
+                process_log
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(updated == 1)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn complete_local_job_run(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    transcript_segments: &[TranscriptSegment],
+    speaker_segments: &[TranscriptSegment],
+    duration_minutes: u32,
+    processing_finished_at_ms: u64,
+    processing_duration_seconds: Option<u32>,
+    process_log: &str,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    complete_local_job_run_on_connection(
+        &mut conn,
+        job_id,
+        attempt_id,
+        lease_token,
+        transcript_segments,
+        speaker_segments,
+        duration_minutes,
+        processing_finished_at_ms,
+        processing_duration_seconds,
+        process_log,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn fail_local_job_run(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    processing_finished_at_ms: u64,
+    processing_duration_seconds: Option<u32>,
+    failure_reason: &str,
+    process_log: &str,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    fail_local_job_run_on_connection(
+        &mut conn,
+        job_id,
+        attempt_id,
+        lease_token,
+        processing_finished_at_ms,
+        processing_duration_seconds,
+        failure_reason,
+        process_log,
+    )
+}
+
+pub fn local_job_run_has_status(
+    app: &AppHandle,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    status: &str,
+) -> LocalResult<bool> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    let exists = conn
+        .query_row(
+            "SELECT EXISTS (
+               SELECT 1 FROM job_runs
+               WHERE job_id = ?1 AND attempt_id = ?2 AND lease_token = ?3 AND status = ?4
+             )",
+            params![
+                job_id,
+                as_sql_i64(attempt_id, "attempt_id")?,
+                as_sql_i64(lease_token, "lease_token")?,
+                status
+            ],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(exists)
+}
+
+fn insert_queued_job_run_tx(tx: &Transaction<'_>, job_id: &str) -> LocalResult<()> {
+    tx.execute(
+        "INSERT INTO job_runs (job_id, attempt_id, lease_token, status)
+         VALUES (?1, 0, 0, 'queued')
+         ON CONFLICT(job_id) DO UPDATE SET
+           status = 'queued',
+           pid = NULL,
+           process_identity = NULL,
+           heartbeat_at_ms = NULL,
+           started_at_ms = NULL,
+           finished_at_ms = NULL,
+           output_dir = NULL,
+           last_error = NULL",
+        params![job_id],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn ensure_recoverable_job_run_rows(conn: &Connection) -> LocalResult<()> {
+    conn.execute(
+        "INSERT INTO job_runs (
+           job_id, attempt_id, lease_token, status, started_at_ms, output_dir
+         )
+         SELECT id,
+                CASE WHEN overall_status = 'queued' THEN 0 ELSE 1 END,
+                CASE WHEN overall_status = 'queued' THEN 0 ELSE 1 END,
+                CASE WHEN overall_status = 'queued' THEN 'queued' ELSE 'running' END,
+                processing_started_at_ms,
+                CASE
+                  WHEN overall_status = 'queued' THEN NULL
+                  ELSE 'attempts/attempt-1-1'
+                END
+         FROM jobs
+         WHERE overall_status IN ('queued', 'transcribing', 'speaker_processing')
+           AND NOT EXISTS (
+             SELECT 1 FROM job_deletion_ops WHERE job_deletion_ops.job_id = jobs.id
+           )
+           AND NOT EXISTS (SELECT 1 FROM job_runs WHERE job_runs.job_id = jobs.id)",
+        [],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn list_recoverable_local_job_runs_on_connection(
+    conn: &Connection,
+) -> LocalResult<Vec<LocalJobRunRecord>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT job_id, attempt_id, lease_token, status, pid, process_identity,
+                    heartbeat_at_ms, started_at_ms, output_dir
+             FROM job_runs
+             WHERE status IN ('queued', 'running')
+               AND NOT EXISTS (
+                 SELECT 1 FROM job_deletion_ops
+                 WHERE job_deletion_ops.job_id = job_runs.job_id
+               )
+             ORDER BY COALESCE(started_at_ms, 0), job_id",
+        )
+        .map_err(|err| err.to_string())?;
+    let runs = statement
+        .query_map([], |row| {
+            Ok(LocalJobRunRecord {
+                job_id: row.get(0)?,
+                attempt_id: row.get::<_, i64>(1)? as u64,
+                lease_token: row.get::<_, i64>(2)? as u64,
+                status: row.get(3)?,
+                pid: row.get::<_, Option<i64>>(4)?.map(|value| value as u32),
+                process_identity: row.get(5)?,
+                heartbeat_at_ms: row.get::<_, Option<i64>>(6)?.map(|value| value as u64),
+                started_at_ms: row.get::<_, Option<i64>>(7)?.map(|value| value as u64),
+                output_dir: row.get(8)?,
+            })
+        })
+        .map_err(|err| err.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())?;
+    Ok(runs)
+}
+
+fn begin_local_job_run_on_connection(
+    conn: &mut Connection,
+    job_id: &str,
+    started_at_ms: u64,
+) -> LocalResult<LocalJobRunLease> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    let started_at = as_sql_i64(started_at_ms, "started_at_ms")?;
+    let (attempt_id, lease_token) = tx
+        .query_row(
+            "INSERT INTO job_runs (
+               job_id, attempt_id, lease_token, status, started_at_ms, heartbeat_at_ms,
+               pid, process_identity, finished_at_ms, output_dir, last_error
+             ) VALUES (?1, 1, 1, 'running', ?2, ?2, NULL, NULL, NULL, NULL, NULL)
+             ON CONFLICT(job_id) DO UPDATE SET
+               attempt_id = job_runs.attempt_id + 1,
+               lease_token = job_runs.lease_token + 1,
+               status = 'running',
+               started_at_ms = excluded.started_at_ms,
+               heartbeat_at_ms = excluded.heartbeat_at_ms,
+               pid = NULL,
+               process_identity = NULL,
+               finished_at_ms = NULL,
+               output_dir = NULL,
+               last_error = NULL
+             RETURNING attempt_id, lease_token",
+            params![job_id, started_at],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .map_err(|err| err.to_string())?;
+    let output_dir = format!("attempts/attempt-{attempt_id}-{lease_token}");
+    tx.execute(
+        "UPDATE job_runs SET output_dir = ?2 WHERE job_id = ?1",
+        params![job_id, output_dir],
+    )
+    .map_err(|err| err.to_string())?;
+    let updated = tx
+        .execute(
+            "UPDATE jobs
+             SET asr_status = 'transcribing',
+                 summary_status = 'idle',
+                 overall_status = 'transcribing',
+                 failure_reason = NULL,
+                 processing_started_at_ms = ?2,
+                 processing_finished_at_ms = NULL,
+                 processing_duration_seconds = NULL
+             WHERE id = ?1",
+            params![job_id, started_at],
+        )
+        .map_err(|err| err.to_string())?;
+    if updated != 1 {
+        return Err("没有找到这个任务。".into());
+    }
+    job_events::append_job_event_tx(&tx, job_id, "started", "任务开始处理。", None)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(LocalJobRunLease {
+        attempt_id: attempt_id as u64,
+        lease_token: lease_token as u64,
+        output_dir,
+    })
+}
+
+fn requeue_recovered_local_job_run_on_connection(
+    conn: &mut Connection,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+) -> LocalResult<bool> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    let updated = tx
+        .execute(
+            "UPDATE job_runs
+             SET lease_token = lease_token + 1,
+                 status = 'queued',
+                 pid = NULL,
+                 process_identity = NULL,
+                 heartbeat_at_ms = NULL,
+                 started_at_ms = NULL,
+                 finished_at_ms = NULL,
+                 output_dir = NULL,
+                 last_error = NULL
+             WHERE job_id = ?1 AND attempt_id = ?2 AND lease_token = ?3",
+            params![
+                job_id,
+                as_sql_i64(attempt_id, "attempt_id")?,
+                as_sql_i64(lease_token, "lease_token")?
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    if updated == 1 {
+        tx.execute(
+            "UPDATE jobs
+             SET asr_status = 'queued', summary_status = 'idle', overall_status = 'queued',
+                 failure_reason = NULL, processing_started_at_ms = NULL,
+                 processing_finished_at_ms = NULL, processing_duration_seconds = NULL
+             WHERE id = ?1",
+            params![job_id],
+        )
+        .map_err(|err| err.to_string())?;
+    }
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(updated == 1)
+}
+
+fn is_current_local_job_run_on_connection(
+    conn: &Connection,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+) -> LocalResult<bool> {
+    conn.query_row(
+        "SELECT EXISTS (
+           SELECT 1 FROM job_runs
+           WHERE job_id = ?1 AND attempt_id = ?2 AND lease_token = ?3 AND status = 'running'
+         )",
+        params![
+            job_id,
+            as_sql_i64(attempt_id, "attempt_id")?,
+            as_sql_i64(lease_token, "lease_token")?
+        ],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(|err| err.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn complete_local_job_run_on_connection(
+    conn: &mut Connection,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    transcript_segments: &[TranscriptSegment],
+    speaker_segments: &[TranscriptSegment],
+    duration_minutes: u32,
+    processing_finished_at_ms: u64,
+    processing_duration_seconds: Option<u32>,
+    process_log: &str,
+) -> LocalResult<bool> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    if !claim_current_run_tx(&tx, job_id, attempt_id, lease_token, "completed")? {
+        return Ok(false);
+    }
+    jobs::replace_segments_tx(&tx, job_id, "transcript", transcript_segments)?;
+    jobs::replace_segments_tx(&tx, job_id, "speaker", speaker_segments)?;
     tx.execute(
         "UPDATE jobs
-         SET asr_status = ?2,
-             summary_status = ?3,
-             overall_status = ?4,
-             failure_reason = ?5
+         SET duration_minutes = ?2,
+             processing_finished_at_ms = ?3,
+             processing_duration_seconds = ?4,
+             summary_status = 'idle',
+             asr_status = 'completed',
+             overall_status = 'completed',
+             failure_reason = NULL,
+             process_log = ?5
          WHERE id = ?1",
         params![
             job_id,
-            asr_status,
-            summary_status,
-            overall_status,
+            i64::from(duration_minutes),
+            as_sql_i64(processing_finished_at_ms, "processing_finished_at_ms")?,
+            processing_duration_seconds.map(i64::from),
+            process_log
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    job_events::append_job_event_tx(&tx, job_id, "completed", "任务处理完成。", None)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fail_local_job_run_on_connection(
+    conn: &mut Connection,
+    job_id: &str,
+    attempt_id: u64,
+    lease_token: u64,
+    processing_finished_at_ms: u64,
+    processing_duration_seconds: Option<u32>,
+    failure_reason: &str,
+    process_log: &str,
+) -> LocalResult<bool> {
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    if !claim_current_run_tx(&tx, job_id, attempt_id, lease_token, "failed")? {
+        return Ok(false);
+    }
+    tx.execute(
+        "UPDATE job_runs SET last_error = ?4 WHERE job_id = ?1 AND attempt_id = ?2 AND lease_token = ?3",
+        params![
+            job_id,
+            as_sql_i64(attempt_id, "attempt_id")?,
+            as_sql_i64(lease_token, "lease_token")?,
             failure_reason
         ],
     )
     .map_err(|err| err.to_string())?;
-    job_events::append_job_event_tx(
-        &tx,
-        job_id,
-        overall_status,
-        failure_reason.unwrap_or(""),
-        None,
-    )?;
-    tx.commit().map_err(|err| err.to_string())?;
-    Ok(())
-}
-
-pub fn update_job_process_log(app: &AppHandle, job_id: &str, process_log: &str) -> LocalResult<()> {
-    init_database(app)?;
-    let conn = open_connection(app)?;
-    conn.execute(
-        "UPDATE jobs SET process_log = ?2 WHERE id = ?1",
-        params![job_id, process_log],
+    tx.execute(
+        "UPDATE jobs
+         SET processing_finished_at_ms = ?2,
+             processing_duration_seconds = ?3,
+             asr_status = 'failed',
+             summary_status = 'idle',
+             overall_status = 'failed',
+             failure_reason = ?4,
+             process_log = ?5
+         WHERE id = ?1",
+        params![
+            job_id,
+            as_sql_i64(processing_finished_at_ms, "processing_finished_at_ms")?,
+            processing_duration_seconds.map(i64::from),
+            failure_reason,
+            process_log
+        ],
     )
     .map_err(|err| err.to_string())?;
-    Ok(())
+    job_events::append_job_event_tx(&tx, job_id, "failed", failure_reason, None)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(true)
 }
 
-pub fn replace_job_segments(
-    app: &AppHandle,
+fn claim_current_run_tx(
+    tx: &Transaction<'_>,
     job_id: &str,
-    transcript_segments: &[TranscriptSegment],
-    speaker_segments: &[TranscriptSegment],
-) -> LocalResult<()> {
-    init_database(app)?;
-    let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
-    jobs::replace_segments_tx(&tx, job_id, "transcript", transcript_segments)?;
-    jobs::replace_segments_tx(&tx, job_id, "speaker", speaker_segments)?;
-    tx.commit().map_err(|err| err.to_string())
+    attempt_id: u64,
+    lease_token: u64,
+    terminal_status: &str,
+) -> LocalResult<bool> {
+    let updated = tx
+        .execute(
+            "UPDATE job_runs
+             SET status = ?4, finished_at_ms = ?5, pid = NULL, heartbeat_at_ms = NULL
+             WHERE job_id = ?1 AND attempt_id = ?2 AND lease_token = ?3 AND status = 'running'",
+            params![
+                job_id,
+                as_sql_i64(attempt_id, "attempt_id")?,
+                as_sql_i64(lease_token, "lease_token")?,
+                terminal_status,
+                as_sql_i64(
+                    crate::infrastructure::time::unix_timestamp_millis() as u64,
+                    "finished_at_ms"
+                )?
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(updated == 1)
+}
+
+fn as_sql_i64(value: u64, label: &str) -> LocalResult<i64> {
+    i64::try_from(value).map_err(|_| format!("{label} 超出 SQLite INTEGER 范围。"))
 }
 
 pub fn rename_job_speaker(
@@ -274,98 +1011,6 @@ pub fn rename_job_speaker(
     tx.commit().map_err(|err| err.to_string())
 }
 
-pub fn update_job_completion(
-    app: &AppHandle,
-    job_id: &str,
-    duration_minutes: u32,
-    processing_finished_at_ms: u64,
-    processing_duration_seconds: Option<u32>,
-    failure_reason: Option<&str>,
-) -> LocalResult<()> {
-    init_database(app)?;
-    let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
-    tx.execute(
-        "UPDATE jobs
-         SET duration_minutes = ?2,
-             processing_finished_at_ms = ?3,
-             processing_duration_seconds = ?4,
-             summary_status = ?5,
-             asr_status = ?6,
-             overall_status = ?7,
-             failure_reason = ?8
-         WHERE id = ?1",
-        params![
-            job_id,
-            duration_minutes,
-            processing_finished_at_ms as i64,
-            processing_duration_seconds.map(i64::from),
-            "idle",
-            "completed",
-            "completed",
-            failure_reason
-        ],
-    )
-    .map_err(|err| err.to_string())?;
-    job_events::append_job_event_tx(&tx, job_id, "completed", "任务处理完成。", None)?;
-    tx.commit().map_err(|err| err.to_string())?;
-    Ok(())
-}
-
-pub fn mark_job_processing_started(
-    app: &AppHandle,
-    job_id: &str,
-    processing_started_at_ms: u64,
-) -> LocalResult<()> {
-    init_database(app)?;
-    let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
-    tx.execute(
-        "UPDATE jobs
-         SET processing_started_at_ms = ?2,
-             processing_finished_at_ms = NULL,
-             processing_duration_seconds = NULL
-         WHERE id = ?1",
-        params![job_id, processing_started_at_ms as i64],
-    )
-    .map_err(|err| err.to_string())?;
-    job_events::append_job_event_tx(&tx, job_id, "started", "任务开始处理。", None)?;
-    tx.commit().map_err(|err| err.to_string())?;
-    Ok(())
-}
-
-pub fn update_job_failure(
-    app: &AppHandle,
-    job_id: &str,
-    processing_finished_at_ms: u64,
-    processing_duration_seconds: Option<u32>,
-    failure_reason: &str,
-) -> LocalResult<()> {
-    init_database(app)?;
-    let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
-    tx.execute(
-        "UPDATE jobs
-         SET processing_finished_at_ms = ?2,
-             processing_duration_seconds = ?3,
-             asr_status = 'failed',
-             summary_status = 'idle',
-             overall_status = 'failed',
-             failure_reason = ?4
-         WHERE id = ?1",
-        params![
-            job_id,
-            processing_finished_at_ms as i64,
-            processing_duration_seconds.map(i64::from),
-            failure_reason
-        ],
-    )
-    .map_err(|err| err.to_string())?;
-    job_events::append_job_event_tx(&tx, job_id, "failed", failure_reason, None)?;
-    tx.commit().map_err(|err| err.to_string())?;
-    Ok(())
-}
-
 pub fn reset_job_for_retry(
     app: &AppHandle,
     job_id: &str,
@@ -374,6 +1019,15 @@ pub fn reset_job_for_retry(
 ) -> LocalResult<()> {
     init_database(app)?;
     let mut conn = open_connection(app)?;
+    reset_job_for_retry_on_connection(&mut conn, job_id, python_path, runner_script_path)
+}
+
+fn reset_job_for_retry_on_connection(
+    conn: &mut Connection,
+    job_id: &str,
+    python_path: &str,
+    runner_script_path: &str,
+) -> LocalResult<()> {
     let tx = conn.transaction().map_err(|err| err.to_string())?;
     tx.execute(
         "UPDATE jobs
@@ -404,37 +1058,122 @@ pub fn reset_job_for_retry(
     jobs::replace_segments_tx(&tx, job_id, "transcript", &[])?;
     jobs::replace_segments_tx(&tx, job_id, "speaker", &[])?;
     ai_summary_runs::delete_summary_runs_for_job_tx(&tx, job_id)?;
+    insert_queued_job_run_tx(&tx, job_id)?;
     job_events::append_job_event_tx(&tx, job_id, "retried", "任务已重试。", None)?;
     tx.commit().map_err(|err| err.to_string())
 }
 
-pub fn delete_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
+pub fn prepare_job_deletion(app: &AppHandle, job_id: &str) -> LocalResult<JobDeletionOperation> {
     init_database(app)?;
     let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
-    ai_summary_runs::delete_summary_runs_for_job_tx(&tx, job_id)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    let operation_id = ids::timestamped_id("delete");
+    let trash_name = format!("{job_id}-{operation_id}");
+    let operation = job_deletions::prepare_tx(
+        &tx,
+        &operation_id,
+        job_id,
+        &trash_name,
+        crate::infrastructure::time::unix_timestamp_millis() as u64,
+    )?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(operation)
+}
+
+pub fn list_pending_job_deletions(app: &AppHandle) -> LocalResult<Vec<JobDeletionOperation>> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    job_deletions::list(&conn)
+}
+
+pub fn job_exists(app: &AppHandle, job_id: &str) -> LocalResult<bool> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM jobs WHERE id = ?1)",
+        params![job_id],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(|err| err.to_string())
+}
+
+pub fn mark_job_deletion_phase(
+    app: &AppHandle,
+    operation_id: &str,
+    phase: JobDeletionPhase,
+) -> LocalResult<()> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    job_deletions::set_phase(
+        &conn,
+        operation_id,
+        phase,
+        crate::infrastructure::time::unix_timestamp_millis() as u64,
+    )
+}
+
+pub fn record_job_deletion_error(
+    app: &AppHandle,
+    operation_id: &str,
+    error: &str,
+) -> LocalResult<()> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    job_deletions::record_error(
+        &conn,
+        operation_id,
+        error,
+        crate::infrastructure::time::unix_timestamp_millis() as u64,
+    )
+}
+
+pub fn delete_job_for_operation(
+    app: &AppHandle,
+    operation: &JobDeletionOperation,
+) -> LocalResult<()> {
+    init_database(app)?;
+    let mut conn = open_connection(app)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| err.to_string())?;
+    job_deletions::require(&tx, &operation.operation_id, &operation.job_id)?;
+    ai_summary_runs::delete_summary_runs_for_job_tx(&tx, &operation.job_id)?;
     tx.execute(
         "DELETE FROM transcript_segments WHERE job_id = ?1",
-        params![job_id],
+        params![operation.job_id],
     )
     .map_err(|err| err.to_string())?;
     tx.execute(
         "DELETE FROM job_source_files WHERE job_id = ?1",
-        params![job_id],
+        params![operation.job_id],
     )
     .map_err(|err| err.to_string())?;
-    tx.execute("DELETE FROM jobs WHERE id = ?1", params![job_id])
+    tx.execute("DELETE FROM jobs WHERE id = ?1", params![operation.job_id])
         .map_err(|err| err.to_string())?;
+    job_deletions::set_phase(
+        &tx,
+        &operation.operation_id,
+        JobDeletionPhase::DatabaseDeleted,
+        crate::infrastructure::time::unix_timestamp_millis() as u64,
+    )?;
     tx.commit().map_err(|err| err.to_string())
 }
 
-pub fn list_ai_models(app: &AppHandle) -> LocalResult<Vec<AiModelConfig>> {
+pub fn complete_job_deletion_operation(app: &AppHandle, operation_id: &str) -> LocalResult<()> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    job_deletions::finish(&conn, operation_id)
+}
+
+pub fn list_ai_models(app: &AppHandle) -> LocalResult<Vec<AiModelMetadata>> {
     init_database(app)?;
     let conn = open_connection(app)?;
     ai_models::list_ai_models(&conn)
 }
 
-pub fn save_ai_model(app: &AppHandle, model: &AiModelConfig) -> LocalResult<()> {
+pub fn save_ai_model(app: &AppHandle, model: &AiModelSaveInput) -> LocalResult<()> {
     init_database(app)?;
     let mut conn = open_connection(app)?;
     let tx = conn.transaction().map_err(|err| err.to_string())?;
@@ -838,53 +1577,155 @@ pub fn import_meeting_members(
     Ok(MeetingMemberImportResult { created, updated })
 }
 
-pub fn save_ai_summary_run(app: &AppHandle, run: &AiSummaryRun) -> LocalResult<()> {
-    init_database(app)?;
-    let conn = open_connection(app)?;
-    ai_summary_runs::save_summary_run(&conn, run)?;
-    ai_summary_runs::update_job_summary_status_after_save(&conn, run)
-}
-
 pub fn set_active_ai_summary_run(app: &AppHandle, job_id: &str, run_id: &str) -> LocalResult<()> {
     init_database(app)?;
     let conn = open_connection(app)?;
-    conn.execute(
-        "UPDATE jobs SET active_summary_run_id = ?2 WHERE id = ?1",
-        params![job_id, run_id],
-    )
-    .map_err(|err| err.to_string())?;
-    Ok(())
+    ai_summary_runs::set_active_summary_run(&conn, job_id, run_id)
 }
 
 pub fn delete_ai_summary_run(app: &AppHandle, job_id: &str, run_id: &str) -> LocalResult<()> {
     init_database(app)?;
-    let conn = open_connection(app)?;
-    ai_summary_runs::delete_summary_run(&conn, job_id, run_id)?;
+    let mut conn = open_connection(app)?;
+    ai_summary_runs::delete_summary_run(&mut conn, job_id, run_id)
+}
 
-    let remaining_runs = ai_summary_runs::list_summary_runs(&conn, job_id)?;
-    let next_active_run = remaining_runs
-        .iter()
-        .find(|run| run.status == "completed" && run.result.is_some())
-        .cloned()
-        .or_else(|| remaining_runs.first().cloned());
-    let summary_status = if remaining_runs.iter().any(|run| run.status == "running") {
-        "summarizing"
-    } else if next_active_run
-        .as_ref()
-        .and_then(|run| run.result.as_ref())
-        .is_some()
-    {
-        "completed"
-    } else if remaining_runs.iter().any(|run| run.status == "failed") {
-        "failed"
-    } else {
-        "idle"
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    ai_summary_runs::update_job_summary_selection(
-        &conn,
-        job_id,
-        summary_status,
-        next_active_run.as_ref().map(|run| run.id.clone()),
-    )
+    #[test]
+    fn retry_reset_commits_results_and_persistent_queue_together() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE jobs (
+               id TEXT PRIMARY KEY,
+               upload_status TEXT NOT NULL,
+               asr_status TEXT NOT NULL,
+               summary_status TEXT NOT NULL,
+               overall_status TEXT NOT NULL,
+               failure_reason TEXT,
+               process_log TEXT,
+               duration_minutes INTEGER NOT NULL,
+               processing_started_at_ms INTEGER,
+               processing_finished_at_ms INTEGER,
+               processing_duration_seconds INTEGER,
+               python_path TEXT,
+               runner_script_path TEXT
+             );
+             CREATE TABLE transcript_segments (job_id TEXT, segment_type TEXT);
+             CREATE TABLE ai_summary_runs (id TEXT PRIMARY KEY, job_id TEXT NOT NULL);
+             CREATE TABLE job_runs (
+               job_id TEXT PRIMARY KEY,
+               attempt_id INTEGER NOT NULL,
+               lease_token INTEGER NOT NULL,
+               status TEXT NOT NULL,
+               pid INTEGER,
+               process_identity TEXT,
+               heartbeat_at_ms INTEGER,
+               started_at_ms INTEGER,
+               finished_at_ms INTEGER,
+               output_dir TEXT,
+               last_error TEXT
+             );
+             CREATE TABLE job_events (
+               id TEXT PRIMARY KEY,
+               job_id TEXT NOT NULL,
+               event_type TEXT NOT NULL,
+               message TEXT NOT NULL,
+               metadata_json TEXT,
+               created_at TEXT NOT NULL
+             );
+             INSERT INTO jobs VALUES(
+               'job-1700000000000-1', 'uploaded', 'failed', 'completed', 'failed',
+               'old failure', 'old log', 12, 10, 20, 10, '/old/python', '/old/runner'
+             );
+             INSERT INTO transcript_segments VALUES
+               ('job-1700000000000-1', 'transcript'),
+               ('job-1700000000000-1', 'speaker');
+             INSERT INTO ai_summary_runs VALUES('summary-1', 'job-1700000000000-1');
+             INSERT INTO job_runs VALUES(
+               'job-1700000000000-1', 4, 9, 'failed', 77, 'old identity', 20,
+               10, 20, 'attempts/attempt-4-9', 'old failure'
+             );",
+        )
+        .unwrap();
+
+        reset_job_for_retry_on_connection(
+            &mut conn,
+            "job-1700000000000-1",
+            "/new/python",
+            "/new/runner",
+        )
+        .unwrap();
+
+        let job_state = conn
+            .query_row(
+                "SELECT asr_status, summary_status, overall_status, failure_reason,
+                        process_log, duration_minutes, processing_started_at_ms,
+                        python_path, runner_script_path
+                 FROM jobs WHERE id = 'job-1700000000000-1'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, Option<i64>>(6)?,
+                        row.get::<_, String>(7)?,
+                        row.get::<_, String>(8)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(job_state.0, "queued");
+        assert_eq!(job_state.1, "idle");
+        assert_eq!(job_state.2, "queued");
+        assert_eq!(job_state.3, None);
+        assert_eq!(job_state.4, None);
+        assert_eq!(job_state.5, 0);
+        assert_eq!(job_state.6, None);
+        assert_eq!(job_state.7, "/new/python");
+        assert_eq!(job_state.8, "/new/runner");
+
+        let run_state = conn
+            .query_row(
+                "SELECT attempt_id, lease_token, status, pid, process_identity, output_dir
+                 FROM job_runs WHERE job_id = 'job-1700000000000-1'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(run_state, (4, 9, "queued".into(), None, None, None));
+        let remaining_results: i64 = conn
+            .query_row("SELECT COUNT(*) FROM transcript_segments", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let remaining_summaries: i64 = conn
+            .query_row("SELECT COUNT(*) FROM ai_summary_runs", [], |row| row.get(0))
+            .unwrap();
+        let retry_events: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM job_events WHERE event_type = 'retried'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            (remaining_results, remaining_summaries, retry_events),
+            (0, 0, 1)
+        );
+    }
 }

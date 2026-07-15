@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-equip-pet-inventory-item"
+description = "Enables the equip_pet_inventory_item command without any pre-configured scope."
+commands.allow = ["equip_pet_inventory_item"]
+
+[[permission]]
+identifier = "deny-equip-pet-inventory-item"
+description = "Denies the equip_pet_inventory_item command without any pre-configured scope."
+commands.deny = ["equip_pet_inventory_item"]

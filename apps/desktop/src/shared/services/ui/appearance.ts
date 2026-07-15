@@ -1,5 +1,6 @@
-import { getCurrentWindow, type Theme } from "@tauri-apps/api/window";
+import type { Theme } from "@tauri-apps/api/window";
 import { applyLocalPetWorkflowEvent } from "@/shared/services/tauri/pet";
+import { setCurrentWindowTheme } from "@/shared/services/tauri/window";
 import type { SettingsState, ThemeMode } from "@/shared/types/meeting";
 
 const systemThemeQuery = "(prefers-color-scheme: dark)";
@@ -62,7 +63,7 @@ export function applyAppearance(settings: SettingsState): void {
 
 async function syncWindowTheme(theme: Theme | null): Promise<void> {
   try {
-    await getCurrentWindow().setTheme(theme);
+    await setCurrentWindowTheme(theme);
   } catch {
     // Ignore native theme sync failures and keep CSS theme as the source of truth.
   }

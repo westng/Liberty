@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-or-resume-ai-summary-run"
+description = "Enables the start_or_resume_ai_summary_run command without any pre-configured scope."
+commands.allow = ["start_or_resume_ai_summary_run"]
+
+[[permission]]
+identifier = "deny-start-or-resume-ai-summary-run"
+description = "Denies the start_or_resume_ai_summary_run command without any pre-configured scope."
+commands.deny = ["start_or_resume_ai_summary_run"]

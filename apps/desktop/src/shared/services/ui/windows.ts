@@ -1,10 +1,47 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { formatMessage, getCurrentMessages } from "@/shared/i18n";
+import type { ProcessingMode } from "@/shared/types/meeting";
 
 const PET_STORE_ITEM_WINDOW_LABEL = "pet-store-item-detail";
 let petStoreItemWindowQueue: Promise<unknown> = Promise.resolve();
+const ENTITY_CHANGED_EVENT = "liberty:entity-changed";
 
-export async function openAiSummaryWindow(jobId: string, title: string) {
+export type ChangedEntity = "job" | "summary" | "model" | "template" | "member";
+export type EntityChangedPayload = {
+  entity: ChangedEntity;
+  id: string;
+  action: "saved" | "deleted";
+  revision: string;
+};
+
+export function publishEntityChanged(payload: Omit<EntityChangedPayload, "revision"> & { revision?: string }) {
+  return emit(ENTITY_CHANGED_EVENT, {
+    ...payload,
+    revision: payload.revision ?? new Date().toISOString(),
+  } satisfies EntityChangedPayload);
+}
+
+export function listenForEntityChanges(handler: (payload: EntityChangedPayload) => void): Promise<UnlistenFn> {
+  return listen<EntityChangedPayload>(ENTITY_CHANGED_EVENT, (event) => handler(event.payload));
+}
+
+async function keepEditorOpenWhenCloseWasCancelled(label: string) {
+  const existing = await WebviewWindow.getByLabel(label);
+  if (!existing) {
+    return null;
+  }
+
+  await existing.close();
+  const remaining = await WebviewWindow.getByLabel(label);
+  if (remaining) {
+    await remaining.setFocus().catch(() => undefined);
+  }
+  return remaining;
+}
+
+export async function openAiSummaryWindow(jobId: string, title: string, source: ProcessingMode) {
   const label = "ai-summary";
   const existing = await WebviewWindow.getByLabel(label);
   const messages = getCurrentMessages().windows;
@@ -13,9 +50,11 @@ export async function openAiSummaryWindow(jobId: string, title: string) {
     await existing.close();
   }
 
+  const scopeToken = await issueJobWindowScope(label, jobId, source);
+
   const window = new WebviewWindow(label, {
     title: formatMessage(messages.aiSummaryTitle, { title }),
-    url: `/ai-summary?jobId=${encodeURIComponent(jobId)}`,
+    url: buildJobWindowUrl("/ai-summary", source, jobId, scopeToken),
     width: 1120,
     height: 860,
     minWidth: 960,
@@ -27,7 +66,11 @@ export async function openAiSummaryWindow(jobId: string, title: string) {
   return window;
 }
 
-export async function openMeetingNotesWindow(jobId: string, title: string) {
+export async function openMeetingNotesWindow(
+  jobId: string,
+  title: string,
+  source: ProcessingMode,
+) {
   const label = "meeting-notes";
   const existing = await WebviewWindow.getByLabel(label);
   const messages = getCurrentMessages().windows;
@@ -36,9 +79,11 @@ export async function openMeetingNotesWindow(jobId: string, title: string) {
     await existing.close();
   }
 
+  const scopeToken = await issueJobWindowScope(label, jobId, source);
+
   const window = new WebviewWindow(label, {
     title: formatMessage(messages.meetingNotesTitle, { title }),
-    url: `/meeting-notes?jobId=${encodeURIComponent(jobId)}`,
+    url: buildJobWindowUrl("/meeting-notes", source, jobId, scopeToken),
     width: 1120,
     height: 860,
     minWidth: 920,
@@ -50,13 +95,31 @@ export async function openMeetingNotesWindow(jobId: string, title: string) {
   return window;
 }
 
+function issueJobWindowScope(windowLabel: string, jobId: string, source: ProcessingMode) {
+  return invoke<string>("issue_job_window_scope", {
+    windowLabel,
+    jobId,
+    source,
+  });
+}
+
+function buildJobWindowUrl(
+  pathname: string,
+  source: ProcessingMode,
+  jobId: string,
+  scopeToken: string,
+) {
+  const params = new URLSearchParams({ source, jobId, scopeToken });
+  return `${pathname}?${params.toString()}`;
+}
+
 export async function openModelEditorWindow(modelId?: string) {
   const label = "model-editor";
-  const existing = await WebviewWindow.getByLabel(label);
   const messages = getCurrentMessages().windows;
 
-  if (existing) {
-    await existing.close();
+  const remaining = await keepEditorOpenWhenCloseWasCancelled(label);
+  if (remaining) {
+    return remaining;
   }
 
   const query = modelId ? `?id=${encodeURIComponent(modelId)}` : "";
@@ -76,11 +139,11 @@ export async function openModelEditorWindow(modelId?: string) {
 
 export async function openTemplateEditorWindow(templateId?: string) {
   const label = "template-editor";
-  const existing = await WebviewWindow.getByLabel(label);
   const messages = getCurrentMessages().windows;
 
-  if (existing) {
-    await existing.close();
+  const remaining = await keepEditorOpenWhenCloseWasCancelled(label);
+  if (remaining) {
+    return remaining;
   }
 
   const query = templateId ? `?id=${encodeURIComponent(templateId)}` : "";
@@ -100,11 +163,11 @@ export async function openTemplateEditorWindow(templateId?: string) {
 
 export async function openMemberEditorWindow(memberId?: string) {
   const label = "member-editor";
-  const existing = await WebviewWindow.getByLabel(label);
   const messages = getCurrentMessages().windows;
 
-  if (existing) {
-    await existing.close();
+  const remaining = await keepEditorOpenWhenCloseWasCancelled(label);
+  if (remaining) {
+    return remaining;
   }
 
   const query = memberId ? `?id=${encodeURIComponent(memberId)}` : "";

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-prompt-pet-name"
+description = "Enables the prompt_pet_name command without any pre-configured scope."
+commands.allow = ["prompt_pet_name"]
+
+[[permission]]
+identifier = "deny-prompt-pet-name"
+description = "Denies the prompt_pet_name command without any pre-configured scope."
+commands.deny = ["prompt_pet_name"]

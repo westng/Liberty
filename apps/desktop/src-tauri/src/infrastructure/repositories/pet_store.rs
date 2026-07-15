@@ -13,6 +13,7 @@ use crate::{
 
 const PET_ID: &str = "default-pet";
 const LP: &str = "lp";
+const EVENT_KEY_CURRENCY: &str = "event_key";
 pub const GIFT_BOX_ITEM_KEY: &str = "gift-box-tool";
 pub const MAKEUP_TICKET_ITEM_KEY: &str = "gem-ticket-tool";
 pub const GIFT_BOX_DAILY_FREE_LIMIT: i64 = 3;
@@ -750,6 +751,214 @@ const CATALOG_SEEDS: &[CatalogSeed] = &[
         18,
         650,
     ),
+    food_seed(
+        "wheat-harvest-food",
+        "小麦",
+        "Wheat",
+        "农场收获的小麦，可作为基础投喂食物。",
+        "Wheat harvested from the farm, usable as a basic feeding item.",
+        "first_meet",
+        18,
+        1,
+        "",
+        "harvest_wheat",
+        4,
+        660,
+    ),
+    food_seed(
+        "carrot-harvest-food",
+        "胡萝卜",
+        "Carrot",
+        "农场收获的胡萝卜，清爽稳定的投喂食物。",
+        "Carrots harvested from the farm, a steady fresh feeding item.",
+        "first_meet",
+        24,
+        1,
+        "",
+        "harvest_carrot",
+        6,
+        662,
+    ),
+    food_seed(
+        "tomato-harvest-food",
+        "番茄",
+        "Tomato",
+        "农场收获的番茄，成熟后带来一份元气照顾。",
+        "Tomatoes harvested from the farm, a bright feeding item.",
+        "familiar",
+        32,
+        1,
+        "",
+        "harvest_tomato",
+        8,
+        664,
+    ),
+    food_seed(
+        "pumpkin-harvest-food",
+        "南瓜",
+        "Pumpkin",
+        "农场收获的南瓜，饱满扎实的高级投喂食物。",
+        "Pumpkins harvested from the farm, a hearty premium feeding item.",
+        "grow_together",
+        58,
+        2,
+        "",
+        "harvest_pumpkin",
+        14,
+        666,
+    ),
+    food_seed(
+        "corn-harvest-food",
+        "玉米",
+        "Corn",
+        "农场收获的玉米，适合持续补充活力。",
+        "Corn harvested from the farm, good for steady energy.",
+        "familiar",
+        30,
+        1,
+        "",
+        "harvest_corn",
+        8,
+        668,
+    ),
+    food_seed(
+        "strawberry-harvest-food",
+        "草莓",
+        "Strawberry",
+        "农场收获的草莓，甜甜的小份投喂食物。",
+        "Strawberries harvested from the farm, a sweet feeding item.",
+        "grow_together",
+        38,
+        2,
+        "",
+        "harvest_strawberry",
+        10,
+        670,
+    ),
+    food_seed(
+        "blueberry-harvest-food",
+        "蓝莓",
+        "Blueberry",
+        "农场收获的蓝莓，小而珍贵的浆果投喂食物。",
+        "Blueberries harvested from the farm, a small premium berry item.",
+        "deep_bond",
+        48,
+        3,
+        "",
+        "harvest_blueberry",
+        12,
+        672,
+    ),
+    food_seed(
+        "potato-harvest-food",
+        "土豆",
+        "Potato",
+        "农场收获的土豆，便宜稳定的基础投喂食物。",
+        "Potatoes harvested from the farm, a reliable basic feeding item.",
+        "first_meet",
+        20,
+        1,
+        "",
+        "harvest_potato",
+        5,
+        674,
+    ),
+    seed_item(
+        "wheat-seed",
+        "小麦种子",
+        "Wheat Seeds",
+        "农场播种消耗品，可种出小麦。",
+        "A farm planting consumable used to grow wheat.",
+        "first_meet",
+        4,
+        1,
+        "wheat_seed",
+        700,
+    ),
+    seed_item(
+        "carrot-seed",
+        "胡萝卜种子",
+        "Carrot Seeds",
+        "农场播种消耗品，可种出胡萝卜。",
+        "A farm planting consumable used to grow carrots.",
+        "first_meet",
+        6,
+        1,
+        "carrot_seed",
+        710,
+    ),
+    seed_item(
+        "tomato-seed",
+        "番茄种子",
+        "Tomato Seeds",
+        "农场播种消耗品，可种出番茄。",
+        "A farm planting consumable used to grow tomatoes.",
+        "familiar",
+        9,
+        1,
+        "tomato_seed",
+        720,
+    ),
+    seed_item(
+        "pumpkin-seed",
+        "南瓜种子",
+        "Pumpkin Seeds",
+        "农场播种消耗品，可种出高收益南瓜。",
+        "A farm planting consumable used to grow high-yield pumpkins.",
+        "grow_together",
+        14,
+        2,
+        "pumpkin_seed",
+        730,
+    ),
+    seed_item(
+        "corn-seed",
+        "玉米种子",
+        "Corn Seeds",
+        "农场播种消耗品，可种出玉米。",
+        "A farm planting consumable used to grow corn.",
+        "familiar",
+        8,
+        1,
+        "corn_seed",
+        740,
+    ),
+    seed_item(
+        "strawberry-seed",
+        "草莓种子",
+        "Strawberry Seeds",
+        "农场播种消耗品，可种出草莓。",
+        "A farm planting consumable used to grow strawberries.",
+        "grow_together",
+        10,
+        2,
+        "strawberry_seed",
+        750,
+    ),
+    seed_item(
+        "blueberry-seed",
+        "蓝莓种子",
+        "Blueberry Seeds",
+        "农场播种消耗品，可种出蓝莓。",
+        "A farm planting consumable used to grow blueberries.",
+        "deep_bond",
+        15,
+        3,
+        "blueberry_seed",
+        760,
+    ),
+    seed_item(
+        "potato-seed",
+        "土豆种子",
+        "Potato Seeds",
+        "农场播种消耗品，可种出土豆。",
+        "A farm planting consumable used to grow potatoes.",
+        "first_meet",
+        5,
+        1,
+        "potato_seed",
+        770,
+    ),
     seed(
         "baby-bottle-badge",
         "badge",
@@ -1078,6 +1287,38 @@ const fn food_seed(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+const fn seed_item(
+    item_key: &'static str,
+    name_zh: &'static str,
+    name_en: &'static str,
+    description_zh: &'static str,
+    description_en: &'static str,
+    rarity: &'static str,
+    price_lp: i64,
+    level_gate: i64,
+    asset_key: &'static str,
+    sort_order: i64,
+) -> CatalogSeed {
+    CatalogSeed {
+        item_key,
+        item_type: "seed",
+        slot: "consumable",
+        name_zh,
+        name_en,
+        description_zh,
+        description_en,
+        rarity,
+        price_lp,
+        level_gate,
+        stage_gate: "",
+        milestone_gate: "",
+        asset_key,
+        growth_value: 0,
+        sort_order,
+    }
+}
+
 pub fn ensure_store_defaults_tx(tx: &Transaction<'_>, now: &str) -> LocalResult<()> {
     ensure_wallet_tx(tx, now)?;
     upsert_inventory_tx(
@@ -1277,8 +1518,12 @@ pub fn find_catalog_item_by_key(item_key: &str) -> Option<PetStoreCatalogItem> {
     find_catalog_item(item_key)
 }
 
-pub fn current_store_limit_date() -> String {
+pub fn current_local_date() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+pub fn current_store_limit_date() -> String {
+    current_local_date()
 }
 
 pub fn load_daily_free_claimed_tx(
@@ -1673,6 +1918,7 @@ fn gift_box_pool_items_tx(tx: &Transaction<'_>) -> LocalResult<Vec<GiftBoxPrize>
             item.enabled
                 && item.item_type != "pet"
                 && item.item_type != "badge"
+                && item.item_type != "seed"
                 && item.item_key != GIFT_BOX_ITEM_KEY
                 && lock_reason(item, &profile, &counters).is_none()
         })
@@ -1925,6 +2171,51 @@ pub fn grant_reward_tx(
     Ok(true)
 }
 
+pub fn claim_event_key_tx(
+    tx: &Transaction<'_>,
+    source_type: &str,
+    source_key: &str,
+    metadata: Option<&str>,
+    now: &str,
+) -> LocalResult<bool> {
+    let already_claimed = tx
+        .query_row(
+            "SELECT 1 FROM pet_economy_ledger
+             WHERE pet_id = ?1
+               AND source_type = ?2
+               AND source_key = ?3
+               AND currency_key IN (?4, ?5)
+             LIMIT 1",
+            params![PET_ID, source_type, source_key, LP, EVENT_KEY_CURRENCY],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|err| err.to_string())?
+        .is_some();
+    if already_claimed {
+        return Ok(false);
+    }
+
+    let inserted = tx
+        .execute(
+            "INSERT OR IGNORE INTO pet_economy_ledger (
+                id, pet_id, entry_type, currency_key, amount, balance_after,
+                source_type, source_key, metadata, created_at
+             ) VALUES (?1, ?2, 'event', ?3, 0, 0, ?4, ?5, ?6, ?7)",
+            params![
+                ids::timestamped_id("pet-event-key"),
+                PET_ID,
+                EVENT_KEY_CURRENCY,
+                source_type,
+                source_key,
+                metadata,
+                now
+            ],
+        )
+        .map_err(|err| err.to_string())?;
+    Ok(inserted == 1)
+}
+
 pub fn reward_exists_tx(
     tx: &Transaction<'_>,
     source_type: &str,
@@ -1939,25 +2230,19 @@ pub fn increment_counter_tx(
     event_key: &str,
     now: &str,
 ) -> LocalResult<bool> {
-    let existing = load_counter_tx(tx, counter_key)?;
-    if existing
-        .as_ref()
-        .is_some_and(|counter| counter.last_event_key == event_key)
-    {
+    let counter_event_type = format!("milestone_counter:{counter_key}");
+    if !claim_event_key_tx(tx, &counter_event_type, event_key, None, now)? {
         return Ok(false);
     }
-    let next_value = existing
-        .map(|counter| counter.counter_value.saturating_add(1))
-        .unwrap_or(1);
     tx.execute(
         "INSERT INTO pet_milestone_counters (
             pet_id, counter_key, counter_value, last_event_key, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5)
+         ) VALUES (?1, ?2, 1, ?3, ?4)
          ON CONFLICT(pet_id, counter_key) DO UPDATE SET
-            counter_value = excluded.counter_value,
+            counter_value = pet_milestone_counters.counter_value + 1,
             last_event_key = excluded.last_event_key,
             updated_at = excluded.updated_at",
-        params![PET_ID, counter_key, next_value, event_key, now],
+        params![PET_ID, counter_key, event_key, now],
     )
     .map_err(|err| err.to_string())?;
     Ok(true)
@@ -2491,13 +2776,13 @@ fn list_economy(conn: &Connection, limit: usize) -> LocalResult<Vec<PetEconomyEn
             "SELECT id, pet_id, entry_type, currency_key, amount, balance_after,
                     source_type, source_key, metadata, created_at
              FROM pet_economy_ledger
-             WHERE pet_id = ?1
+             WHERE pet_id = ?1 AND currency_key = ?2
              ORDER BY datetime(created_at) DESC, created_at DESC
-             LIMIT ?2",
+             LIMIT ?3",
         )
         .map_err(|err| err.to_string())?;
     let rows = stmt
-        .query_map(params![PET_ID, limit as i64], map_economy_entry)
+        .query_map(params![PET_ID, LP, limit as i64], map_economy_entry)
         .map_err(|err| err.to_string())?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|err| err.to_string())
@@ -2538,21 +2823,6 @@ fn map_economy_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetEconomyEntr
         metadata: row.get(8)?,
         created_at: row.get(9)?,
     })
-}
-
-fn load_counter_tx(
-    tx: &Transaction<'_>,
-    counter_key: &str,
-) -> LocalResult<Option<PetMilestoneCounter>> {
-    tx.query_row(
-        "SELECT pet_id, counter_key, counter_value, last_event_key, updated_at
-         FROM pet_milestone_counters
-         WHERE pet_id = ?1 AND counter_key = ?2",
-        params![PET_ID, counter_key],
-        map_counter,
-    )
-    .optional()
-    .map_err(|err| err.to_string())
 }
 
 fn list_counters(conn: &Connection) -> LocalResult<Vec<PetMilestoneCounter>> {
@@ -2599,6 +2869,8 @@ fn map_counter(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetMilestoneCounter>
 
 #[cfg(test)]
 mod tests {
+    use rusqlite::Connection;
+
     use super::*;
 
     fn test_profile(level: i64, stage: &str) -> PetProfile {
@@ -2645,5 +2917,33 @@ mod tests {
             &HashMap::new(),
         );
         assert_eq!(state.status, "achievement");
+    }
+
+    #[test]
+    fn milestone_event_keys_remain_unique_across_a_b_a_ordering() {
+        let mut conn = Connection::open_in_memory().expect("in-memory sqlite");
+        crate::local_db::schema::apply_test_schema(&conn).expect("schema");
+        let tx = conn.transaction().expect("transaction");
+        crate::infrastructure::repositories::pet::ensure_default_exists_tx(&tx)
+            .expect("default pet");
+
+        assert!(
+            increment_counter_tx(&tx, "summaries_completed", "run-a", "2026-07-15")
+                .expect("first run-a")
+        );
+        assert!(
+            increment_counter_tx(&tx, "summaries_completed", "run-b", "2026-07-15").expect("run-b")
+        );
+        assert!(
+            !increment_counter_tx(&tx, "summaries_completed", "run-a", "2026-07-15")
+                .expect("replayed run-a")
+        );
+
+        let counter = list_counters_tx(&tx)
+            .expect("counters")
+            .into_iter()
+            .find(|counter| counter.counter_key == "summaries_completed")
+            .expect("stored counter");
+        assert_eq!(counter.counter_value, 2);
     }
 }

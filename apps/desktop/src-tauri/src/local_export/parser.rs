@@ -80,6 +80,19 @@ pub fn parse_overview_to_export_data(overview: &str) -> ExportDocData {
                 current_section = Some(SpeechSection::NextWeekPlan);
                 continue;
             }
+            "个人总结" => {
+                current_section = Some(SpeechSection::Summary);
+                in_closing_summary = false;
+                continue;
+            }
+            "全局总结" => {
+                if let Some(block) = current_block.take() {
+                    data.speech_blocks.push(block);
+                }
+                current_section = None;
+                in_closing_summary = true;
+                continue;
+            }
             "总结" => {
                 if current_block.is_some() {
                     let has_future_speaker = remaining_lines

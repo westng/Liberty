@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "member-editor-capability",
+  "description": "Member editor can manage meeting members and read UI preferences only.",
+  "windows": ["member-editor"],
+  "permissions": [
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "dialog:allow-confirm",
+    "allow-destroy-current-window",
+    "allow-set-current-window-theme",
+    "allow-set-current-window-title",
+    "allow-get-ui-preferences",
+    "allow-list-meeting-members",
+    "allow-save-meeting-member",
+    "allow-delete-meeting-member"
+  ]
+}

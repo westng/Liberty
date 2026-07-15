@@ -3,7 +3,8 @@ use calamine::{open_workbook_auto, Data, Reader};
 use chrono::Utc;
 use rust_xlsxwriter::Workbook;
 use std::{collections::HashSet, path::Path};
-use tauri::AppHandle;
+use tauri::{AppHandle, Webview};
+use tauri_plugin_fs::FsExt;
 
 #[tauri::command]
 pub fn list_meeting_members(app: AppHandle) -> LocalResult<Vec<MeetingMember>> {
@@ -23,22 +24,31 @@ pub fn delete_meeting_member(app: AppHandle, id: String) -> LocalResult<()> {
 #[tauri::command]
 pub fn import_meeting_members_excel(
     app: AppHandle,
+    webview: Webview,
     file_path: String,
 ) -> LocalResult<MeetingMemberImportResult> {
     if file_path.trim().is_empty() {
         return Err("导入文件路径不能为空。".into());
     }
 
-    let rows = parse_members_excel(Path::new(file_path.trim()))?;
+    let path = Path::new(file_path.trim());
+    ensure_dialog_authorized(&webview, path, "导入")?;
+    let rows = parse_members_excel(path)?;
     local_db::import_meeting_members(&app, &rows)
 }
 
 #[tauri::command]
-pub fn export_meeting_members_excel(app: AppHandle, file_path: String) -> LocalResult<()> {
+pub fn export_meeting_members_excel(
+    app: AppHandle,
+    webview: Webview,
+    file_path: String,
+) -> LocalResult<()> {
     if file_path.trim().is_empty() {
         return Err("导出路径不能为空。".into());
     }
 
+    let path = Path::new(file_path.trim());
+    ensure_dialog_authorized(&webview, path, "导出")?;
     let members = local_db::list_meeting_members(&app)?;
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
@@ -70,11 +80,17 @@ pub fn export_meeting_members_excel(app: AppHandle, file_path: String) -> LocalR
             .map_err(|err| err.to_string())?;
     }
 
-    workbook
-        .save(file_path.trim())
-        .map_err(|err| err.to_string())?;
+    workbook.save(path).map_err(|err| err.to_string())?;
 
     Ok(())
+}
+
+fn ensure_dialog_authorized(webview: &Webview, path: &Path, operation: &str) -> LocalResult<()> {
+    if webview.fs_scope().is_allowed(path) {
+        Ok(())
+    } else {
+        Err(format!("{operation}失败：文件路径未经系统对话框授权。"))
+    }
 }
 
 fn parse_members_excel(path: &Path) -> LocalResult<Vec<MeetingMember>> {

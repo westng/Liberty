@@ -1,32 +1,40 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MeetingNotesPanel from "@/shared/components/MeetingNotesPanel";
 import StatusBadge from "@/shared/components/StatusBadge";
-import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
-import { createLocalMembersService } from "@/shared/services/tauri/members";
 import {
-  buildSummaryRun,
   createEmptyMeetingSummary,
   summaryResultToMeetingSummary,
 } from "@/shared/services/ai/storage";
-import { generateAiSummary } from "@/shared/services/ai/summary";
+import { startOrResumeAiSummaryRun } from "@/shared/services/ai/summary";
 import { getPrimaryTranscriptSegments } from "@/shared/services/meeting/transcript";
-import type { AiSummaryRun, JobStage, MeetingMember } from "@/shared/types/meeting";
+import { createLocalAiService, type AiSummaryOptions } from "@/shared/services/tauri/ai";
+import { createLocalMeetingService } from "@/shared/services/tauri/meeting";
+import { closeCurrentWindow } from "@/shared/services/tauri/window";
+import { publishEntityChanged } from "@/shared/services/ui/windows";
+import type { AiSummaryRun, JobStage, MeetingJob, ProcessingMode } from "@/shared/types/meeting";
 
-const membersService = createLocalMembersService();
+const localAiService = createLocalAiService();
+const localMeetingService = createLocalMeetingService();
+
+function parseJobSource(value: string | null): ProcessingMode | null {
+  return value === "local" || value === "remote" ? value : null;
+}
 
 export default function AiSummaryView() {
-  const aiStore = useAiStore();
   const meetingStore = useMeetingStore();
   const messages = getMessages(meetingStore.settings.locale).aiSummary;
   const commonMessages = getMessages(meetingStore.settings.locale).common;
-  const jobId = new URLSearchParams(window.location.search).get("jobId") ?? "";
-  const job = meetingStore.getJobById(jobId);
-  const enabledModels = aiStore.models.filter((model) => model.enabled);
-  const templates = aiStore.templates;
+  const query = new URLSearchParams(window.location.search);
+  const jobId = query.get("jobId")?.trim() ?? "";
+  const windowScopeToken = query.get("scopeToken")?.trim() ?? "";
+  const jobSource = parseJobSource(query.get("source"));
+  const [job, setJob] = useState<MeetingJob | null>(null);
+  const [options, setOptions] = useState<AiSummaryOptions>({ models: [], templates: [] });
+  const enabledModels = options.models.filter((model) => model.enabled);
+  const templates = options.templates;
   const latestRuns = useMemo(
     () => [...(job?.summaryRuns ?? [])].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     [job?.summaryRuns],
@@ -41,10 +49,14 @@ export default function AiSummaryView() {
   const [extraInstructions, setExtraInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [members, setMembers] = useState<MeetingMember[]>([]);
-  const selectedModel = aiStore.getModelById(selectedModelId);
-  const selectedTemplate = aiStore.getTemplateById(selectedTemplateId);
+  const resumedRunIds = useRef(new Set<string>());
+  const selectedModel = options.models.find((model) => model.id === selectedModelId);
+  const selectedTemplate = options.templates.find((template) => template.id === selectedTemplateId);
   const selectedRun = latestRuns.find((run) => run.id === selectedRunId) ?? latestRuns[0] ?? null;
+  const runningRun = latestRuns.find((run) => run.status === "running") ?? null;
+  const resumableRun = runningRun ?? (latestRun?.status === "failed" ? latestRun : null);
+  const remoteUnavailable = jobSource === "remote";
+  const invalidJobRef = !jobSource || !jobId || !windowScopeToken;
   const transcriptCount = job ? getPrimaryTranscriptSegments(job).length : 0;
   const previewSummary = selectedRun?.result
     ? summaryResultToMeetingSummary(selectedRun.result)
@@ -76,7 +88,9 @@ export default function AiSummaryView() {
           : "idle"
     : summaryDisplayStatus;
   const selectedRunIsActive = Boolean(job?.activeSummaryRunId && job.activeSummaryRunId === selectedRun?.id);
-  const canApplySelectedRun = Boolean(job && selectedRun?.result && !selectedRunIsActive);
+  const canApplySelectedRun = Boolean(
+    jobSource === "local" && selectedRun?.result && !selectedRunIsActive,
+  );
   const activeSummaryLabel = !latestRun
     ? messages.activeLabelEmpty
     : summaryDisplayStatus === "failed"
@@ -108,7 +122,7 @@ export default function AiSummaryView() {
 
   useEffect(() => {
     if (!selectedModelId) {
-      setSelectedModelId((aiStore.getDefaultModel() ?? enabledModels[0])?.id ?? "");
+      setSelectedModelId((enabledModels.find((model) => model.isDefault) ?? enabledModels[0])?.id ?? "");
     }
   }, [enabledModels, selectedModelId]);
 
@@ -122,37 +136,99 @@ export default function AiSummaryView() {
 
   useEffect(() => {
     void (async () => {
-      await aiStore.ensureLoaded();
-      if (jobId) {
-        await meetingStore.refreshJob(jobId);
+      if (jobSource !== "local" || !jobId || !windowScopeToken) {
+        return;
       }
-      setMembers(await membersService.listMembers());
-      await reconcileStaleRuns();
+      try {
+        const [refreshed, summaryOptions] = await Promise.all([
+          localMeetingService.getJobResult(jobId, windowScopeToken),
+          localAiService.getSummaryOptions("local"),
+        ]);
+        if (refreshed.source !== "local") {
+          throw new Error(messages.jobSourceMismatch);
+        }
+        setJob(refreshed);
+        setOptions(summaryOptions);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : messages.jobNotFound);
+      }
     })();
-  }, [jobId]);
+  }, [jobId, jobSource, windowScopeToken]);
 
-  async function reconcileStaleRuns() {
-    const now = Date.now();
-    const staleRuns = latestRuns.filter((run) => {
-      if (run.status !== "running") {
-        return false;
-      }
-      return now - new Date(run.updatedAt).getTime() > 60_000;
-    });
-
-    for (const run of staleRuns) {
-      await meetingStore.saveSummaryRun({
-        ...run,
-        status: "failed",
-        errorMessage: messages.staleRunError,
-        updatedAt: new Date().toISOString(),
+  useEffect(() => {
+    if (!job || jobSource !== "local" || !runningRun) {
+      return;
+    }
+    if (!resumedRunIds.current.has(runningRun.id)) {
+      resumedRunIds.current.add(runningRun.id);
+      void startOrResumeAiSummaryRun({
+        source: "local",
+        jobId: job.id,
+        windowScopeToken,
+        runId: runningRun.id,
+      }).catch((error) => {
+        setErrorMessage(error instanceof Error ? error.message : messages.requestFailed);
       });
     }
-  }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      try {
+        const refreshed = await localMeetingService.getJobResult(job.id, windowScopeToken);
+        if (refreshed.source !== "local") {
+          throw new Error(messages.jobSourceMismatch);
+        }
+        if (!cancelled) {
+          setJob(refreshed);
+          setErrorMessage("");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : messages.requestFailed);
+        }
+      } finally {
+        if (!cancelled) {
+          timer = setTimeout(() => void refresh(), 1_000);
+        }
+      }
+    };
+    timer = setTimeout(() => void refresh(), 500);
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [job?.id, jobSource, runningRun?.id, windowScopeToken]);
 
   async function submit() {
     if (!job) {
       setErrorMessage(messages.jobNotFound);
+      return;
+    }
+    if (jobSource !== "local") {
+      setErrorMessage(messages.remoteUnavailable);
+      return;
+    }
+    if (resumableRun) {
+      setErrorMessage("");
+      setSubmitting(true);
+      try {
+        const run = await startOrResumeAiSummaryRun({
+          source: "local",
+          jobId: job.id,
+          windowScopeToken,
+          runId: resumableRun.id,
+        });
+        resumedRunIds.current.add(run.id);
+        setSelectedRunId(run.id);
+        setJob(await localMeetingService.getJobResult(job.id, windowScopeToken));
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : messages.requestFailed);
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
     if (!selectedModel) {
@@ -172,73 +248,50 @@ export default function AiSummaryView() {
 
     setErrorMessage("");
     setSubmitting(true);
-    const pendingRun = buildSummaryRun({
-      jobId: job.id,
-      modelConfigId: selectedModel.id,
-      templateId: selectedTemplate.id,
-      includeSpeaker,
-      includeTimestamp,
-      extraInstructions: extraInstructions.trim(),
-      status: "running",
-      promptPreview: undefined,
-      result: undefined,
-      minutesPayload: undefined,
-    });
-
-    await meetingStore.saveSummaryRun(pendingRun);
-
     try {
-      const response = await generateAiSummary({
-        job,
-        model: selectedModel,
-        template: selectedTemplate,
+      const run = await startOrResumeAiSummaryRun({
+        source: "local",
+        jobId: job.id,
+        windowScopeToken,
+        modelConfigId: selectedModel.id,
+        templateId: selectedTemplate.id,
         includeSpeaker,
         includeTimestamp,
         useMemberMapping,
-        members,
         extraInstructions: extraInstructions.trim(),
       });
-      const minutesPayload = response.minutesPayload
-        ? { ...response.minutesPayload, sourceSummaryRunId: pendingRun.id }
-        : undefined;
-
-      await meetingStore.saveSummaryRun({
-        ...pendingRun,
-        status: "completed",
-        promptPreview: response.promptPreview,
-        rawResponse: response.rawResponse,
-        result: response.result,
-        minutesPayload,
-      });
-      await meetingStore.setActiveSummaryRun(pendingRun.jobId, pendingRun.id);
-      setSelectedRunId(pendingRun.id);
+      resumedRunIds.current.add(run.id);
+      setSelectedRunId(run.id);
+      setJob(await localMeetingService.getJobResult(job.id, windowScopeToken));
     } catch (error) {
       const message = error instanceof Error ? error.message : messages.requestFailed;
       setErrorMessage(message);
-      await meetingStore.saveSummaryRun({
-        ...pendingRun,
-        status: "failed",
-        errorMessage: message,
-      });
     } finally {
       setSubmitting(false);
     }
   }
 
   async function closeWindow() {
-    await getCurrentWebviewWindow().close();
+    await closeCurrentWindow();
   }
 
   async function applySelectedRun() {
-    if (!job || !selectedRun?.result) {
+    if (!job || jobSource !== "local" || !selectedRun?.result) {
       return;
     }
 
-    await meetingStore.setActiveSummaryRun(job.id, selectedRun.id);
+    await localAiService.setActiveSummaryRun(
+      "local",
+      job.id,
+      selectedRun.id,
+      windowScopeToken,
+    );
+    setJob(await localMeetingService.getJobResult(job.id, windowScopeToken));
+    await publishEntityChanged({ entity: "summary", id: job.id, action: "saved" }).catch(() => undefined);
   }
 
   async function removeRun(run: AiSummaryRun) {
-    if (!job) {
+    if (!job || jobSource !== "local") {
       return;
     }
 
@@ -253,7 +306,14 @@ export default function AiSummaryView() {
       return;
     }
 
-    await meetingStore.deleteSummaryRun(job.id, run.id);
+    await localAiService.deleteSummaryRun(
+      "local",
+      job.id,
+      run.id,
+      windowScopeToken,
+    );
+    setJob(await localMeetingService.getJobResult(job.id, windowScopeToken));
+    await publishEntityChanged({ entity: "summary", id: job.id, action: "deleted" }).catch(() => undefined);
     if (selectedRunId === run.id) {
       setSelectedRunId("");
     }
@@ -304,7 +364,7 @@ export default function AiSummaryView() {
               <div className="field-grid two-col">
                 <div className="field">
                   <label htmlFor="summary-model">{messages.model}</label>
-                  <select id="summary-model" value={selectedModelId} onChange={(event) => setSelectedModelId(event.target.value)}>
+                  <select disabled={remoteUnavailable || Boolean(runningRun)} id="summary-model" value={selectedModelId} onChange={(event) => setSelectedModelId(event.target.value)}>
                     <option disabled value="">{messages.chooseModel}</option>
                     {enabledModels.map((model) => (
                       <option key={model.id} value={model.id}>{model.name} · {model.model}</option>
@@ -314,7 +374,7 @@ export default function AiSummaryView() {
 
                 <div className="field">
                   <label htmlFor="summary-template">{messages.template}</label>
-                  <select id="summary-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+                  <select disabled={remoteUnavailable || Boolean(runningRun)} id="summary-template" value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
                     <option disabled value="">{messages.chooseTemplate}</option>
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>{template.name}</option>
@@ -325,32 +385,34 @@ export default function AiSummaryView() {
 
               <div className="field-grid two-col">
                 <label className="toggle-field">
-                  <input checked={includeSpeaker} onChange={(event) => setIncludeSpeaker(event.target.checked)} type="checkbox" />
+                  <input checked={includeSpeaker} disabled={remoteUnavailable || Boolean(runningRun)} onChange={(event) => setIncludeSpeaker(event.target.checked)} type="checkbox" />
                   <span>{messages.includeSpeaker}</span>
                 </label>
                 <label className="toggle-field">
-                  <input checked={includeTimestamp} onChange={(event) => setIncludeTimestamp(event.target.checked)} type="checkbox" />
+                  <input checked={includeTimestamp} disabled={remoteUnavailable || Boolean(runningRun)} onChange={(event) => setIncludeTimestamp(event.target.checked)} type="checkbox" />
                   <span>{messages.includeTimestamp}</span>
                 </label>
               </div>
 
               <div className="field-grid two-col">
                 <label className="toggle-field">
-                  <input checked={useMemberMapping} onChange={(event) => setUseMemberMapping(event.target.checked)} type="checkbox" />
+                  <input checked={useMemberMapping} disabled={remoteUnavailable || Boolean(runningRun)} onChange={(event) => setUseMemberMapping(event.target.checked)} type="checkbox" />
                   <span>{messages.useMemberMapping}</span>
                 </label>
               </div>
 
               <div className="field">
                 <label htmlFor="summary-extra">{messages.extraInstructions}</label>
-                <textarea id="summary-extra" value={extraInstructions} onChange={(event) => setExtraInstructions(event.target.value)} placeholder={messages.extraInstructionsPlaceholder} />
+                <textarea disabled={remoteUnavailable || Boolean(runningRun)} id="summary-extra" value={extraInstructions} onChange={(event) => setExtraInstructions(event.target.value)} placeholder={messages.extraInstructionsPlaceholder} />
               </div>
             </div>
 
-            {errorMessage && <div className="note-block error-block">{errorMessage}</div>}
+            {remoteUnavailable && <div className="note-block error-block">capability_unavailable: {messages.remoteUnavailable}</div>}
+            {invalidJobRef && <div className="note-block error-block">{messages.jobRefMissing}</div>}
+            {!remoteUnavailable && !invalidJobRef && errorMessage && <div className="note-block error-block">{errorMessage}</div>}
 
             <div className="button-row summary-submit-row">
-              <button className="primary-button" type="button" disabled={submitting} onClick={submit}>
+              <button className="primary-button" type="button" disabled={remoteUnavailable || invalidJobRef || submitting || Boolean(runningRun)} onClick={submit}>
                 {submitting ? messages.submitting : messages.submit}
               </button>
             </div>
@@ -372,7 +434,7 @@ export default function AiSummaryView() {
                   >
                     <div className="record-item-head">
                       <div className="record-title-stack">
-                        <strong>{aiStore.getTemplateById(run.templateId)?.name || messages.unknownTemplate}</strong>
+                        <strong>{options.templates.find((template) => template.id === run.templateId)?.name || messages.unknownTemplate}</strong>
                         <div className="record-tags">
                           {job?.activeSummaryRunId === run.id ? (
                             <span className="record-tag active">{messages.currentResult}</span>
@@ -384,7 +446,7 @@ export default function AiSummaryView() {
                       <StatusBadge status={run.status === "running" ? "summarizing" : run.status === "completed" ? "completed" : "failed"} />
                     </div>
                     <div className="record-item-body">
-                      <span>{aiStore.getModelById(run.modelConfigId)?.name || messages.unknownModel}</span>
+                      <span>{options.models.find((model) => model.id === run.modelConfigId)?.name || messages.unknownModel}</span>
                       <span>{formatCreatedAt(run.createdAt)}</span>
                     </div>
                     {run.result?.overview && <div className="record-item-copy">{run.result.overview}</div>}
@@ -408,8 +470,8 @@ export default function AiSummaryView() {
             {selectedRun && (
               <div className="summary-preview-toolbar">
                 <div className="record-meta summary-preview-meta">
-                  <span>{aiStore.getTemplateById(selectedRun.templateId)?.name || messages.unknownTemplate}</span>
-                  <span>{aiStore.getModelById(selectedRun.modelConfigId)?.name || messages.unknownModel}</span>
+                  <span>{options.templates.find((template) => template.id === selectedRun.templateId)?.name || messages.unknownTemplate}</span>
+                  <span>{options.models.find((model) => model.id === selectedRun.modelConfigId)?.name || messages.unknownModel}</span>
                   <span>{formatCreatedAt(selectedRun.createdAt)}</span>
                   {selectedRunIsActive && <span>{messages.currentResult}</span>}
                 </div>
@@ -417,7 +479,7 @@ export default function AiSummaryView() {
                   <button className="secondary-button" type="button" disabled={!canApplySelectedRun} onClick={applySelectedRun}>
                     {selectedRunIsActive ? messages.usingCurrent : messages.setCurrent}
                   </button>
-                  <button className="secondary-button jobs-delete-button" type="button" onClick={() => removeRun(selectedRun)}>
+                  <button className="secondary-button jobs-delete-button" type="button" disabled={remoteUnavailable} onClick={() => removeRun(selectedRun)}>
                     {messages.deleteCurrent}
                   </button>
                 </div>

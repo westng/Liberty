@@ -1,9 +1,9 @@
 use crate::{
-    infrastructure::repositories::ai_summary_runs,
-    local_db::{job_dir, LocalResult},
+    infrastructure::{repositories::ai_summary_runs, runner_files},
+    local_db::{jobs_root, LocalResult},
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
-use std::fs;
+use std::path::PathBuf;
 use tauri::AppHandle;
 
 use super::{model::*, progress};
@@ -218,17 +218,15 @@ pub(crate) fn load_job(
         job.summary_status = "idle".into();
     }
 
-    let dir = job_dir(app, &job.id)?;
     if should_apply_progress_snapshot(&job) {
-        if let Ok(progress) = progress::read_json::<ProgressSnapshot>(&dir.join("progress.json")) {
-            progress::apply_progress_snapshot(&mut job, &progress);
+        if let Some(dir) = active_attempt_dir(app, conn, &job.id)? {
+            if let Ok(progress) =
+                progress::read_json::<ProgressSnapshot>(&dir.join("progress.json"))
+            {
+                progress::apply_progress_snapshot(&mut job, &progress);
+            }
         }
     }
-
-    job.process_log = fs::read_to_string(dir.join("process.log"))
-        .ok()
-        .map(|content| content.trim_end().to_string())
-        .filter(|content| !content.is_empty());
 
     Ok(job)
 }
@@ -293,14 +291,54 @@ pub(crate) fn load_job_summary(
         .ok_or_else(|| "没有找到这个任务。".to_string())?;
 
     job.source_files = load_source_files(conn, &job.id)?;
-    let dir = job_dir(app, &job.id)?;
     if should_apply_progress_snapshot(&job) {
-        if let Ok(progress) = progress::read_json::<ProgressSnapshot>(&dir.join("progress.json")) {
-            progress::apply_progress_snapshot(&mut job, &progress);
+        if let Some(dir) = active_attempt_dir(app, conn, &job.id)? {
+            if let Ok(progress) =
+                progress::read_json::<ProgressSnapshot>(&dir.join("progress.json"))
+            {
+                progress::apply_progress_snapshot(&mut job, &progress);
+            }
         }
     }
 
     Ok(job)
+}
+
+fn active_attempt_dir(
+    app: &AppHandle,
+    conn: &Connection,
+    job_id: &str,
+) -> LocalResult<Option<PathBuf>> {
+    let run = conn
+        .query_row(
+            "SELECT attempt_id, lease_token, output_dir
+             FROM job_runs
+             WHERE job_id = ?1 AND status = 'running'",
+            params![job_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|err| err.to_string())?;
+    let Some((attempt_id, lease_token, output_dir)) = run else {
+        return Ok(None);
+    };
+    if attempt_id < 0 || lease_token < 0 {
+        return Err("任务运行记录包含无效的 attempt 或 lease。".into());
+    }
+
+    let expected_output_dir = format!("attempts/attempt-{attempt_id}-{lease_token}");
+    if output_dir.as_deref() != Some(expected_output_dir.as_str()) {
+        return Err("任务运行记录的输出目录与当前 lease 不一致。".into());
+    }
+
+    let job_dir = runner_files::resolve_job_dir(&jobs_root(app)?, job_id)?;
+    runner_files::resolve_attempt_dir(&job_dir, attempt_id as u64, lease_token as u64)
 }
 
 fn load_source_files(conn: &Connection, job_id: &str) -> LocalResult<Vec<MeetingSourceFile>> {

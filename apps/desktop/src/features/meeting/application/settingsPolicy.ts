@@ -6,7 +6,8 @@ export const defaultSettings: SettingsState = {
   accentColor: "#2f6dff",
   locale: "zh-CN",
   backendUrl: "",
-  apiToken: "",
+  apiTokenConfigured: false,
+  processingMode: "local",
   defaultHotwords: "SeACo-Paraformer, FunASR, 会议纪要",
   summaryTemplate: "表格版会议纪要",
   concurrency: 2,
@@ -36,7 +37,8 @@ export function normalizeSettings(settings?: Partial<SettingsState> | null): Set
       ? merged.accentColor.trim().toLowerCase()
       : defaultSettings.accentColor,
     backendUrl: merged.backendUrl.trim(),
-    apiToken: merged.apiToken.trim(),
+    apiTokenConfigured: Boolean(merged.apiTokenConfigured),
+    processingMode: merged.processingMode === "remote" ? "remote" : "local",
     defaultHotwords: merged.defaultHotwords.trim() || defaultSettings.defaultHotwords,
     summaryTemplate:
       merged.summaryTemplate.trim() === "默认会议纪要模板"
@@ -66,7 +68,7 @@ export function hasManualPythonOverride(settings: SettingsState) {
 }
 
 export function shouldUseLocalDataSource(settings: SettingsState) {
-  return !settings.backendUrl.trim();
+  return settings.processingMode === "local";
 }
 
 export function isManagedRuntimeReady(runtimeStatus: ManagedRuntimeStatus) {

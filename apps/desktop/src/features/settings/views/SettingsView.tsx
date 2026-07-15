@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { message, save as saveFile } from "@tauri-apps/plugin-dialog";
+import { confirm, message, save as saveFile } from "@tauri-apps/plugin-dialog";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { accentColors, useSettingsForm } from "@/features/settings/application/useSettingsForm";
@@ -10,8 +10,9 @@ import {
 } from "@/features/settings/application/useRuntimePanel";
 import { useDiagnosticsPanel } from "@/shared/services/system/diagnostics";
 import { exportDesktopPetDiagnosticLog } from "@/shared/services/tauri/system";
-import { getMessages } from "@/shared/i18n";
-import type { LiquidGlassStyle, LocaleCode, LocalAsrDevice, ThemeMode } from "@/shared/types/meeting";
+import { formatMessage, getMessages } from "@/shared/i18n";
+import { runAppStatusAction } from "@/shared/services/ui/statusNotifications";
+import type { LiquidGlassStyle, LocaleCode, LocalAsrDevice, ProcessingMode, ThemeMode } from "@/shared/types/meeting";
 import "./SettingsView.css";
 
 export default function SettingsView() {
@@ -30,6 +31,7 @@ export default function SettingsView() {
     setLocale,
     setAccentColor,
     setRuntimeDownloadSource,
+    clearApiToken,
     save,
   } = useSettingsForm(store);
   const {
@@ -52,6 +54,13 @@ export default function SettingsView() {
     supportedPlatformTags,
     refreshDiagnostics,
   } = useDiagnosticsPanel();
+  const remoteStatusLabel = store.remoteStatus === "checking"
+    ? messages.remoteStatusChecking
+    : store.remoteStatus === "ready"
+      ? messages.remoteStatusReady
+      : store.remoteStatus === "unavailable"
+        ? messages.remoteStatusUnavailable
+        : messages.remoteStatusIdle;
 
   useEffect(() => {
     void refreshRuntimePanel();
@@ -118,11 +127,33 @@ export default function SettingsView() {
     }
 
     try {
-      await exportDesktopPetDiagnosticLog(filePath);
+      await runAppStatusAction(
+        "exportDiagnostics",
+        () => exportDesktopPetDiagnosticLog(filePath),
+      );
       await message(`诊断日志已导出：${filePath}`, {
         title: "工程诊断",
         kind: "info",
       });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function clearRemoteApiToken() {
+    const confirmed = await confirm(messages.apiTokenClearConfirm, {
+      title: messages.apiToken,
+      kind: "warning",
+    });
+    if (confirmed) {
+      await clearApiToken();
+    }
+  }
+
+  async function checkRemoteService() {
+    setSaveError("");
+    try {
+      await store.ensureRemoteCapabilities(true);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     }
@@ -190,6 +221,7 @@ export default function SettingsView() {
               </select>
             </div>
           </div>
+
         </article>
       </div>
 
@@ -231,9 +263,20 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.runtimeModeHint}</p>
             </div>
             <div className="setting-control">
+              <select
+                value={form.processingMode}
+                onChange={(event) => {
+                  const processingMode = event.target.value as ProcessingMode;
+                  patchForm({ processingMode });
+                  void save({ processingMode });
+                }}
+              >
+                <option value="local">{shellMessages.localMode}</option>
+                <option value="remote">{shellMessages.remoteMode}</option>
+              </select>
               <div className="summary-inline">
                 <span>{runtimeModeLabel}</span>
-                <span>{store.localMode ? messages.localDatabaseReady : messages.waitingLocalConfig}</span>
+                <span>{runtimeStatus.shellReady ? messages.localDatabaseReady : messages.waitingLocalConfig}</span>
               </div>
             </div>
           </div>
@@ -438,7 +481,7 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.defaultHotwordsHint}</p>
             </div>
             <div className="setting-control">
-              <textarea id="default-hotwords" value={form.defaultHotwords} onChange={(event) => patchForm({ defaultHotwords: event.target.value })} placeholder={messages.defaultHotwordsPlaceholder} onBlur={save} />
+              <textarea id="default-hotwords" value={form.defaultHotwords} onChange={(event) => patchForm({ defaultHotwords: event.target.value })} placeholder={messages.defaultHotwordsPlaceholder} onBlur={() => void save()} />
             </div>
           </div>
 
@@ -448,7 +491,7 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.defaultSummaryTemplateHint}</p>
             </div>
             <div className="setting-control">
-              <input id="summary-template" value={form.summaryTemplate} onChange={(event) => patchForm({ summaryTemplate: event.target.value })} placeholder={messages.defaultSummaryTemplatePlaceholder} onBlur={save} />
+              <input id="summary-template" value={form.summaryTemplate} onChange={(event) => patchForm({ summaryTemplate: event.target.value })} placeholder={messages.defaultSummaryTemplatePlaceholder} onBlur={() => void save()} />
             </div>
           </div>
 
@@ -458,7 +501,7 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.concurrencyHint}</p>
             </div>
             <div className="setting-control setting-control-inline">
-              <input id="concurrency" value={form.concurrency} onChange={(event) => patchForm({ concurrency: Number(event.target.value) })} type="number" min="1" max="8" onBlur={save} />
+              <input id="concurrency" value={form.concurrency} onChange={(event) => patchForm({ concurrency: Number(event.target.value) })} type="number" min="1" max="8" onBlur={() => void save()} />
             </div>
           </div>
 
@@ -469,8 +512,9 @@ export default function SettingsView() {
             </div>
             <div className="setting-control setting-control-inline">
               <select value={form.localAsrDevice} onChange={(event) => {
-                patchForm({ localAsrDevice: event.target.value as LocalAsrDevice });
-                void save();
+                const localAsrDevice = event.target.value as LocalAsrDevice;
+                patchForm({ localAsrDevice });
+                void save({ localAsrDevice });
               }}>
                 <option value="auto">{messages.localAsrDeviceAuto}</option>
                 <option value="cpu">{messages.localAsrDeviceCpu}</option>
@@ -486,7 +530,7 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.localAsrThreadsHint}</p>
             </div>
             <div className="setting-control setting-control-inline">
-              <input id="local-asr-threads" value={form.localAsrThreads} onChange={(event) => patchForm({ localAsrThreads: Number(event.target.value) })} type="number" min="0" max="32" onBlur={save} />
+              <input id="local-asr-threads" value={form.localAsrThreads} onChange={(event) => patchForm({ localAsrThreads: Number(event.target.value) })} type="number" min="0" max="32" onBlur={() => void save()} />
             </div>
           </div>
 
@@ -496,7 +540,7 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.localAsrBatchSizeSecondsHint}</p>
             </div>
             <div className="setting-control setting-control-inline">
-              <input id="local-asr-batch-size-seconds" value={form.localAsrBatchSizeSeconds} onChange={(event) => patchForm({ localAsrBatchSizeSeconds: Number(event.target.value) })} type="number" min="30" max="1200" step="30" onBlur={save} />
+              <input id="local-asr-batch-size-seconds" value={form.localAsrBatchSizeSeconds} onChange={(event) => patchForm({ localAsrBatchSizeSeconds: Number(event.target.value) })} type="number" min="30" max="1200" step="30" onBlur={() => void save()} />
             </div>
           </div>
         </article>
@@ -511,7 +555,7 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.backendUrlHint}</p>
             </div>
             <div className="setting-control">
-              <input id="backend-url" value={form.backendUrl} onChange={(event) => patchForm({ backendUrl: event.target.value })} placeholder={messages.backendUrlPlaceholder} onBlur={save} />
+              <input id="backend-url" value={form.backendUrl} onChange={(event) => patchForm({ backendUrl: event.target.value })} placeholder={messages.backendUrlPlaceholder} onBlur={() => void save()} />
             </div>
           </div>
 
@@ -521,7 +565,49 @@ export default function SettingsView() {
               <p className="settings-hint">{messages.apiTokenHint}</p>
             </div>
             <div className="setting-control">
-              <input id="api-token" value={form.apiToken} onChange={(event) => patchForm({ apiToken: event.target.value })} type="password" placeholder={messages.apiTokenPlaceholder} autoComplete="off" onBlur={save} />
+              <div className="setting-control-inline">
+                <input
+                  id="api-token"
+                  value={form.apiToken}
+                  onChange={(event) => patchForm({ apiToken: event.target.value })}
+                  type="password"
+                  placeholder={store.settings.apiTokenConfigured ? messages.apiTokenConfigured : messages.apiTokenPlaceholder}
+                  autoComplete="off"
+                  onBlur={() => void save()}
+                />
+                {store.settings.apiTokenConfigured && (
+                  <button className="text-button danger-text" type="button" onClick={() => void clearRemoteApiToken()}>
+                    {messages.apiTokenClear}
+                  </button>
+                )}
+              </div>
+              <p className="settings-hint">
+                {store.settings.apiTokenConfigured ? messages.apiTokenConfigured : messages.apiTokenNotConfigured}
+              </p>
+            </div>
+          </div>
+
+          <div className="setting-row">
+            <div className="settings-meta">
+              <span className="settings-label">{messages.remoteStatus}</span>
+              <p className="settings-hint">
+                {store.remoteCapabilities
+                  ? formatMessage(messages.remoteServiceVersion, { version: store.remoteCapabilities.serviceVersion })
+                  : store.remoteError || messages.backendUrlHint}
+              </p>
+            </div>
+            <div className="setting-control setting-control-inline">
+              <span className={`diagnostics-state diagnostics-state-${store.remoteStatus === "ready" ? "ready" : store.remoteStatus === "unavailable" ? "error" : "pending"}`}>
+                {remoteStatusLabel}
+              </span>
+              <button
+                className="text-button"
+                type="button"
+                disabled={store.remoteStatus === "checking" || !form.backendUrl.trim()}
+                onClick={() => void checkRemoteService()}
+              >
+                {messages.remoteCheck}
+              </button>
             </div>
           </div>
         </article>

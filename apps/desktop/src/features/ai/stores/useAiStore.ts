@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { createDraftModelConfig, createDraftTemplate } from "@/shared/services/ai/storage";
 import { createLocalAiService } from "@/shared/services/tauri/ai";
-import type { AiModelConfig, AiSummaryTemplate } from "@/shared/types/meeting";
+import { runAppStatusAction } from "@/shared/services/ui/statusNotifications";
+import type { AiModelConfig, AiModelSaveInput, AiSummaryTemplate } from "@/shared/types/meeting";
 
 type AiState = {
   models: AiModelConfig[];
@@ -15,7 +16,8 @@ let state: AiState = {
 
 const aiService = createLocalAiService();
 const listeners = new Set<() => void>();
-let hasLoaded = false;
+let modelsLoaded = false;
+let templatesLoaded = false;
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -44,45 +46,63 @@ function normalizeDefaultModel(models: AiModelConfig[]) {
 }
 
 async function reloadState() {
-  const [models, templates] = await Promise.all([
-    aiService.listModels(),
-    aiService.listTemplates(),
-  ]);
+  await Promise.all([reloadModels(), reloadTemplates()]);
+}
 
-  setState({ models, templates });
-  hasLoaded = true;
+async function reloadModels() {
+  const models = await aiService.listModels();
+  modelsLoaded = true;
+  setState({ models });
+}
+
+async function reloadTemplates() {
+  const templates = await aiService.listTemplates();
+  templatesLoaded = true;
+  setState({ templates });
 }
 
 async function ensureLoaded() {
-  if (hasLoaded) {
-    return;
-  }
+  await Promise.all([ensureModelsLoaded(), ensureTemplatesLoaded()]);
+}
 
-  await reloadState();
+async function ensureModelsLoaded() {
+  if (!modelsLoaded) await reloadModels();
+}
+
+async function ensureTemplatesLoaded() {
+  if (!templatesLoaded) await reloadTemplates();
 }
 
 function createModel() {
   return createDraftModelConfig();
 }
 
-async function saveModel(model: AiModelConfig) {
+async function saveModelOperation(input: AiModelSaveInput) {
+  const { credential, ...model } = input;
+  const existingModel = state.models.find((item) => item.id === model.id);
   const nextModel = {
     ...model,
+    credentialPresent: credential.action === "set"
+      ? true
+      : credential.action === "clear"
+        ? false
+        : existingModel?.credentialPresent ?? false,
     updatedAt: new Date().toISOString(),
-  };
+  } satisfies AiModelConfig;
   const current = state.models.some((item) => item.id === model.id)
     ? state.models.map((item) => (item.id === model.id ? nextModel : item))
     : [nextModel, ...state.models];
   const normalized = normalizeDefaultModel(current);
   const target = normalized.find((item) => item.id === nextModel.id) ?? nextModel;
+  const { credentialPresent: _credentialPresent, ...targetMetadata } = target;
 
-  await aiService.saveModel(target);
-  await reloadState();
+  await aiService.saveModel({ ...targetMetadata, credential });
+  await reloadModels();
 }
 
-async function deleteModel(id: string) {
+async function deleteModelOperation(id: string) {
   await aiService.deleteModel(id);
-  await reloadState();
+  await reloadModels();
 }
 
 function createTemplate() {
@@ -107,7 +127,7 @@ function duplicateTemplate(templateId: string) {
   } satisfies AiSummaryTemplate;
 }
 
-async function saveTemplate(template: AiSummaryTemplate) {
+async function saveTemplateOperation(template: AiSummaryTemplate) {
   const nextTemplate = {
     ...template,
     builtin: false,
@@ -115,17 +135,33 @@ async function saveTemplate(template: AiSummaryTemplate) {
   };
 
   await aiService.saveTemplate(nextTemplate);
-  await reloadState();
+  await reloadTemplates();
 }
 
-async function deleteTemplate(id: string) {
+async function deleteTemplateOperation(id: string) {
   await aiService.deleteTemplate(id);
-  await reloadState();
+  await reloadTemplates();
 }
 
 async function insertTemplate(template: AiSummaryTemplate) {
   await aiService.saveTemplate(template);
-  await reloadState();
+  await reloadTemplates();
+}
+
+function saveModel(model: AiModelSaveInput) {
+  return runAppStatusAction("saveModel", () => saveModelOperation(model));
+}
+
+function deleteModel(id: string) {
+  return runAppStatusAction("deleteModel", () => deleteModelOperation(id));
+}
+
+function saveTemplate(template: AiSummaryTemplate) {
+  return runAppStatusAction("saveTemplate", () => saveTemplateOperation(template));
+}
+
+function deleteTemplate(id: string) {
+  return runAppStatusAction("deleteTemplate", () => deleteTemplateOperation(id));
 }
 
 function getDefaultModel() {
@@ -143,6 +179,8 @@ function getModelById(id: string) {
 
 const actions = {
   ensureLoaded,
+  ensureModelsLoaded,
+  ensureTemplatesLoaded,
   createModel,
   saveModel,
   deleteModel,
@@ -154,6 +192,8 @@ const actions = {
   getDefaultModel,
   getTemplateById,
   getModelById,
+  reloadModels,
+  reloadTemplates,
   reloadState,
 };
 

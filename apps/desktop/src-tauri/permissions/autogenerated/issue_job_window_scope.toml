@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-issue-job-window-scope"
+description = "Enables the issue_job_window_scope command without any pre-configured scope."
+commands.allow = ["issue_job_window_scope"]
+
+[[permission]]
+identifier = "deny-issue-job-window-scope"
+description = "Denies the issue_job_window_scope command without any pre-configured scope."
+commands.deny = ["issue_job_window_scope"]

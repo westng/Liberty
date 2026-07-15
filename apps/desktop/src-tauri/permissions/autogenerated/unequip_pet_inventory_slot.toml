@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unequip-pet-inventory-slot"
+description = "Enables the unequip_pet_inventory_slot command without any pre-configured scope."
+commands.allow = ["unequip_pet_inventory_slot"]
+
+[[permission]]
+identifier = "deny-unequip-pet-inventory-slot"
+description = "Denies the unequip_pet_inventory_slot command without any pre-configured scope."
+commands.deny = ["unequip_pet_inventory_slot"]

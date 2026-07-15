@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-destroy-current-window"
+description = "Enables the destroy_current_window command without any pre-configured scope."
+commands.allow = ["destroy_current_window"]
+
+[[permission]]
+identifier = "deny-destroy-current-window"
+description = "Denies the destroy_current_window command without any pre-configured scope."
+commands.deny = ["destroy_current_window"]

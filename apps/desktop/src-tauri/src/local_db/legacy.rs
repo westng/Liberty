@@ -37,7 +37,7 @@ pub(crate) fn import_legacy_jobs(app: &AppHandle, conn: &mut Connection) -> Loca
             jobs::save_job_snapshot_tx(&tx, &job)?;
 
             if has_summary_content(&job.summary) {
-                let imported_run = imported_summary_run(&job);
+                let imported_run = imported_summary_run(&job)?;
                 ai_summary_runs::save_summary_run_tx(&tx, &imported_run)?;
             }
         }
@@ -62,7 +62,7 @@ fn read_legacy_job(job_dir: &Path) -> LocalResult<MeetingJob> {
     }
 
     if let Ok(result) = progress::read_json::<LegacyRunnerResult>(&job_dir.join("result.json")) {
-        if !job.enable_speaker && job.transcript_segments.is_empty() {
+        if job.transcript_segments.is_empty() {
             job.transcript_segments = result.transcript_segments.unwrap_or_default();
         }
         if job.speaker_segments.is_empty() {
@@ -95,9 +95,36 @@ fn has_summary_content(summary: &MeetingSummary) -> bool {
         || !summary.follow_ups.is_empty()
 }
 
-fn imported_summary_run(job: &MeetingJob) -> AiSummaryRun {
-    AiSummaryRun {
-        id: format!("imported-summary-{}", job.id),
+fn imported_summary_run(job: &MeetingJob) -> LocalResult<AiSummaryRun> {
+    let id = format!("imported-summary-{}", job.id);
+    let result = AiSummaryResult {
+        title: job.title.clone(),
+        overview: job.summary.overview.clone(),
+        topics: job.summary.topics.clone(),
+        decisions: job.summary.decisions.clone(),
+        action_items: job
+            .summary
+            .action_items
+            .iter()
+            .map(|item| AiSummaryActionItem {
+                task: item.clone(),
+                owner: String::new(),
+                due_date: String::new(),
+            })
+            .collect(),
+        risks: job.summary.risks.clone(),
+        follow_ups: job.summary.follow_ups.clone(),
+    };
+    let minutes_payload = crate::local_export::source::reconstruct_verified_payload(
+        job,
+        &result,
+        &[],
+        "",
+        Some(id.clone()),
+    )?;
+
+    Ok(AiSummaryRun {
+        id,
         job_id: job.id.clone(),
         model_config_id: String::new(),
         template_id: String::new(),
@@ -108,26 +135,62 @@ fn imported_summary_run(job: &MeetingJob) -> AiSummaryRun {
         error_message: None,
         prompt_preview: Some("Imported from legacy JSON task".into()),
         raw_response: None,
-        result: Some(AiSummaryResult {
-            title: job.title.clone(),
-            overview: job.summary.overview.clone(),
-            topics: job.summary.topics.clone(),
-            decisions: job.summary.decisions.clone(),
-            action_items: job
-                .summary
-                .action_items
-                .iter()
-                .map(|item| AiSummaryActionItem {
-                    task: item.clone(),
-                    owner: String::new(),
-                    due_date: String::new(),
-                })
-                .collect(),
-            risks: job.summary.risks.clone(),
-            follow_ups: job.summary.follow_ups.clone(),
-        }),
-        minutes_payload: None,
+        result: Some(result),
+        minutes_payload: Some(minutes_payload),
         created_at: job.created_at.clone(),
         updated_at: job.created_at.clone(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imported_completed_run_persists_verified_payload_with_snapshot_speakers() {
+        let job = MeetingJob {
+            id: "legacy-job".into(),
+            title: "周会".into(),
+            enable_speaker: true,
+            transcript_segments: vec![
+                TranscriptSegment {
+                    speaker: Some("人员A".into()),
+                    ..TranscriptSegment::default()
+                },
+                TranscriptSegment {
+                    speaker: Some("人员B".into()),
+                    ..TranscriptSegment::default()
+                },
+            ],
+            summary: MeetingSummary {
+                overview: "发言内容\n【部门】：人员A\n上周总结：\n1、A事项".into(),
+                ..MeetingSummary::default()
+            },
+            ..MeetingJob::default()
+        };
+
+        let run = imported_summary_run(&job).unwrap();
+        let payload = run.minutes_payload.expect("legacy payload");
+        let speakers = payload
+            .speaker_reports
+            .iter()
+            .map(|report| report.resolved_name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(run.status, "completed");
+        assert_eq!(
+            payload.source_summary_run_id.as_deref(),
+            Some("imported-summary-legacy-job")
+        );
+        assert!(speakers.contains(&"人员A"));
+        assert!(speakers.contains(&"人员B"));
+        assert_eq!(
+            payload
+                .speaker_reports
+                .iter()
+                .find(|report| report.resolved_name == "人员B")
+                .map(|report| report.match_status.as_str()),
+            Some("missing_from_ai")
+        );
     }
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-extra-desktop-pet"
+description = "Enables the open_extra_desktop_pet command without any pre-configured scope."
+commands.allow = ["open_extra_desktop_pet"]
+
+[[permission]]
+identifier = "deny-open-extra-desktop-pet"
+description = "Denies the open_extra_desktop_pet command without any pre-configured scope."
+commands.deny = ["open_extra_desktop_pet"]

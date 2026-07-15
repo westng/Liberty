@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-claim-pet-daily-check-in"
+description = "Enables the claim_pet_daily_check_in command without any pre-configured scope."
+commands.allow = ["claim_pet_daily_check_in"]
+
+[[permission]]
+identifier = "deny-claim-pet-daily-check-in"
+description = "Denies the claim_pet_daily_check_in command without any pre-configured scope."
+commands.deny = ["claim_pet_daily_check_in"]

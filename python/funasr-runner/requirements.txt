@@ -1,9 +1,9 @@
-# Managed local runtime requirements for Liberty.
-# Keep these versions conservative so Python 3.9 remains supported on macOS and Windows.
-numpy<2
-torch>=2.1,<2.4
-torchaudio>=2.1,<2.4
-torchvision>=0.16,<0.19
-modelscope>=1.24,<2
-huggingface_hub>=0.30,<1
-funasr>=1.1,<2
+# Direct inputs for the generated, platform-specific hash locks.
+# Keep these exact pins aligned with Python 3.10 and the CPU PyTorch wheel set.
+numpy==1.26.4
+torch==2.2.2
+torchaudio==2.2.2
+torchvision==0.17.2
+modelscope==1.24.1
+huggingface_hub==0.30.2
+funasr==1.3.9

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
+import { publishEntityChanged } from "@/shared/services/ui/windows";
+import { destroyCurrentWindow, setCurrentWindowTitle } from "@/shared/services/tauri/window";
 import type { AiSummaryTemplate } from "@/shared/types/meeting";
 
 export default function TemplateEditorView() {
@@ -12,16 +14,42 @@ export default function TemplateEditorView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AiSummaryTemplate>(() => aiStore.createTemplate());
   const [errorMessage, setErrorMessage] = useState("");
+  const [dirty, setDirty] = useState(false);
   const messages = getMessages(meetingStore.settings.locale).templates;
   const commonMessages = getMessages(meetingStore.settings.locale).common;
   const selectedTemplate = selectedId ? aiStore.getTemplateById(selectedId) ?? null : null;
 
   useEffect(() => {
-    void initialize();
+    void initialize().catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWindow().onCloseRequested(async (event) => {
+      if (!dirty) return;
+      event.preventDefault();
+      const shouldClose = await confirm(messages.reset, {
+        title: commonMessages.closeWindow,
+        kind: "warning",
+        okLabel: commonMessages.closeWindow,
+        cancelLabel: commonMessages.cancel,
+      });
+      if (shouldClose) await destroyCurrentWindow();
+    }).then((stop) => {
+      if (active) unlisten = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [dirty, messages, commonMessages]);
+
   async function initialize() {
-    await aiStore.ensureLoaded();
+    await aiStore.ensureTemplatesLoaded();
     const templateId = new URLSearchParams(window.location.search).get("id");
 
     if (templateId) {
@@ -29,6 +57,7 @@ export default function TemplateEditorView() {
       if (template) {
         setSelectedId(template.id);
         setDraft({ ...template });
+        setDirty(false);
         await syncWindowTitle(true);
         return;
       }
@@ -36,11 +65,13 @@ export default function TemplateEditorView() {
 
     setSelectedId(null);
     setDraft(aiStore.createTemplate());
+    setDirty(false);
     await syncWindowTitle(false);
   }
 
   function patchDraft(patch: Partial<AiSummaryTemplate>) {
     setDraft((current) => ({ ...current, ...patch }));
+    setDirty(true);
   }
 
   function validateDraft() {
@@ -55,7 +86,7 @@ export default function TemplateEditorView() {
 
   async function syncWindowTitle(isEdit: boolean) {
     try {
-      await getCurrentWindow().setTitle(isEdit ? messages.editorEditTitle : messages.editorNewTitle);
+      await setCurrentWindowTitle(isEdit ? messages.editorEditTitle : messages.editorNewTitle);
     } catch {
       // ignore
     }
@@ -73,17 +104,22 @@ export default function TemplateEditorView() {
       return;
     }
 
-    await aiStore.saveTemplate({
-      ...draft,
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      prompt: draft.prompt.trim(),
-    });
-
-    setSelectedId(draft.id);
-    setDraft({ ...(aiStore.getTemplateById(draft.id) ?? draft) });
-    setErrorMessage("");
-    await syncWindowTitle(true);
+    try {
+      await aiStore.saveTemplate({
+        ...draft,
+        name: draft.name.trim(),
+        description: draft.description.trim(),
+        prompt: draft.prompt.trim(),
+      });
+      setSelectedId(draft.id);
+      setDraft({ ...(aiStore.getTemplateById(draft.id) ?? draft) });
+      setDirty(false);
+      setErrorMessage("");
+      await publishEntityChanged({ entity: "template", id: draft.id, action: "saved" }).catch(() => undefined);
+      await syncWindowTitle(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function duplicateTemplate() {
@@ -96,11 +132,17 @@ export default function TemplateEditorView() {
       return;
     }
 
-    await aiStore.insertTemplate(duplicated);
-    setSelectedId(duplicated.id);
-    setDraft({ ...(aiStore.getTemplateById(duplicated.id) ?? duplicated) });
-    setErrorMessage("");
-    await syncWindowTitle(true);
+    try {
+      await aiStore.insertTemplate(duplicated);
+      setSelectedId(duplicated.id);
+      setDraft({ ...(aiStore.getTemplateById(duplicated.id) ?? duplicated) });
+      setDirty(false);
+      setErrorMessage("");
+      await publishEntityChanged({ entity: "template", id: duplicated.id, action: "saved" }).catch(() => undefined);
+      await syncWindowTitle(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function removeTemplate() {
@@ -119,13 +161,28 @@ export default function TemplateEditorView() {
       return;
     }
 
-    await aiStore.deleteTemplate(selectedTemplate.id);
-    resetDraft();
+    try {
+      await aiStore.deleteTemplate(selectedTemplate.id);
+      await publishEntityChanged({ entity: "template", id: selectedTemplate.id, action: "deleted" }).catch(() => undefined);
+      resetDraft(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
-  function resetDraft() {
+  async function resetDraft(force = false) {
+    if (!force && dirty) {
+      const confirmed = await confirm(messages.reset, {
+        title: messages.reset,
+        kind: "warning",
+        okLabel: messages.reset,
+        cancelLabel: commonMessages.cancel,
+      });
+      if (!confirmed) return;
+    }
     setSelectedId(null);
     setDraft(aiStore.createTemplate());
+    setDirty(false);
     setErrorMessage("");
     void syncWindowTitle(false);
   }
@@ -185,7 +242,7 @@ export default function TemplateEditorView() {
           <button className="primary-button" type="button" disabled={draft.builtin} onClick={save}>
             {messages.save}
           </button>
-          <button className="secondary-button" type="button" onClick={resetDraft}>
+          <button className="secondary-button" type="button" onClick={() => void resetDraft()}>
             {messages.reset}
           </button>
           {selectedTemplate && !selectedTemplate.builtin && (

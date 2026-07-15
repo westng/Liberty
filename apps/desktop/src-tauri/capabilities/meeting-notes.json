@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "meeting-notes-capability",
+  "description": "Meeting notes window can read one explicitly sourced local result and UI preferences.",
+  "windows": ["meeting-notes"],
+  "permissions": [
+    "allow-close-current-window",
+    "allow-set-current-window-theme",
+    "allow-get-ui-preferences",
+    "allow-get-job-result"
+  ]
+}

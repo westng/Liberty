@@ -2,8 +2,11 @@ import { getIconData, iconToSVG } from "@iconify/utils";
 import { icons as f7Icons } from "@iconify-json/f7";
 
 const iconNames = {
+  dashboard: "house",
   plus: "plus-circle",
   tray: "tray",
+  results: "doc-chart",
+  market: "rectangle-grid-2x2",
   chip: "cube-box",
   doc: "doc-text",
   people: "person-2",

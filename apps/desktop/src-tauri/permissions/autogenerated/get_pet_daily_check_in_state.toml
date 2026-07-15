@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-pet-daily-check-in-state"
+description = "Enables the get_pet_daily_check_in_state command without any pre-configured scope."
+commands.allow = ["get_pet_daily_check_in_state"]
+
+[[permission]]
+identifier = "deny-get-pet-daily-check-in-state"
+description = "Denies the get_pet_daily_check_in_state command without any pre-configured scope."
+commands.deny = ["get_pet_daily_check_in_state"]

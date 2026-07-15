@@ -34,9 +34,13 @@ This includes:
 
 ## Manual Release Checks
 
-- Confirm runtime bundles exist for each platform ID.
+- Confirm `runtime-manifest.json` has explicit entries for each supported platform ID.
+- Confirm configured Python and ffmpeg asset URLs are reachable with a cheap HEAD or byte-range probe before publishing them to users.
+- Confirm placeholder or unavailable runtime sources are not advertised in the client.
 - Confirm macOS Intel and Apple Silicon artifacts are separate.
 - Confirm Windows x86 and x64 artifacts do not share runtime assumptions.
-- Confirm `runtime-manifest.json` matches the release bundle contents.
+- Confirm Windows x86 unsupported runtime-download messaging is still accurate when the platform remains listed.
+- Confirm the Environment & Models settings flow can list configured download sources and surface runtime-install logs.
 - Confirm diagnostics report shows the expected current platform and schema version.
 - Confirm no API keys, tokens, or local source paths appear in exported diagnostics.
+- Confirm desktop-pet diagnostic log export redacts sensitive paths and includes useful runtime/resource state.

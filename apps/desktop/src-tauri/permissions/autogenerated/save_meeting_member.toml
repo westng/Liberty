@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-meeting-member"
+description = "Enables the save_meeting_member command without any pre-configured scope."
+commands.allow = ["save_meeting_member"]
+
+[[permission]]
+identifier = "deny-save-meeting-member"
+description = "Denies the save_meeting_member command without any pre-configured scope."
+commands.deny = ["save_meeting_member"]

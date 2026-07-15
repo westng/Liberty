@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-meeting-members"
+description = "Enables the list_meeting_members command without any pre-configured scope."
+commands.allow = ["list_meeting_members"]
+
+[[permission]]
+identifier = "deny-list-meeting-members"
+description = "Denies the list_meeting_members command without any pre-configured scope."
+commands.deny = ["list_meeting_members"]

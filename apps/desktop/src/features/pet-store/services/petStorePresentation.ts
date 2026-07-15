@@ -20,6 +20,7 @@ export const categoryAccents: Record<string, string> = {
   theme: "#61b86b",
   tool: "#f6c04f",
   food: "#f58a4c",
+  seed: "#78b94c",
   badge: "#5f7dff",
   none: "#8f96a3",
 };
@@ -80,6 +81,19 @@ export function shopImageUrl(imageKey: string) {
   return shopImageUrlMap[imageKey] ?? shopImageUrlMap.gift_box ?? "";
 }
 
+export function isFarmHarvestItemKey(itemKey: string) {
+  return itemKey.endsWith("-harvest-food");
+}
+
+export function displayItemTypeLabel(storeState: PetStoreState | null, item: PetStoreDisplayItem, locale: LocaleCode) {
+  const catalog = itemCatalog(storeState, item);
+  if (catalog && isFarmHarvestItemKey(catalog.itemKey)) {
+    return locale === "en-US" ? "Harvest" : "果实";
+  }
+  const itemType = isCatalogItem(item) ? item.item.itemType : item.itemType;
+  return itemTypeLabel(itemType, locale);
+}
+
 export function itemTypeLabel(itemType: string, locale: LocaleCode) {
   if (locale === "en-US") {
     return itemType === "pet"
@@ -92,9 +106,11 @@ export function itemTypeLabel(itemType: string, locale: LocaleCode) {
             ? "Tool"
             : itemType === "food"
               ? "Food"
-              : itemType === "none"
-                ? "No Prize"
-              : "Badge";
+              : itemType === "seed"
+                ? "Seed"
+                : itemType === "none"
+                  ? "No Prize"
+                  : "Badge";
   }
 
   return itemType === "pet"
@@ -104,9 +120,11 @@ export function itemTypeLabel(itemType: string, locale: LocaleCode) {
       : itemType === "theme"
         ? "场景"
         : itemType === "tool"
-          ? "道具"
-          : itemType === "food"
-            ? "食物"
+        ? "道具"
+        : itemType === "food"
+          ? "食物"
+          : itemType === "seed"
+            ? "种子"
             : itemType === "none"
               ? "空奖"
               : "徽章";

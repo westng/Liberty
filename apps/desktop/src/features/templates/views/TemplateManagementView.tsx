@@ -25,13 +25,13 @@ export default function TemplateManagementView() {
   const latestTemplate = templates[0] ?? null;
 
   useEffect(() => {
-    void aiStore.ensureLoaded();
+    void aiStore.ensureTemplatesLoaded();
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
   }, []);
 
   function handleWindowFocus() {
-    void aiStore.reloadState();
+    void aiStore.reloadTemplates();
   }
 
   async function removeTemplate(template: AiSummaryTemplate) {

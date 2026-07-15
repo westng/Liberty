@@ -1,6 +1,8 @@
 pub mod ai_models;
+pub mod ai_summary_run_models;
 pub mod ai_summary_runs;
 pub mod ai_templates;
+pub mod farm;
 pub mod job_events;
 pub mod members;
 pub mod pet;
@@ -10,3 +12,4 @@ pub mod pet_redeem_key;
 pub mod pet_store;
 pub mod runtime_state;
 pub mod settings;
+pub mod work_game;

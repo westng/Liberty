@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-delete-job"
+description = "Enables the remote_delete_job command without any pre-configured scope."
+commands.allow = ["remote_delete_job"]
+
+[[permission]]
+identifier = "deny-remote-delete-job"
+description = "Denies the remote_delete_job command without any pre-configured scope."
+commands.deny = ["remote_delete_job"]

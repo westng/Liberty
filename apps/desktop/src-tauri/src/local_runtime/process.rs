@@ -156,65 +156,6 @@ where
     });
 }
 
-pub fn warmup_default_models(
-    python_executable: &Path,
-    warmup_path: &Path,
-    models_root: &Path,
-    asr_backend: &str,
-    model_endpoint: Option<&str>,
-    log_path: &Path,
-) -> LocalResult<()> {
-    let mut command = Command::new(python_executable);
-    command
-        .env("PYTHONUTF8", "1")
-        .env("LIBERTY_ASR_BACKEND", asr_backend)
-        .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
-        .env("HF_HOME", models_root.join("huggingface"))
-        .env("TORCH_HOME", models_root.join("torch"))
-        .arg(warmup_path)
-        .arg("--models-root")
-        .arg(models_root);
-
-    if let Some(endpoint) = model_endpoint
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        command.env("MODELSCOPE_ENDPOINT", endpoint);
-    }
-
-    run_command_with_log(&mut command, log_path, "Downloading default ASR models")
-}
-
-pub fn validate_default_models_offline(
-    python_executable: &Path,
-    warmup_path: &Path,
-    models_root: &Path,
-    asr_backend: &str,
-    log_path: &Path,
-) -> LocalResult<()> {
-    let mut command = Command::new(python_executable);
-    command
-        .env("PYTHONUTF8", "1")
-        .env("LIBERTY_ASR_BACKEND", asr_backend)
-        .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
-        .env("HF_HOME", models_root.join("huggingface"))
-        .env("TORCH_HOME", models_root.join("torch"))
-        .env("MODELSCOPE_OFFLINE", "1")
-        .env("HF_HUB_OFFLINE", "1")
-        .env("TRANSFORMERS_OFFLINE", "1")
-        .arg(warmup_path)
-        .arg("--models-root")
-        .arg(models_root)
-        .arg("--validate-only");
-
-    run_command_with_log_timeout(
-        &mut command,
-        log_path,
-        "Validating cached ASR models offline",
-        Duration::from_secs(10 * 60),
-    )
-}
-
 pub fn validate_ffmpeg_runtime(ffmpeg_path: &Path, log_path: &Path) -> LocalResult<()> {
     run_command_with_log_timeout(
         Command::new(ffmpeg_path)

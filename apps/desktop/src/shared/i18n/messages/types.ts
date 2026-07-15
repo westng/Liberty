@@ -2,8 +2,11 @@ import type { JobStage } from "@/shared/types/meeting";
 
 export type MessageTree = {
   nav: {
+    dashboard: string;
     newJob: string;
     jobs: string;
+    results: string;
+    workMarket: string;
     models: string;
     templates: string;
     members: string;
@@ -66,6 +69,32 @@ export type MessageTree = {
     cpu: string;
     memory: string;
     graphics: string;
+    statusReady: string;
+    statusWorking: string;
+    statusSucceeded: string;
+    statusStarted: string;
+    statusFailed: string;
+    statusActions: {
+      createJob: string;
+      deleteJob: string;
+      retryJob: string;
+      renameSpeaker: string;
+      saveSettings: string;
+      downloadRuntime: string;
+      detectRuntime: string;
+      updateRuntimeSource: string;
+      exportFile: string;
+      saveModel: string;
+      deleteModel: string;
+      saveTemplate: string;
+      deleteTemplate: string;
+      saveMember: string;
+      deleteMember: string;
+      importMembers: string;
+      exportMembers: string;
+      togglePet: string;
+      exportDiagnostics: string;
+    };
   };
   settings: {
     pageTitle: string;
@@ -175,12 +204,23 @@ export type MessageTree = {
     localAsrBatchSizeSeconds: string;
     localAsrBatchSizeSecondsHint: string;
     remoteCompatibility: string;
+    remoteStatus: string;
+    remoteStatusIdle: string;
+    remoteStatusChecking: string;
+    remoteStatusReady: string;
+    remoteStatusUnavailable: string;
+    remoteCheck: string;
+    remoteServiceVersion: string;
     backendUrl: string;
     backendUrlHint: string;
     backendUrlPlaceholder: string;
     apiToken: string;
     apiTokenHint: string;
     apiTokenPlaceholder: string;
+    apiTokenConfigured: string;
+    apiTokenNotConfigured: string;
+    apiTokenClear: string;
+    apiTokenClearConfirm: string;
     save: string;
     copyright: string;
     authorGithub: string;
@@ -239,6 +279,7 @@ export type MessageTree = {
     fileCount: string;
     modelDownloadRequiredTitle: string;
     modelDownloadRequiredMessage: string;
+    remoteUploadUnavailable: string;
   };
   jobs: {
     deleteConfirm: string;
@@ -329,6 +370,7 @@ export type MessageTree = {
     speakerInputPlaceholder: string;
     emptyFilteredTranscript: string;
     notFound: string;
+    remoteOperationUnavailable: string;
   };
   aiSummary: {
     activeLabelEmpty: string;
@@ -336,6 +378,9 @@ export type MessageTree = {
     activeLabelRunning: string;
     activeLabelSaved: string;
     staleRunError: string;
+    remoteUnavailable: string;
+    jobRefMissing: string;
+    jobSourceMismatch: string;
     jobNotFound: string;
     modelMissing: string;
     templateMissing: string;
@@ -401,6 +446,12 @@ export type MessageTree = {
     baseUrlPlaceholder: string;
     apiKey: string;
     apiKeyPlaceholder: string;
+    apiKeyKeepPlaceholder: string;
+    credentialStored: string;
+    credentialMissing: string;
+    credentialClearPending: string;
+    clearCredential: string;
+    keepCredential: string;
     model: string;
     modelPlaceholder: string;
     modelHelp: string;
@@ -491,6 +542,7 @@ export type MessageTree = {
     risksHeading: string;
     followUpsHeading: string;
     emptySummary: string;
+    remoteWordUnavailable: string;
   };
   windows: {
     aiSummaryTitle: string;

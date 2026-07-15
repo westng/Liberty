@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-job-summary-docx"
+description = "Enables the export_job_summary_docx command without any pre-configured scope."
+commands.allow = ["export_job_summary_docx"]
+
+[[permission]]
+identifier = "deny-export-job-summary-docx"
+description = "Denies the export_job_summary_docx command without any pre-configured scope."
+commands.deny = ["export_job_summary_docx"]

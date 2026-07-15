@@ -1,29 +1,209 @@
 use crate::infrastructure::process_logs;
 use crate::infrastructure::runner_files;
-use crate::infrastructure::runner_process::{self, RunnerCommandInput};
+use crate::infrastructure::runner_process::{self, RunnerCommandInput, RunnerExit};
 use crate::infrastructure::time::unix_timestamp_millis;
-use crate::local_db::{
-    self, job_dir, mark_job_processing_started, update_job_completion, update_job_failure,
-    update_job_process_log, update_job_statuses, MeetingJob, MeetingSourceFile, MeetingSummary,
-    TranscriptSegment,
-};
+use crate::local_db::{self, MeetingJob, MeetingSourceFile, MeetingSummary, TranscriptSegment};
 use crate::local_runtime;
-use crate::process_utils::configure_background_process;
 use serde::Deserialize;
 use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
     process::Stdio,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, OnceLock,
+    },
+    time::Duration,
 };
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Webview, WebviewWindow};
+use tauri_plugin_fs::FsExt;
+
+#[path = "infrastructure/job_scheduler.rs"]
+mod job_scheduler;
+
+use job_scheduler::{
+    JobExecution, JobExecutionError, JobExecutionMode, JobExecutor, JobRunCompletion,
+    JobRunContext, JobRunRegistration, JobRunStore, JobScheduler, PersistedJobState,
+    RecoverableJob, RunFence, SchedulerResult,
+};
 
 static JOB_COUNTER: AtomicU64 = AtomicU64::new(1);
+static JOB_SCHEDULER: OnceLock<JobScheduler> = OnceLock::new();
+const DELETE_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+const DATABASE_PROCESS_LOG_BYTES: usize = 64 * 1024;
 
 type LocalResult<T> = Result<T, String>;
 
+struct LocalJobRunStore {
+    app: AppHandle,
+}
+
+impl JobRunStore for LocalJobRunStore {
+    fn load_recoverable_jobs(&self) -> SchedulerResult<Vec<RecoverableJob>> {
+        local_db::list_recoverable_local_job_runs(&self.app).map(|runs| {
+            runs.into_iter()
+                .map(|run| RecoverableJob {
+                    job_id: run.job_id,
+                    state: if run.status == "queued" {
+                        PersistedJobState::Queued
+                    } else {
+                        PersistedJobState::Running
+                    },
+                    fence: Some(RunFence {
+                        attempt_id: run.attempt_id,
+                        lease_token: run.lease_token,
+                    }),
+                    pid: run.pid,
+                    process_identity: run.process_identity,
+                    started_at_ms: run.started_at_ms,
+                    heartbeat_at_ms: run.heartbeat_at_ms,
+                })
+                .collect()
+        })
+    }
+
+    fn requeue_recovered_job(
+        &self,
+        job_id: &str,
+        previous_fence: Option<RunFence>,
+    ) -> SchedulerResult<()> {
+        let fence = previous_fence.ok_or_else(|| "恢复中的任务缺少运行 fence。".to_string())?;
+        if local_db::requeue_recovered_local_job_run(
+            &self.app,
+            job_id,
+            fence.attempt_id,
+            fence.lease_token,
+        )? {
+            Ok(())
+        } else {
+            Err("恢复任务时运行 fence 已失效。".into())
+        }
+    }
+
+    fn begin_run(&self, registration: &JobRunRegistration) -> SchedulerResult<RunFence> {
+        let lease = local_db::begin_local_job_run(
+            &self.app,
+            &registration.job_id,
+            registration.started_at_ms,
+        )?;
+        Ok(RunFence {
+            attempt_id: lease.attempt_id,
+            lease_token: lease.lease_token,
+        })
+    }
+
+    fn fence_job(&self, job_id: &str) -> SchedulerResult<()> {
+        local_db::fence_local_job_run(&self.app, job_id)
+    }
+
+    fn attach_process(
+        &self,
+        job_id: &str,
+        fence: RunFence,
+        pid: u32,
+        process_identity: &str,
+        heartbeat_at_ms: u64,
+    ) -> SchedulerResult<bool> {
+        local_db::attach_local_job_process(
+            &self.app,
+            job_id,
+            fence.attempt_id,
+            fence.lease_token,
+            pid,
+            process_identity,
+            heartbeat_at_ms,
+        )
+    }
+
+    fn heartbeat(
+        &self,
+        job_id: &str,
+        fence: RunFence,
+        pid: Option<u32>,
+        heartbeat_at_ms: u64,
+    ) -> SchedulerResult<bool> {
+        local_db::heartbeat_local_job_run(
+            &self.app,
+            job_id,
+            fence.attempt_id,
+            fence.lease_token,
+            pid,
+            heartbeat_at_ms,
+        )
+    }
+
+    fn is_current_fence(&self, job_id: &str, fence: RunFence) -> SchedulerResult<bool> {
+        local_db::is_current_local_job_run(&self.app, job_id, fence.attempt_id, fence.lease_token)
+    }
+
+    fn finish_run(
+        &self,
+        job_id: &str,
+        fence: RunFence,
+        completion: &JobRunCompletion,
+    ) -> SchedulerResult<bool> {
+        match completion {
+            JobRunCompletion::Completed => local_db::local_job_run_has_status(
+                &self.app,
+                job_id,
+                fence.attempt_id,
+                fence.lease_token,
+                "completed",
+            ),
+            JobRunCompletion::Failed { reason } => {
+                if local_db::local_job_run_has_status(
+                    &self.app,
+                    job_id,
+                    fence.attempt_id,
+                    fence.lease_token,
+                    "failed",
+                )? {
+                    return Ok(true);
+                }
+                let execution = JobExecution {
+                    job_id: job_id.to_string(),
+                    fence,
+                    started_at_ms: 0,
+                    mode: JobExecutionMode::Fresh,
+                };
+                mark_failed(&self.app, &execution, reason)
+            }
+            JobRunCompletion::Cancelled => local_db::requeue_recovered_local_job_run(
+                &self.app,
+                job_id,
+                fence.attempt_id,
+                fence.lease_token,
+            ),
+        }
+    }
+}
+
+struct LocalJobExecutor {
+    app: AppHandle,
+}
+
+impl JobExecutor for LocalJobExecutor {
+    fn execute(
+        &self,
+        execution: JobExecution,
+        context: JobRunContext,
+    ) -> Result<(), JobExecutionError> {
+        match execute_local_job(&self.app, &execution, &context) {
+            Err(JobExecutionError::Failed(reason)) => {
+                match mark_failed(&self.app, &execution, &reason) {
+                    Ok(true) => Err(JobExecutionError::Failed(reason)),
+                    Ok(false) => Err(JobExecutionError::Cancelled),
+                    Err(error) => Err(JobExecutionError::Failed(error)),
+                }
+            }
+            result => result,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateJobInput {
     pub title: String,
@@ -33,8 +213,6 @@ pub struct CreateJobInput {
     pub enable_speaker: bool,
     pub summary_template: String,
     pub created_at: String,
-    #[serde(default)]
-    pub runner_script_path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,11 +239,27 @@ pub fn list_jobs(app: AppHandle) -> LocalResult<Vec<MeetingJob>> {
 
 #[tauri::command]
 pub fn get_job(app: AppHandle, id: String) -> LocalResult<MeetingJob> {
+    runner_files::validate_job_id(&id)?;
     local_db::get_job(&app, &id)
 }
 
 #[tauri::command]
-pub fn get_job_result(app: AppHandle, id: String) -> LocalResult<MeetingJob> {
+pub fn get_job_result(
+    app: AppHandle,
+    window: WebviewWindow,
+    id: String,
+    window_scope_token: Option<String>,
+) -> LocalResult<MeetingJob> {
+    runner_files::validate_job_id(&id)?;
+    crate::window_scope::authorize_job_window(
+        &window,
+        &[
+            crate::window_scope::ai_summary_window(),
+            crate::window_scope::meeting_notes_window(),
+        ],
+        &id,
+        window_scope_token.as_deref(),
+    )?;
     local_db::get_job(&app, &id)
 }
 
@@ -76,39 +270,65 @@ pub fn rename_job_speaker(
     from_speaker: String,
     to_speaker: String,
 ) -> LocalResult<MeetingJob> {
+    runner_files::validate_job_id(&id)?;
     local_db::rename_job_speaker(&app, &id, &from_speaker, &to_speaker)?;
     local_db::get_job(&app, &id)
 }
 
 #[tauri::command]
 pub fn delete_job(app: AppHandle, id: String) -> LocalResult<()> {
-    let dir = job_dir(&app, &id)?;
-
-    if dir.exists() {
-        fs::remove_dir_all(&dir).map_err(|err| err.to_string())?;
+    runner_files::validate_job_id(&id)?;
+    local_db::get_job(&app, &id)?;
+    let scheduler = job_scheduler(&app)?;
+    let mut deletion = scheduler.reserve_deletion(id.clone())?;
+    let operation = local_db::prepare_job_deletion(&app, &id)?;
+    deletion.persist_intent();
+    let result = (|| {
+        deletion.fence_and_cancel()?;
+        deletion.wait_until_idle(DELETE_WAIT_TIMEOUT)?;
+        converge_job_deletion(&app, &operation)
+    })();
+    if let Err(error) = result {
+        let _ = local_db::record_job_deletion_error(&app, &operation.operation_id, &error);
+        return Err(error);
     }
-
-    local_db::delete_job(&app, &id)
+    Ok(())
 }
 
 #[tauri::command]
-pub fn create_job(app: AppHandle, input: CreateJobInput) -> LocalResult<MeetingJob> {
+pub fn create_job(
+    app: AppHandle,
+    webview: Webview,
+    input: CreateJobInput,
+) -> LocalResult<MeetingJob> {
     validate_create_input(&app, &input)?;
-
-    let runner_script_path = resolve_runner_script_path(&app, Some(&input.runner_script_path))?;
+    for file in &input.files {
+        let path = file
+            .path
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .ok_or_else(|| "本地任务文件缺少路径。".to_string())?;
+        if !webview.fs_scope().is_allowed(Path::new(path)) {
+            return Err("任务文件未经系统选择对话框授权。".into());
+        }
+    }
+    let scheduler = job_scheduler(&app)?;
+    let runner_script_path = resolve_runner_script_path(&app)?;
     let job = build_initial_job(input, runner_script_path);
-    let dir = job_dir(&app, &job.id)?;
+    let dir = safe_job_dir(&app, &job.id)?;
     fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    reset_process_log(&dir)?;
-    reset_runner_files(&dir)?;
     local_db::save_job_snapshot(&app, &job)?;
-    spawn_local_job(app.clone(), job.id.clone());
-    local_db::get_job(&app, &job.id)
+    let queued_snapshot = local_db::get_job(&app, &job.id)?;
+    scheduler.enqueue(job.id.clone())?;
+    Ok(queued_snapshot)
 }
 
 #[tauri::command]
 pub fn retry_job(app: AppHandle, id: String) -> LocalResult<MeetingJob> {
-    let settings = local_db::get_settings(&app)?;
+    runner_files::validate_job_id(&id)?;
+    let scheduler = job_scheduler(&app)?;
+    let reservation = scheduler.reserve_job(id.clone())?;
     let job = local_db::get_job(&app, &id)?;
     let first_file = job
         .source_files
@@ -119,33 +339,33 @@ pub fn retry_job(app: AppHandle, id: String) -> LocalResult<MeetingJob> {
         return Err("本地模式只支持带本地路径的文件。".into());
     }
 
-    let dir = job_dir(&app, &id)?;
+    let dir = safe_job_dir(&app, &id)?;
     fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    reset_process_log(&dir)?;
-    reset_runner_files(&dir)?;
-    let runner_script_path = resolve_runner_script_path(&app, job.runner_script_path.as_deref())?;
-    let resolved_runtime =
-        local_runtime::resolve_python_runtime(&app, Some(&settings.python_path))?;
-    local_db::reset_job_for_retry(
-        &app,
-        &id,
-        &resolved_runtime.python_path,
-        &runner_script_path,
+    let runner_script_path = resolve_runner_script_path(&app)?;
+    local_db::reset_job_for_retry(&app, &id, "", &runner_script_path)?;
+    let queued_snapshot = local_db::get_job(&app, &id)?;
+    reservation.enqueue()?;
+    Ok(queued_snapshot)
+}
+
+fn execute_local_job(
+    app: &AppHandle,
+    execution: &JobExecution,
+    context: &JobRunContext,
+) -> Result<(), JobExecutionError> {
+    let job_id = execution.job_id.as_str();
+    runner_files::validate_job_id(job_id)?;
+    context.ensure_current()?;
+    let job_dir = safe_job_dir(app, job_id)?;
+    let dir = runner_files::create_attempt_dir(
+        &job_dir,
+        execution.fence.attempt_id,
+        execution.fence.lease_token,
     )?;
-    spawn_local_job(app.clone(), id.clone());
-    local_db::get_job(&app, &id)
-}
-
-fn spawn_local_job(app: AppHandle, job_id: String) {
-    std::thread::spawn(move || {
-        if let Err(error) = execute_local_job(&app, &job_id) {
-            let _ = mark_failed(&app, &job_id, &error);
-        }
-    });
-}
-
-fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
-    let dir = job_dir(app, job_id)?;
+    if execution.mode == JobExecutionMode::Fresh {
+        process_logs::reset(&dir)?;
+        reset_runner_files(&dir)?;
+    }
     let job = local_db::get_job(app, job_id)?;
     let settings = local_db::get_settings(app)?;
     let input_file = job
@@ -153,12 +373,10 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
         .first()
         .and_then(|file| file.path.clone())
         .ok_or_else(|| "任务缺少可处理的本地文件路径。".to_string())?;
-    let resolved_runtime = local_runtime::resolve_python_runtime(app, Some(&settings.python_path))?;
-    let runner_script_path = resolve_runner_script_path(app, job.runner_script_path.as_deref())?;
+    let resolved_runtime = local_runtime::resolve_python_runtime(app, &settings)?;
+    let runner_script_path = resolve_runner_script_path(app)?;
 
-    update_job_statuses(app, job_id, "transcribing", "idle", "transcribing", None)?;
     let processing_started_at_ms = unix_timestamp_millis() as u64;
-    mark_job_processing_started(app, job_id, processing_started_at_ms)?;
     let runtime_threads = runner_process::resolve_local_asr_threads(&settings);
     append_process_log_line(
         &dir,
@@ -182,7 +400,7 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
         &input_file,
         resolved_runtime.ffmpeg_path.as_deref(),
     )?;
-    sync_process_log(app, job_id, &dir)?;
+    sync_process_log(app, execution, &dir)?;
 
     let mut command = runner_process::build_runner_command(RunnerCommandInput {
         runtime: &resolved_runtime,
@@ -194,26 +412,52 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
         runtime_threads,
     });
 
-    configure_background_process(&mut command);
+    runner_process::configure_runner_process(&mut command);
     let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|err| format!("无法启动本地 Python 处理进程: {err}"))?;
-    let status =
-        runner_process::stream_child_logs(app, job_id, &dir, &mut child, sync_process_log)?;
+    let process_identity = match runner_process::capture_runner_process_identity(child.id()) {
+        Ok(identity) => identity,
+        Err(error) => {
+            return match runner_process::terminate_runner(&mut child) {
+                Ok(()) => Err(error.into()),
+                Err(termination_error) => Err(format!("{error}; {termination_error}").into()),
+            };
+        }
+    };
+    if let Err(error) = context.register_process(child.id(), &process_identity) {
+        return match runner_process::terminate_runner(&mut child) {
+            Ok(()) => Err(error.into()),
+            Err(termination_error) => Err(format!("{error}; {termination_error}").into()),
+        };
+    }
+    let runner_exit = runner_process::stream_child_logs(
+        app,
+        job_id,
+        &dir,
+        &mut child,
+        |app, _, dir| sync_process_log(app, execution, dir),
+        || context.is_cancelled(),
+        |_| context.heartbeat(),
+    )?;
+    let status = match runner_exit {
+        RunnerExit::Finished(status) => status,
+        RunnerExit::Cancelled => return Err(JobExecutionError::Cancelled),
+    };
 
     if !status.success() {
         let code = status.code().unwrap_or(-1);
         let detailed = read_runner_failure_reason(&dir)
             .or_else(|| process_logs::summarize_tail(&dir, 12))
             .unwrap_or_else(|| format!("本地 Python 处理失败，退出码 {code}。"));
-        return Err(detailed);
+        return Err(JobExecutionError::Failed(detailed));
     }
 
     let runner_result = read_runner_result(&dir)?;
     if let Some(reason) = runner_result.failure_reason.clone() {
-        return Err(reason);
+        return Err(JobExecutionError::Failed(reason));
     }
 
     let transcript_segments = runner_result.transcript_segments.unwrap_or_default();
@@ -225,13 +469,17 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
         return Err("Runner 未返回说话人分离结果。".into());
     }
 
-    local_db::replace_job_segments(app, job_id, &transcript_segments, &speaker_segments)?;
     let processing_finished_at_ms = unix_timestamp_millis() as u64;
     let processing_duration_seconds =
         Some(((processing_finished_at_ms.saturating_sub(processing_started_at_ms)) / 1000) as u32);
-    update_job_completion(
+    let process_log = process_logs::read_recent(&dir, DATABASE_PROCESS_LOG_BYTES);
+    let accepted = local_db::complete_local_job_run(
         app,
         job_id,
+        execution.fence.attempt_id,
+        execution.fence.lease_token,
+        &transcript_segments,
+        &speaker_segments,
         derived_duration_minutes(
             runner_result.duration_minutes,
             job.duration_minutes,
@@ -240,9 +488,11 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
         ),
         processing_finished_at_ms,
         processing_duration_seconds,
-        None,
+        &process_log,
     )?;
-    sync_process_log(app, job_id, &dir)?;
+    if !accepted {
+        return Err(JobExecutionError::Cancelled);
+    }
 
     Ok(())
 }
@@ -250,6 +500,7 @@ fn execute_local_job(app: &AppHandle, job_id: &str) -> LocalResult<()> {
 fn build_initial_job(input: CreateJobInput, runner_script_path: String) -> MeetingJob {
     MeetingJob {
         id: make_job_id(),
+        source: "local".into(),
         title: input.title,
         source_files: input.files,
         duration_minutes: 0,
@@ -281,7 +532,7 @@ fn build_initial_job(input: CreateJobInput, runner_script_path: String) -> Meeti
     }
 }
 
-fn validate_create_input(app: &AppHandle, input: &CreateJobInput) -> LocalResult<()> {
+fn validate_create_input(_app: &AppHandle, input: &CreateJobInput) -> LocalResult<()> {
     if input.title.trim().is_empty() {
         return Err("任务标题不能为空。".into());
     }
@@ -303,24 +554,11 @@ fn validate_create_input(app: &AppHandle, input: &CreateJobInput) -> LocalResult
         return Err("输入文件不存在或当前路径不可访问。".into());
     }
 
-    let settings = local_db::get_settings(app)?;
-    local_runtime::resolve_python_runtime(app, Some(&settings.python_path))?;
-
     Ok(())
 }
 
-fn resolve_runner_script_path(
-    app: &AppHandle,
-    configured_path: Option<&str>,
-) -> LocalResult<String> {
+fn resolve_runner_script_path(app: &AppHandle) -> LocalResult<String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if let Some(path) = configured_path
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        candidates.push(PathBuf::from(path));
-    }
 
     if let Ok(resource_dir) = app.path().resource_dir() {
         candidates.push(resource_dir.join("scripts").join("runner.py"));
@@ -358,22 +596,33 @@ fn append_process_log_line(job_dir: &Path, line: &str) -> LocalResult<()> {
     process_logs::append_line(job_dir, line)
 }
 
-fn reset_process_log(job_dir: &Path) -> LocalResult<()> {
-    process_logs::reset(job_dir)
-}
-
 fn reset_runner_files(job_dir: &Path) -> LocalResult<()> {
     runner_files::reset_runner_files(job_dir)
 }
 
-fn sync_process_log(app: &AppHandle, job_id: &str, job_dir: &Path) -> LocalResult<()> {
-    let log = process_logs::read_trimmed(job_dir);
-    update_job_process_log(app, job_id, &log)
+fn sync_process_log(app: &AppHandle, execution: &JobExecution, job_dir: &Path) -> LocalResult<()> {
+    let log = process_logs::read_recent(job_dir, DATABASE_PROCESS_LOG_BYTES);
+    if local_db::update_local_job_process_log(
+        app,
+        &execution.job_id,
+        execution.fence.attempt_id,
+        execution.fence.lease_token,
+        &log,
+    )? {
+        Ok(())
+    } else {
+        Err("任务运行 fence 已失效，拒绝发布进程日志。".into())
+    }
 }
 
-fn mark_failed(app: &AppHandle, job_id: &str, reason: &str) -> LocalResult<()> {
-    let dir = job_dir(app, job_id)?;
-    sync_process_log(app, job_id, &dir)?;
+fn mark_failed(app: &AppHandle, execution: &JobExecution, reason: &str) -> LocalResult<bool> {
+    let job_id = execution.job_id.as_str();
+    let dir = runner_files::resolve_attempt_dir(
+        &safe_job_dir(app, job_id)?,
+        execution.fence.attempt_id,
+        execution.fence.lease_token,
+    )?
+    .ok_or_else(|| "任务 attempt 目录不存在。".to_string())?;
     let detailed_reason = read_runner_failure_reason(&dir)
         .or_else(|| process_logs::summarize_tail(&dir, 12))
         .unwrap_or_else(|| reason.to_string());
@@ -382,13 +631,95 @@ fn mark_failed(app: &AppHandle, job_id: &str, reason: &str) -> LocalResult<()> {
     let processing_duration_seconds = job
         .processing_started_at_ms
         .map(|started_at| ((processing_finished_at_ms.saturating_sub(started_at)) / 1000) as u32);
-    update_job_failure(
+    let process_log = process_logs::read_recent(&dir, DATABASE_PROCESS_LOG_BYTES);
+    local_db::fail_local_job_run(
         app,
         job_id,
+        execution.fence.attempt_id,
+        execution.fence.lease_token,
         processing_finished_at_ms,
         processing_duration_seconds,
         &detailed_reason,
+        &process_log,
     )
+}
+
+fn job_scheduler(app: &AppHandle) -> LocalResult<&'static JobScheduler> {
+    let settings = local_db::get_settings(app)?;
+    let scheduler = JOB_SCHEDULER.get_or_init(|| {
+        JobScheduler::new(
+            settings.concurrency as usize,
+            Arc::new(LocalJobRunStore { app: app.clone() }),
+            Arc::new(LocalJobExecutor { app: app.clone() }),
+            Arc::new(|job: &RecoverableJob| {
+                runner_process::terminate_persisted_runner(job.pid, job.process_identity.as_deref())
+            }),
+        )
+    });
+    scheduler.set_max_concurrency(settings.concurrency as usize)?;
+    scheduler.start_recovery()?;
+    Ok(scheduler)
+}
+
+pub fn start_job_scheduler(app: &AppHandle) -> LocalResult<()> {
+    recover_pending_job_deletions(app)?;
+    job_scheduler(app).map(|_| ())
+}
+
+pub fn shutdown_job_scheduler() -> LocalResult<()> {
+    match JOB_SCHEDULER.get() {
+        Some(scheduler) => scheduler.shutdown(Duration::from_secs(5)),
+        None => Ok(()),
+    }
+}
+
+fn safe_job_dir(app: &AppHandle, job_id: &str) -> LocalResult<PathBuf> {
+    runner_files::resolve_job_dir(&local_db::jobs_root(app)?, job_id)
+}
+
+fn recover_pending_job_deletions(app: &AppHandle) -> LocalResult<()> {
+    let operations = local_db::list_pending_job_deletions(app)?;
+    let mut failures = Vec::new();
+    for operation in operations {
+        if let Err(error) = converge_job_deletion(app, &operation) {
+            let _ = local_db::record_job_deletion_error(app, &operation.operation_id, &error);
+            failures.push(format!("{}: {error}", operation.job_id));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("恢复未完成的任务删除失败: {}", failures.join("; ")))
+    }
+}
+
+fn converge_job_deletion(
+    app: &AppHandle,
+    operation: &local_db::JobDeletionOperation,
+) -> LocalResult<()> {
+    runner_process::terminate_persisted_runner(
+        operation.runner_pid,
+        operation.runner_process_identity.as_deref(),
+    )?;
+    if local_db::job_exists(app, &operation.job_id)? {
+        local_db::fence_local_job_run(app, &operation.job_id)?;
+    }
+    local_db::mark_job_deletion_phase(
+        app,
+        &operation.operation_id,
+        local_db::JobDeletionPhase::Fenced,
+    )?;
+
+    let jobs_root = local_db::jobs_root(app)?;
+    runner_files::move_job_dir_to_trash(&jobs_root, &operation.job_id, &operation.trash_name)?;
+    local_db::mark_job_deletion_phase(
+        app,
+        &operation.operation_id,
+        local_db::JobDeletionPhase::Trashed,
+    )?;
+    local_db::delete_job_for_operation(app, operation)?;
+    runner_files::purge_job_trash(&jobs_root, &operation.trash_name)?;
+    local_db::complete_job_deletion_operation(app, &operation.operation_id)
 }
 
 fn derived_duration_minutes(

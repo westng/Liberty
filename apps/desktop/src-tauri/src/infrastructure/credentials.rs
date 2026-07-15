@@ -1,11 +1,16 @@
 #[cfg(target_os = "macos")]
-use std::process::Command;
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 use crate::domain::error::AppError;
 
 pub type CredentialResult<T> = Result<T, AppError>;
 
 const SERVICE_NAME: &str = "LibertyDesktop";
+#[cfg(target_os = "macos")]
+const MACOS_SECURITY_PATH: &str = "/usr/bin/security";
 
 pub trait CredentialStore {
     fn get_secret(&self, key: &str) -> CredentialResult<Option<String>>;
@@ -38,9 +43,13 @@ pub fn credential_key_for_ai_model(model_id: &str) -> String {
     format!("ai-model:{model_id}:api-key")
 }
 
+pub fn credential_key_for_remote_api_token() -> &'static str {
+    "settings:remote-api-token"
+}
+
 #[cfg(target_os = "macos")]
 fn get_system_secret(key: &str) -> CredentialResult<Option<String>> {
-    let output = Command::new("security")
+    let output = Command::new(MACOS_SECURITY_PATH)
         .args(["find-generic-password", "-s", SERVICE_NAME, "-a", key, "-w"])
         .output()
         .map_err(|err| AppError::Infrastructure(format!("读取 macOS Keychain 失败: {err}")))?;
@@ -66,7 +75,7 @@ fn get_system_secret(key: &str) -> CredentialResult<Option<String>> {
 
 #[cfg(target_os = "macos")]
 fn set_system_secret(key: &str, value: &str) -> CredentialResult<()> {
-    let status = Command::new("security")
+    let mut child = Command::new(MACOS_SECURITY_PATH)
         .args([
             "add-generic-password",
             "-U",
@@ -75,23 +84,49 @@ fn set_system_secret(key: &str, value: &str) -> CredentialResult<()> {
             "-a",
             key,
             "-w",
-            value,
         ])
-        .status()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|err| AppError::Infrastructure(format!("写入 macOS Keychain 失败: {err}")))?;
 
-    if status.success() {
+    let write_result = child
+        .stdin
+        .take()
+        .ok_or_else(|| AppError::Infrastructure("无法打开 macOS Keychain 输入通道。".into()))
+        .and_then(|mut stdin| {
+            stdin
+                .write_all(value.as_bytes())
+                .and_then(|()| stdin.write_all(b"\n"))
+                .map_err(|err| {
+                    AppError::Infrastructure(format!("写入 macOS Keychain 输入失败: {err}"))
+                })
+        });
+    if let Err(error) = write_result {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|err| AppError::Infrastructure(format!("等待 macOS Keychain 写入失败: {err}")))?;
+
+    if output.status.success() {
         Ok(())
     } else {
-        Err(AppError::Infrastructure(
-            "写入 macOS Keychain 失败，请检查钥匙串权限。".into(),
-        ))
+        let detail = String::from_utf8_lossy(&output.stderr);
+        Err(AppError::Infrastructure(format!(
+            "写入 macOS Keychain 失败，请检查钥匙串权限: {}",
+            detail.trim()
+        )))
     }
 }
 
 #[cfg(target_os = "macos")]
 fn delete_system_secret(key: &str) -> CredentialResult<()> {
-    let output = Command::new("security")
+    let output = Command::new(MACOS_SECURITY_PATH)
         .args(["delete-generic-password", "-s", SERVICE_NAME, "-a", key])
         .output()
         .map_err(|err| AppError::Infrastructure(format!("删除 macOS Keychain 凭据失败: {err}")))?;

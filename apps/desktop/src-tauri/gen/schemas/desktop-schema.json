@@ -2001,6 +2001,1062 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the apply_pet_interaction command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-apply-pet-interaction",
+          "markdownDescription": "Enables the apply_pet_interaction command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the apply_pet_workflow_event command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-apply-pet-workflow-event",
+          "markdownDescription": "Enables the apply_pet_workflow_event command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the care_work_game_task command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-care-work-game-task",
+          "markdownDescription": "Enables the care_work_game_task command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the claim_pet_daily_check_in command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-claim-pet-daily-check-in",
+          "markdownDescription": "Enables the claim_pet_daily_check_in command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the claim_work_game_task command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-claim-work-game-task",
+          "markdownDescription": "Enables the claim_work_game_task command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the close_current_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-close-current-window",
+          "markdownDescription": "Enables the close_current_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the create_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-create-job",
+          "markdownDescription": "Enables the create_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_ai_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-ai-model",
+          "markdownDescription": "Enables the delete_ai_model command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_ai_summary_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-ai-summary-run",
+          "markdownDescription": "Enables the delete_ai_summary_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_ai_template command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-ai-template",
+          "markdownDescription": "Enables the delete_ai_template command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-job",
+          "markdownDescription": "Enables the delete_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the delete_meeting_member command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-delete-meeting-member",
+          "markdownDescription": "Enables the delete_meeting_member command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the destroy_current_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-destroy-current-window",
+          "markdownDescription": "Enables the destroy_current_window command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the detect_runtime_component command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-detect-runtime-component",
+          "markdownDescription": "Enables the detect_runtime_component command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the draw_pet_blind_box command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-draw-pet-blind-box",
+          "markdownDescription": "Enables the draw_pet_blind_box command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the equip_pet_inventory_item command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-equip-pet-inventory-item",
+          "markdownDescription": "Enables the equip_pet_inventory_item command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the export_desktop_pet_diagnostic_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-desktop-pet-diagnostic-log",
+          "markdownDescription": "Enables the export_desktop_pet_diagnostic_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the export_job_summary_docx command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-job-summary-docx",
+          "markdownDescription": "Enables the export_job_summary_docx command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the export_meeting_members_excel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-meeting-members-excel",
+          "markdownDescription": "Enables the export_meeting_members_excel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_ai_summary_options command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-ai-summary-options",
+          "markdownDescription": "Enables the get_ai_summary_options command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_desktop_pet_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-desktop-pet-status",
+          "markdownDescription": "Enables the get_desktop_pet_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_diagnostics command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-diagnostics",
+          "markdownDescription": "Enables the get_diagnostics command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_farm_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-farm-state",
+          "markdownDescription": "Enables the get_farm_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-job",
+          "markdownDescription": "Enables the get_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_job_result command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-job-result",
+          "markdownDescription": "Enables the get_job_result command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_pet_blind_box_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-pet-blind-box-state",
+          "markdownDescription": "Enables the get_pet_blind_box_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_pet_daily_check_in_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-pet-daily-check-in-state",
+          "markdownDescription": "Enables the get_pet_daily_check_in_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_pet_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-pet-profile",
+          "markdownDescription": "Enables the get_pet_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_pet_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-pet-settings",
+          "markdownDescription": "Enables the get_pet_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_pet_store_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-pet-store-state",
+          "markdownDescription": "Enables the get_pet_store_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_process_metrics command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-process-metrics",
+          "markdownDescription": "Enables the get_process_metrics command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_remote_capabilities command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-remote-capabilities",
+          "markdownDescription": "Enables the get_remote_capabilities command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_runtime_component_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-runtime-component-log",
+          "markdownDescription": "Enables the get_runtime_component_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_runtime_install_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-runtime-install-log",
+          "markdownDescription": "Enables the get_runtime_install_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_runtime_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-runtime-status",
+          "markdownDescription": "Enables the get_runtime_status command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-settings",
+          "markdownDescription": "Enables the get_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_ui_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-ui-preferences",
+          "markdownDescription": "Enables the get_ui_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_work_game_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-work-game-state",
+          "markdownDescription": "Enables the get_work_game_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_work_market_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-work-market-state",
+          "markdownDescription": "Enables the get_work_market_state command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the harvest_farm_plot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-harvest-farm-plot",
+          "markdownDescription": "Enables the harvest_farm_plot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the hide_desktop_pet command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-hide-desktop-pet",
+          "markdownDescription": "Enables the hide_desktop_pet command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the import_meeting_members_excel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-import-meeting-members-excel",
+          "markdownDescription": "Enables the import_meeting_members_excel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install_runtime command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-runtime",
+          "markdownDescription": "Enables the install_runtime command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the install_runtime_component command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-install-runtime-component",
+          "markdownDescription": "Enables the install_runtime_component command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the issue_job_window_scope command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-issue-job-window-scope",
+          "markdownDescription": "Enables the issue_job_window_scope command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_ai_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-ai-models",
+          "markdownDescription": "Enables the list_ai_models command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_ai_summary_runs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-ai-summary-runs",
+          "markdownDescription": "Enables the list_ai_summary_runs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_ai_templates command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-ai-templates",
+          "markdownDescription": "Enables the list_ai_templates command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_farm_harvest_ledger command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-farm-harvest-ledger",
+          "markdownDescription": "Enables the list_farm_harvest_ledger command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_jobs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-jobs",
+          "markdownDescription": "Enables the list_jobs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_meeting_members command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-meeting-members",
+          "markdownDescription": "Enables the list_meeting_members command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_pet_cosmetic_unlocks command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-pet-cosmetic-unlocks",
+          "markdownDescription": "Enables the list_pet_cosmetic_unlocks command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_pet_event_ledger command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-pet-event-ledger",
+          "markdownDescription": "Enables the list_pet_event_ledger command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_pet_redeem_key_redemptions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-pet-redeem-key-redemptions",
+          "markdownDescription": "Enables the list_pet_redeem_key_redemptions command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_runtime_download_sources command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-runtime-download-sources",
+          "markdownDescription": "Enables the list_runtime_download_sources command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_external_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-external-url",
+          "markdownDescription": "Enables the open_external_url command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_extra_desktop_pet command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-extra-desktop-pet",
+          "markdownDescription": "Enables the open_extra_desktop_pet command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_pet_gift_box command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-pet-gift-box",
+          "markdownDescription": "Enables the open_pet_gift_box command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the plant_farm_crop command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-plant-farm-crop",
+          "markdownDescription": "Enables the plant_farm_crop command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the prompt_pet_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-prompt-pet-name",
+          "markdownDescription": "Enables the prompt_pet_name command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the purchase_pet_store_item command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-purchase-pet-store-item",
+          "markdownDescription": "Enables the purchase_pet_store_item command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the redeem_pet_key command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-redeem-pet-key",
+          "markdownDescription": "Enables the redeem_pet_key command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remote_delete_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remote-delete-job",
+          "markdownDescription": "Enables the remote_delete_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remote_get_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remote-get-job",
+          "markdownDescription": "Enables the remote_get_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remote_get_job_result command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remote-get-job-result",
+          "markdownDescription": "Enables the remote_get_job_result command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remote_list_jobs command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remote-list-jobs",
+          "markdownDescription": "Enables the remote_list_jobs command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remote_rename_job_speaker command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remote-rename-job-speaker",
+          "markdownDescription": "Enables the remote_rename_job_speaker command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the remote_retry_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-remote-retry-job",
+          "markdownDescription": "Enables the remote_retry_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the rename_job_speaker command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-rename-job-speaker",
+          "markdownDescription": "Enables the rename_job_speaker command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the repair_pet_daily_check_in command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-repair-pet-daily-check-in",
+          "markdownDescription": "Enables the repair_pet_daily_check_in command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the retry_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-retry-job",
+          "markdownDescription": "Enables the retry_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_ai_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-ai-model",
+          "markdownDescription": "Enables the save_ai_model command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_ai_template command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-ai-template",
+          "markdownDescription": "Enables the save_ai_template command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_meeting_member command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-meeting-member",
+          "markdownDescription": "Enables the save_meeting_member command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_pet_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-pet-profile",
+          "markdownDescription": "Enables the save_pet_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_pet_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-pet-settings",
+          "markdownDescription": "Enables the save_pet_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-settings",
+          "markdownDescription": "Enables the save_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_active_ai_summary_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-active-ai-summary-run",
+          "markdownDescription": "Enables the set_active_ai_summary_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_current_window_theme command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-current-window-theme",
+          "markdownDescription": "Enables the set_current_window_theme command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_current_window_title command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-current-window-title",
+          "markdownDescription": "Enables the set_current_window_title command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_runtime_component_source command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-runtime-component-source",
+          "markdownDescription": "Enables the set_runtime_component_source command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the show_desktop_pet command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-show-desktop-pet",
+          "markdownDescription": "Enables the show_desktop_pet command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_desktop_pet_drag command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-desktop-pet-drag",
+          "markdownDescription": "Enables the start_desktop_pet_drag command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_or_resume_ai_summary_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-or-resume-ai-summary-run",
+          "markdownDescription": "Enables the start_or_resume_ai_summary_run command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_work_game_task command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-work-game-task",
+          "markdownDescription": "Enables the start_work_game_task command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the unequip_pet_inventory_slot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-unequip-pet-inventory-slot",
+          "markdownDescription": "Enables the unequip_pet_inventory_slot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the use_pet_inventory_item command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-use-pet-inventory-item",
+          "markdownDescription": "Enables the use_pet_inventory_item command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the water_farm_plot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-water-farm-plot",
+          "markdownDescription": "Enables the water_farm_plot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the apply_pet_interaction command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-apply-pet-interaction",
+          "markdownDescription": "Denies the apply_pet_interaction command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the apply_pet_workflow_event command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-apply-pet-workflow-event",
+          "markdownDescription": "Denies the apply_pet_workflow_event command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the care_work_game_task command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-care-work-game-task",
+          "markdownDescription": "Denies the care_work_game_task command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the claim_pet_daily_check_in command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-claim-pet-daily-check-in",
+          "markdownDescription": "Denies the claim_pet_daily_check_in command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the claim_work_game_task command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-claim-work-game-task",
+          "markdownDescription": "Denies the claim_work_game_task command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the close_current_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-close-current-window",
+          "markdownDescription": "Denies the close_current_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the create_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-create-job",
+          "markdownDescription": "Denies the create_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_ai_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-ai-model",
+          "markdownDescription": "Denies the delete_ai_model command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_ai_summary_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-ai-summary-run",
+          "markdownDescription": "Denies the delete_ai_summary_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_ai_template command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-ai-template",
+          "markdownDescription": "Denies the delete_ai_template command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-job",
+          "markdownDescription": "Denies the delete_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the delete_meeting_member command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-delete-meeting-member",
+          "markdownDescription": "Denies the delete_meeting_member command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the destroy_current_window command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-destroy-current-window",
+          "markdownDescription": "Denies the destroy_current_window command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the detect_runtime_component command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-detect-runtime-component",
+          "markdownDescription": "Denies the detect_runtime_component command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the draw_pet_blind_box command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-draw-pet-blind-box",
+          "markdownDescription": "Denies the draw_pet_blind_box command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the equip_pet_inventory_item command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-equip-pet-inventory-item",
+          "markdownDescription": "Denies the equip_pet_inventory_item command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_desktop_pet_diagnostic_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-desktop-pet-diagnostic-log",
+          "markdownDescription": "Denies the export_desktop_pet_diagnostic_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_job_summary_docx command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-job-summary-docx",
+          "markdownDescription": "Denies the export_job_summary_docx command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_meeting_members_excel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-meeting-members-excel",
+          "markdownDescription": "Denies the export_meeting_members_excel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_ai_summary_options command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-ai-summary-options",
+          "markdownDescription": "Denies the get_ai_summary_options command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_desktop_pet_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-desktop-pet-status",
+          "markdownDescription": "Denies the get_desktop_pet_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_diagnostics command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-diagnostics",
+          "markdownDescription": "Denies the get_diagnostics command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_farm_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-farm-state",
+          "markdownDescription": "Denies the get_farm_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-job",
+          "markdownDescription": "Denies the get_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_job_result command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-job-result",
+          "markdownDescription": "Denies the get_job_result command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_pet_blind_box_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-pet-blind-box-state",
+          "markdownDescription": "Denies the get_pet_blind_box_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_pet_daily_check_in_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-pet-daily-check-in-state",
+          "markdownDescription": "Denies the get_pet_daily_check_in_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_pet_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-pet-profile",
+          "markdownDescription": "Denies the get_pet_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_pet_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-pet-settings",
+          "markdownDescription": "Denies the get_pet_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_pet_store_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-pet-store-state",
+          "markdownDescription": "Denies the get_pet_store_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_process_metrics command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-process-metrics",
+          "markdownDescription": "Denies the get_process_metrics command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_remote_capabilities command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-remote-capabilities",
+          "markdownDescription": "Denies the get_remote_capabilities command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_runtime_component_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-runtime-component-log",
+          "markdownDescription": "Denies the get_runtime_component_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_runtime_install_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-runtime-install-log",
+          "markdownDescription": "Denies the get_runtime_install_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_runtime_status command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-runtime-status",
+          "markdownDescription": "Denies the get_runtime_status command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-settings",
+          "markdownDescription": "Denies the get_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_ui_preferences command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-ui-preferences",
+          "markdownDescription": "Denies the get_ui_preferences command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_work_game_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-work-game-state",
+          "markdownDescription": "Denies the get_work_game_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_work_market_state command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-work-market-state",
+          "markdownDescription": "Denies the get_work_market_state command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the harvest_farm_plot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-harvest-farm-plot",
+          "markdownDescription": "Denies the harvest_farm_plot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the hide_desktop_pet command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-hide-desktop-pet",
+          "markdownDescription": "Denies the hide_desktop_pet command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the import_meeting_members_excel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-import-meeting-members-excel",
+          "markdownDescription": "Denies the import_meeting_members_excel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install_runtime command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-runtime",
+          "markdownDescription": "Denies the install_runtime command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the install_runtime_component command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-install-runtime-component",
+          "markdownDescription": "Denies the install_runtime_component command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the issue_job_window_scope command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-issue-job-window-scope",
+          "markdownDescription": "Denies the issue_job_window_scope command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_ai_models command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-ai-models",
+          "markdownDescription": "Denies the list_ai_models command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_ai_summary_runs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-ai-summary-runs",
+          "markdownDescription": "Denies the list_ai_summary_runs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_ai_templates command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-ai-templates",
+          "markdownDescription": "Denies the list_ai_templates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_farm_harvest_ledger command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-farm-harvest-ledger",
+          "markdownDescription": "Denies the list_farm_harvest_ledger command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_jobs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-jobs",
+          "markdownDescription": "Denies the list_jobs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_meeting_members command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-meeting-members",
+          "markdownDescription": "Denies the list_meeting_members command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_pet_cosmetic_unlocks command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-pet-cosmetic-unlocks",
+          "markdownDescription": "Denies the list_pet_cosmetic_unlocks command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_pet_event_ledger command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-pet-event-ledger",
+          "markdownDescription": "Denies the list_pet_event_ledger command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_pet_redeem_key_redemptions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-pet-redeem-key-redemptions",
+          "markdownDescription": "Denies the list_pet_redeem_key_redemptions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_runtime_download_sources command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-runtime-download-sources",
+          "markdownDescription": "Denies the list_runtime_download_sources command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_external_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-external-url",
+          "markdownDescription": "Denies the open_external_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_extra_desktop_pet command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-extra-desktop-pet",
+          "markdownDescription": "Denies the open_extra_desktop_pet command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_pet_gift_box command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-pet-gift-box",
+          "markdownDescription": "Denies the open_pet_gift_box command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the plant_farm_crop command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-plant-farm-crop",
+          "markdownDescription": "Denies the plant_farm_crop command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the prompt_pet_name command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-prompt-pet-name",
+          "markdownDescription": "Denies the prompt_pet_name command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the purchase_pet_store_item command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-purchase-pet-store-item",
+          "markdownDescription": "Denies the purchase_pet_store_item command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the redeem_pet_key command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-redeem-pet-key",
+          "markdownDescription": "Denies the redeem_pet_key command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remote_delete_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remote-delete-job",
+          "markdownDescription": "Denies the remote_delete_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remote_get_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remote-get-job",
+          "markdownDescription": "Denies the remote_get_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remote_get_job_result command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remote-get-job-result",
+          "markdownDescription": "Denies the remote_get_job_result command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remote_list_jobs command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remote-list-jobs",
+          "markdownDescription": "Denies the remote_list_jobs command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remote_rename_job_speaker command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remote-rename-job-speaker",
+          "markdownDescription": "Denies the remote_rename_job_speaker command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the remote_retry_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-remote-retry-job",
+          "markdownDescription": "Denies the remote_retry_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the rename_job_speaker command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-rename-job-speaker",
+          "markdownDescription": "Denies the rename_job_speaker command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the repair_pet_daily_check_in command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-repair-pet-daily-check-in",
+          "markdownDescription": "Denies the repair_pet_daily_check_in command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the retry_job command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-retry-job",
+          "markdownDescription": "Denies the retry_job command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_ai_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-ai-model",
+          "markdownDescription": "Denies the save_ai_model command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_ai_template command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-ai-template",
+          "markdownDescription": "Denies the save_ai_template command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_meeting_member command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-meeting-member",
+          "markdownDescription": "Denies the save_meeting_member command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_pet_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-pet-profile",
+          "markdownDescription": "Denies the save_pet_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_pet_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-pet-settings",
+          "markdownDescription": "Denies the save_pet_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-settings",
+          "markdownDescription": "Denies the save_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_active_ai_summary_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-active-ai-summary-run",
+          "markdownDescription": "Denies the set_active_ai_summary_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_current_window_theme command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-current-window-theme",
+          "markdownDescription": "Denies the set_current_window_theme command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_current_window_title command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-current-window-title",
+          "markdownDescription": "Denies the set_current_window_title command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_runtime_component_source command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-runtime-component-source",
+          "markdownDescription": "Denies the set_runtime_component_source command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the show_desktop_pet command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-show-desktop-pet",
+          "markdownDescription": "Denies the show_desktop_pet command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_desktop_pet_drag command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-desktop-pet-drag",
+          "markdownDescription": "Denies the start_desktop_pet_drag command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_or_resume_ai_summary_run command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-or-resume-ai-summary-run",
+          "markdownDescription": "Denies the start_or_resume_ai_summary_run command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_work_game_task command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-work-game-task",
+          "markdownDescription": "Denies the start_work_game_task command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the unequip_pet_inventory_slot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-unequip-pet-inventory-slot",
+          "markdownDescription": "Denies the unequip_pet_inventory_slot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the use_pet_inventory_item command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-use-pet-inventory-item",
+          "markdownDescription": "Denies the use_pet_inventory_item command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the water_farm_plot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-water-farm-plot",
+          "markdownDescription": "Denies the water_farm_plot command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

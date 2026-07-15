@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ai-summary-capability",
+  "description": "AI summary window can operate persistent local summary runs without reading model credentials or full settings.",
+  "windows": ["ai-summary"],
+  "permissions": [
+    "core:event:allow-emit",
+    "dialog:allow-confirm",
+    "allow-close-current-window",
+    "allow-set-current-window-theme",
+    "allow-get-ui-preferences",
+    "allow-get-job-result",
+    "allow-get-ai-summary-options",
+    "allow-start-or-resume-ai-summary-run",
+    "allow-set-active-ai-summary-run",
+    "allow-delete-ai-summary-run"
+  ]
+}

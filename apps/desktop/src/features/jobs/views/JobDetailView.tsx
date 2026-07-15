@@ -6,6 +6,11 @@ import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { getMessages } from "@/shared/i18n";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import type { JobStage } from "@/shared/types/meeting";
+import {
+  jobRef,
+  jobWorkbenchPath,
+  useBoundJobRouteRef,
+} from "./jobRoutes";
 
 const ansiPattern = /\u001b\[[0-9;]*m/g;
 const stageProgressBands: Record<JobStage, { min: number; max: number }> = {
@@ -23,11 +28,35 @@ export default function JobDetailView() {
   const router = useRouter();
   const store = useMeetingStore();
   const jobId = router.params.id ?? "";
-  const job = store.getJobById(jobId);
+  const routeJobRef = useBoundJobRouteRef(
+    jobId,
+    store.settingsLoaded,
+    store.settings.processingMode,
+  );
+  const candidateJob = routeJobRef
+    ? store.getJobById(routeJobRef.jobId, routeJobRef.source)
+    : undefined;
+  const canReadJob = Boolean(
+    candidateJob
+    && (candidateJob.source === "local" || store.canRemoteOperation("jobs.read")),
+  );
+  const job = canReadJob ? candidateJob : undefined;
   const messages = getMessages(store.settings.locale).jobDetail;
   const commonMessages = getMessages(store.settings.locale).common;
+  const operationUnavailable = getMessages(store.settings.locale).workbench.remoteOperationUnavailable;
   const statusMessages = getMessages(store.settings.locale).status;
-  const shouldWarnModelDownloadRequired = !store.settings.backendUrl.trim() && store.runtimeStatus.status !== "ready";
+  const shouldWarnModelDownloadRequired = job?.source === "local" && !store.runtimeStatus.shellReady;
+  const canRetryJob = Boolean(job && (job.source === "local" || store.canRemoteOperation("jobs.retry")));
+  const canOpenWorkbench = Boolean(
+    job
+    && (
+      job.source === "local"
+      || (
+        store.canRemoteOperation("jobs.read")
+        && store.canRemoteOperation("jobs.result.read")
+      )
+    ),
+  );
   const [displayProgressPercent, setDisplayProgressPercent] = useState(0);
   const [progressRunKey, setProgressRunKey] = useState("");
   const stages = job
@@ -40,10 +69,10 @@ export default function JobDetailView() {
     : [];
 
   useEffect(() => {
-    if (jobId) {
-      void store.refreshJob(jobId);
+    if (routeJobRef) {
+      void store.refreshJob(routeJobRef).catch(() => undefined);
     }
-  }, [jobId]);
+  }, [routeJobRef?.jobId, routeJobRef?.source]);
 
   function clampPercent(value: number, min: number, max: number) {
     return Math.max(min, Math.min(max, Math.round(value)));
@@ -96,7 +125,7 @@ export default function JobDetailView() {
       return;
     }
 
-    const runKey = `${job.id}:${job.processingStartedAtMs ?? 0}`;
+    const runKey = `${job.source}:${job.id}:${job.processingStartedAtMs ?? 0}`;
     const nextPercent = resolveStageProgressPercent();
 
     if (progressRunKey !== runKey) {
@@ -106,7 +135,7 @@ export default function JobDetailView() {
     }
 
     setDisplayProgressPercent((current) => Math.max(current, nextPercent));
-  }, [job?.id, job?.processingStartedAtMs, job?.overallStatus, job?.summaryStatus, job?.asrStatus, job?.uploadStatus, job?.progressPercent]);
+  }, [job?.source, job?.id, job?.processingStartedAtMs, job?.overallStatus, job?.summaryStatus, job?.asrStatus, job?.uploadStatus, job?.progressPercent]);
 
   const progressMessage = useMemo(() => {
     if (!job) {
@@ -164,7 +193,10 @@ export default function JobDetailView() {
     return "info";
   }
 
-  async function retryJob(targetJobId: string) {
+  async function retryJob() {
+    if (!canRetryJob) {
+      return;
+    }
     if (shouldWarnModelDownloadRequired) {
       await message(commonMessages.modelUnavailableMessage, {
         title: commonMessages.modelUnavailableTitle,
@@ -173,7 +205,9 @@ export default function JobDetailView() {
       return;
     }
 
-    await store.retryJob(targetJobId);
+    if (job) {
+      await store.retryJob(jobRef(job));
+    }
   }
 
   return (
@@ -212,12 +246,24 @@ export default function JobDetailView() {
 
               <div className="button-row">
                 {job.overallStatus === "completed" && (
-                  <Link className="primary-button" to={`/jobs/${job.id}/workbench`}>
-                    {messages.viewWorkbench}
-                  </Link>
+                  canOpenWorkbench ? (
+                    <Link className="primary-button" to={jobWorkbenchPath(jobRef(job))}>
+                      {messages.viewWorkbench}
+                    </Link>
+                  ) : (
+                    <button className="primary-button" type="button" disabled title={store.remoteError ?? operationUnavailable}>
+                      {messages.viewWorkbench}
+                    </button>
+                  )
                 )}
                 {job.overallStatus === "failed" && (
-                  <button className="secondary-button" type="button" onClick={() => retryJob(job.id)}>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={!canRetryJob}
+                    title={!canRetryJob ? store.remoteError ?? operationUnavailable : undefined}
+                    onClick={() => retryJob()}
+                  >
                     {messages.retryJob}
                   </button>
                 )}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-ui-preferences"
+description = "Enables the get_ui_preferences command without any pre-configured scope."
+commands.allow = ["get_ui_preferences"]
+
+[[permission]]
+identifier = "deny-get-ui-preferences"
+description = "Denies the get_ui_preferences command without any pre-configured scope."
+commands.deny = ["get_ui_preferences"]

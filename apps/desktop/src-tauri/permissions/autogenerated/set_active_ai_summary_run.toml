@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-active-ai-summary-run"
+description = "Enables the set_active_ai_summary_run command without any pre-configured scope."
+commands.allow = ["set_active_ai_summary_run"]
+
+[[permission]]
+identifier = "deny-set-active-ai-summary-run"
+description = "Denies the set_active_ai_summary_run command without any pre-configured scope."
+commands.deny = ["set_active_ai_summary_run"]

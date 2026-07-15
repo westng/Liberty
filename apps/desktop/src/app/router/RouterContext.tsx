@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Context } from "react";
 import { matchRoute, type RouteConfig } from "@/app/router";
 
 type RouterState = {
@@ -8,7 +8,15 @@ type RouterState = {
   push: (to: string) => Promise<void>;
 };
 
-const RouterContext = createContext<RouterState | null>(null);
+const ROUTER_CONTEXT_KEY = "__libertyRouterContext";
+
+type RouterGlobal = typeof globalThis & {
+  [ROUTER_CONTEXT_KEY]?: Context<RouterState | null>;
+};
+
+const routerGlobal = globalThis as RouterGlobal;
+const RouterContext = routerGlobal[ROUTER_CONTEXT_KEY] ?? createContext<RouterState | null>(null);
+routerGlobal[ROUTER_CONTEXT_KEY] = RouterContext;
 
 export function RouterProvider({ children }: { children: React.ReactNode }) {
   const [path, setPath] = useState(() => window.location.pathname || "/");

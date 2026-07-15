@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "@/app/router/RouterContext";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import {
+  displayItemTypeLabel as formatDisplayItemTypeLabel,
   findCatalogItem as findCatalogItemInState,
   growthValueLabel as formatGrowthValueLabel,
   itemAccent as resolveItemAccent,
   itemAssetKey as resolveItemAssetKey,
   itemDescription as resolveItemDescription,
   itemName as resolveItemName,
-  itemTypeLabel as formatItemTypeLabel,
   lockReason as resolveLockReason,
   petBondTiers,
   priceLabel as formatPriceLabel,
@@ -28,7 +28,7 @@ import type {
 } from "@/shared/types/meeting";
 
 type StoreSection = "store" | "inventory";
-type StoreCategory = "all" | "pet" | "cosmetic" | "theme" | "tool" | "food" | "badge";
+type StoreCategory = "all" | "pet" | "cosmetic" | "theme" | "tool" | "food" | "seed" | "badge";
 
 const petService = createLocalPetService();
 const MAKEUP_TICKET_ITEM_KEY = "gem-ticket-tool";
@@ -73,6 +73,7 @@ export default function PetStoreView() {
     { key: "theme", label: isEnglish ? "Scenes" : "场景" },
     { key: "tool", label: isEnglish ? "Tools" : "道具" },
     { key: "food", label: isEnglish ? "Food" : "食物" },
+    { key: "seed", label: isEnglish ? "Seeds" : "种子" },
     { key: "badge", label: isEnglish ? "Badges" : "徽章" },
   ];
 
@@ -320,8 +321,8 @@ export default function PetStoreView() {
     return petSourceLabelOrUnknown(source, locale);
   }
 
-  function itemTypeLabel(itemType: string) {
-    return formatItemTypeLabel(itemType, locale);
+  function displayItemTypeLabel(item: PetStoreCatalogItemState | PetInventoryItem) {
+    return formatDisplayItemTypeLabel(storeState, item, locale);
   }
 
   function rarityLabel(rarity: string) {
@@ -389,6 +390,9 @@ export default function PetStoreView() {
     if (item.itemKey === MAKEUP_TICKET_ITEM_KEY) {
       return isEnglish ? "Use in Check-in" : "去签到页使用";
     }
+    if (item.itemType === "seed") {
+      return isEnglish ? "Go Farm" : "去农场";
+    }
     if (item.slot === "consumable") {
       return isEnglish ? "Use" : "使用";
     }
@@ -402,6 +406,10 @@ export default function PetStoreView() {
   async function handleInventoryAction(item: PetInventoryItem) {
     if (item.itemKey === MAKEUP_TICKET_ITEM_KEY) {
       await router.push("/daily-check-in");
+      return;
+    }
+    if (item.itemType === "seed") {
+      await router.push("/farm");
       return;
     }
     if (item.slot === "consumable") {
@@ -655,7 +663,7 @@ export default function PetStoreView() {
                   <div className="pet-store-card-copy">
                     <div className="pet-store-card-title">
                       <strong>{itemName(item)}</strong>
-                      <span>{itemTypeLabel(item.item.itemType)}</span>
+                      <span>{displayItemTypeLabel(item)}</span>
                     </div>
                     <div className={`pet-store-card-meta ${rarityToneClass(item.item.rarity)}`}>
                       <span>{rarityLabel(item.item.rarity)}</span>
@@ -696,7 +704,7 @@ export default function PetStoreView() {
                   <div className="pet-store-card-copy">
                     <div className="pet-store-card-title">
                       <strong>{itemName(item)}</strong>
-                      <span>{itemTypeLabel(item.itemType)}</span>
+                      <span>{displayItemTypeLabel(item)}</span>
                     </div>
                     <div className="pet-store-card-meta">
                       <span>{inventorySourceLabel(item.source)}</span>

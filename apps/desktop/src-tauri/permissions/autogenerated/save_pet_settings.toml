@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-pet-settings"
+description = "Enables the save_pet_settings command without any pre-configured scope."
+commands.allow = ["save_pet_settings"]
+
+[[permission]]
+identifier = "deny-save-pet-settings"
+description = "Denies the save_pet_settings command without any pre-configured scope."
+commands.deny = ["save_pet_settings"]

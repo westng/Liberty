@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-ai-summary-options"
+description = "Enables the get_ai_summary_options command without any pre-configured scope."
+commands.allow = ["get_ai_summary_options"]
+
+[[permission]]
+identifier = "deny-get-ai-summary-options"
+description = "Denies the get_ai_summary_options command without any pre-configured scope."
+commands.deny = ["get_ai_summary_options"]

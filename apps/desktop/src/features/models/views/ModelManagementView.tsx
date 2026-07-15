@@ -23,13 +23,13 @@ export default function ModelManagementView() {
   const latestModel = models[0] ?? null;
 
   useEffect(() => {
-    void aiStore.ensureLoaded();
+    void aiStore.ensureModelsLoaded();
     window.addEventListener("focus", handleWindowFocus);
     return () => window.removeEventListener("focus", handleWindowFocus);
   }, []);
 
   function handleWindowFocus() {
-    void aiStore.reloadState();
+    void aiStore.reloadModels();
   }
 
   async function removeModel(model: AiModelConfig) {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-pet-event-ledger"
+description = "Enables the list_pet_event_ledger command without any pre-configured scope."
+commands.allow = ["list_pet_event_ledger"]
+
+[[permission]]
+identifier = "deny-list-pet-event-ledger"
+description = "Denies the list_pet_event_ledger command without any pre-configured scope."
+commands.deny = ["list_pet_event_ledger"]

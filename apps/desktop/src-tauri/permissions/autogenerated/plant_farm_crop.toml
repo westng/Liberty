@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-plant-farm-crop"
+description = "Enables the plant_farm_crop command without any pre-configured scope."
+commands.allow = ["plant_farm_crop"]
+
+[[permission]]
+identifier = "deny-plant-farm-crop"
+description = "Denies the plant_farm_crop command without any pre-configured scope."
+commands.deny = ["plant_farm_crop"]

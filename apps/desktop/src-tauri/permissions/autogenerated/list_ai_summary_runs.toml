@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-ai-summary-runs"
+description = "Enables the list_ai_summary_runs command without any pre-configured scope."
+commands.allow = ["list_ai_summary_runs"]
+
+[[permission]]
+identifier = "deny-list-ai-summary-runs"
+description = "Denies the list_ai_summary_runs command without any pre-configured scope."
+commands.deny = ["list_ai_summary_runs"]

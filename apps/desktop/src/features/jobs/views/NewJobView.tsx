@@ -4,6 +4,7 @@ import { useRouter } from "@/app/router/RouterContext";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import type { MeetingSourceFile } from "@/shared/types/meeting";
+import { jobDetailPath, jobRef } from "./jobRoutes";
 
 export default function NewJobView() {
   const router = useRouter();
@@ -20,19 +21,14 @@ export default function NewJobView() {
   const isLocalMode = store.localMode;
   const messages = getMessages(store.settings.locale).newJob;
   const commonMessages = getMessages(store.settings.locale).common;
-  const jobsMessages = getMessages(store.settings.locale).jobs;
   const summaryTemplate = store.settings.summaryTemplate.trim() || messages.defaultSummaryTemplateName;
-  const shouldWarnModelDownloadRequired = !store.settings.backendUrl.trim() && store.runtimeStatus.status !== "ready";
-  const serviceModeLabel = store.localMode
-    ? messages.localPython
-    : store.settings.backendUrl.trim()
-      ? messages.remoteService
-      : messages.envMissing;
-  const recentJobs = store.jobs.slice(0, 4);
-  const activeJobs = store.jobs.filter((job) =>
-    ["queued", "transcribing", "speaker_processing", "summarizing"].includes(job.overallStatus),
-  ).length;
-  const failedJobs = store.jobs.filter((job) => job.overallStatus === "failed").length;
+  const shouldWarnModelDownloadRequired = isLocalMode && !store.runtimeStatus.shellReady;
+  const remoteCreationUnavailable = !isLocalMode && !store.canRemoteOperation("jobs.create");
+  const currentLanguageLabel = lang === "en-US"
+    ? messages.langEn
+    : lang === "ja-JP"
+      ? messages.langJa
+      : messages.langZh;
 
   useEffect(() => {
     if (!hotwordsText.trim() || hotwordsText === previousDefaultHotwords) {
@@ -86,6 +82,9 @@ export default function NewJobView() {
   }
 
   async function pickFiles() {
+    if (remoteCreationUnavailable) {
+      return;
+    }
     try {
       const selected = await open({
         multiple: !isLocalMode,
@@ -139,6 +138,11 @@ export default function NewJobView() {
       return;
     }
 
+    if (remoteCreationUnavailable) {
+      setSubmitError(messages.remoteUploadUnavailable);
+      return;
+    }
+
     if (shouldWarnModelDownloadRequired) {
       await message(commonMessages.modelUnavailableMessage, {
         title: commonMessages.modelUnavailableTitle,
@@ -167,7 +171,7 @@ export default function NewJobView() {
         summaryTemplate,
       });
 
-      await router.push(`/jobs/${job.id}`);
+      await router.push(jobDetailPath(jobRef(job)));
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : messages.createFailed);
     } finally {
@@ -190,13 +194,9 @@ export default function NewJobView() {
         <main className="new-job-composer">
           <header className="new-job-page-head">
             <div>
-              <p className="new-job-kicker">{serviceModeLabel}</p>
               <h2>{messages.heroTitle}</h2>
               <p>{messages.heroCopy}</p>
             </div>
-            <button className="secondary-button" type="button" onClick={pickFiles}>
-              {files.length ? (isLocalMode ? messages.reselect : messages.continueAdding) : messages.addFiles}
-            </button>
           </header>
 
           <article className="new-job-sheet">
@@ -211,16 +211,11 @@ export default function NewJobView() {
                   <h3>{messages.inputFiles}</h3>
                   <p>{isLocalMode ? messages.desktopFilePicker : messages.mediaSupported}</p>
                 </div>
-                {files.length > 0 && (
-                  <button className="text-button danger-text" type="button" onClick={() => setFiles([])}>
-                    {messages.clearList}
-                  </button>
-                )}
               </div>
 
               <div className={`drop-zone new-job-file-box ${files.length ? "has-files" : ""}`}>
                 {!files.length ? (
-                  <button className="drop-zone-button" type="button" onClick={pickFiles}>
+                  <button className="drop-zone-button" type="button" disabled={remoteCreationUnavailable} onClick={pickFiles}>
                     <div className="drop-zone-copy">
                       <strong>{messages.addFiles}</strong>
                       <p>{isLocalMode ? messages.desktopFilePicker : messages.mediaSupported}</p>
@@ -230,6 +225,14 @@ export default function NewJobView() {
                   <>
                     <div className="new-job-file-box-head">
                       <span>{formatMessage(messages.selectedFiles, { count: files.length })}</span>
+                      <div className="new-job-file-box-actions">
+                        <button className="text-button" type="button" disabled={remoteCreationUnavailable} onClick={pickFiles}>
+                          {isLocalMode ? messages.reselect : messages.continueAdding}
+                        </button>
+                        <button className="text-button danger-text" type="button" onClick={() => setFiles([])}>
+                          {messages.clearList}
+                        </button>
+                      </div>
                     </div>
                     <div className="file-list new-job-file-list">
                       {files.map((file) => (
@@ -250,133 +253,65 @@ export default function NewJobView() {
                 )}
               </div>
             </section>
-          </article>
 
-          <article className="new-job-options-panel">
-            <div className="new-job-section-head">
-              <div>
-                <h3>{messages.advancedSettings}</h3>
-                <p>{messages.hotwordsHint}</p>
-              </div>
-            </div>
-
-            <div className="new-job-options-grid">
-              <div className="new-job-option">
+            <details className="new-job-options-panel">
+              <summary className="new-job-options-summary">
                 <div>
-                  <strong>{messages.language}</strong>
-                  <p>{messages.languageHint}</p>
+                  <h3>{messages.advancedSettings}</h3>
+                  <p>{currentLanguageLabel} · {messages.speaker} {enableSpeaker ? commonMessages.enabled : commonMessages.disabled} · {summaryTemplate}</p>
                 </div>
-                <select id="job-lang" value={lang} onChange={(event) => setLang(event.target.value)}>
-                  <option value="zh-CN">{messages.langZh}</option>
-                  <option value="en-US">{messages.langEn}</option>
-                  <option value="ja-JP">{messages.langJa}</option>
-                </select>
-              </div>
+              </summary>
 
-              <div className="new-job-option">
-                <div>
-                  <strong>{messages.speaker}</strong>
-                  <p>{messages.speakerHint}</p>
+              <div className="new-job-options-grid">
+                <div className="new-job-option">
+                  <div>
+                    <strong>{messages.language}</strong>
+                    <p>{messages.languageHint}</p>
+                  </div>
+                  <select id="job-lang" value={lang} onChange={(event) => setLang(event.target.value)}>
+                    <option value="zh-CN">{messages.langZh}</option>
+                    <option value="en-US">{messages.langEn}</option>
+                    <option value="ja-JP">{messages.langJa}</option>
+                  </select>
                 </div>
-                <label>
-                  <input checked={enableSpeaker} onChange={(event) => setEnableSpeaker(event.target.checked)} type="checkbox" />
-                  <span>{enableSpeaker ? commonMessages.enabled : commonMessages.disabled}</span>
-                </label>
-              </div>
 
-              <div className="field new-job-hotwords-field">
-                <label htmlFor="job-hotwords">{messages.hotwords}</label>
-                <textarea id="job-hotwords" value={hotwordsText} onChange={(event) => setHotwordsText(event.target.value)} placeholder={messages.hotwordsPlaceholder} />
+                <div className="new-job-option">
+                  <div>
+                    <strong>{messages.speaker}</strong>
+                    <p>{messages.speakerHint}</p>
+                  </div>
+                  <label>
+                    <input checked={enableSpeaker} onChange={(event) => setEnableSpeaker(event.target.checked)} type="checkbox" />
+                    <span>{enableSpeaker ? commonMessages.enabled : commonMessages.disabled}</span>
+                  </label>
+                </div>
+
+                <div className="field new-job-hotwords-field">
+                  <label htmlFor="job-hotwords">{messages.hotwords}</label>
+                  <textarea id="job-hotwords" value={hotwordsText} onChange={(event) => setHotwordsText(event.target.value)} placeholder={messages.hotwordsPlaceholder} />
+                </div>
               </div>
-            </div>
+            </details>
+
+            {(submitError || remoteCreationUnavailable) && (
+              <div className="error-block new-job-error">
+                {submitError || messages.remoteUploadUnavailable}
+              </div>
+            )}
+
+            <footer className="new-job-submit-bar">
+              <button
+                className="primary-button new-job-create-button"
+                type="button"
+                disabled={isSubmitting || remoteCreationUnavailable || !title.trim() || !files.length}
+                title={remoteCreationUnavailable ? messages.remoteUploadUnavailable : undefined}
+                onClick={submit}
+              >
+                {isSubmitting ? messages.creating : messages.createJob}
+              </button>
+            </footer>
           </article>
         </main>
-
-        <aside className="new-job-rail">
-          <article className="new-job-submit-card">
-            <div className="new-job-status-grid">
-              <div>
-                <span>{messages.allJobs}</span>
-                <strong>{store.jobs.length}</strong>
-              </div>
-              <div>
-                <span>{messages.processing}</span>
-                <strong>{activeJobs}</strong>
-              </div>
-              <div>
-                <span>{messages.failed}</span>
-                <strong>{failedJobs}</strong>
-              </div>
-            </div>
-
-            <div className="new-job-check-list">
-              <div>
-                <strong>{serviceModeLabel}</strong>
-                <span>
-                  {isLocalMode
-                    ? messages.localModeHint
-                    : store.settings.backendUrl.trim()
-                      ? store.settings.backendUrl
-                      : messages.pendingEnvHint}
-                </span>
-              </div>
-              <div>
-                <strong>{messages.fileRule}</strong>
-                <span>{isLocalMode ? messages.localFileRule : messages.remoteFileRule}</span>
-              </div>
-            </div>
-
-            {submitError && <div className="error-block new-job-error">{submitError}</div>}
-
-            <button
-              className="primary-button new-job-create-button"
-              type="button"
-              disabled={isSubmitting || !title.trim() || !files.length}
-              onClick={submit}
-            >
-              {isSubmitting ? messages.creating : messages.createJob}
-            </button>
-
-            <div className="new-job-rail-actions">
-              <button className="text-button" type="button" onClick={() => router.push("/jobs")}>
-                {messages.viewJobs}
-              </button>
-              <button className="text-button" type="button" onClick={() => router.push("/settings")}>
-                {messages.settings}
-              </button>
-            </div>
-          </article>
-
-          <article className="new-job-recent-card">
-            <div className="new-job-section-head">
-              <h3>{messages.recentJobs}</h3>
-              <button className="text-button" type="button" onClick={() => router.push("/jobs")}>
-                {messages.viewAll}
-              </button>
-            </div>
-
-            {recentJobs.length ? (
-              <div className="job-list compact-list">
-                {recentJobs.map((job) => (
-                  <div key={job.id} className="new-job-recent-row">
-                    <div>
-                      <h4>{job.title}</h4>
-                      <p>
-                        {formatMessage(messages.fileCount, { count: job.sourceFiles.length })} ·{" "}
-                        {formatMessage(jobsMessages.minutes, { count: job.durationMinutes })}
-                      </p>
-                    </div>
-                    <button className="text-button recent-job-action" type="button" onClick={() => router.push(`/jobs/${job.id}`)}>
-                      {commonMessages.open}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state compact-empty">{messages.noTasks}</div>
-            )}
-          </article>
-        </aside>
       </div>
     </section>
   );

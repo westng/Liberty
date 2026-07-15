@@ -4,49 +4,62 @@ import { Link, useRouter } from "@/app/router/RouterContext";
 import StatusBadge from "@/shared/components/StatusBadge";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
+import type { MeetingJob } from "@/shared/types/meeting";
+import {
+  jobDetailPath,
+  jobRef,
+  jobRefKey,
+  jobWorkbenchPath,
+} from "./jobRoutes";
 
 export default function JobsView() {
   const store = useMeetingStore();
   const router = useRouter();
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const messages = getMessages(store.settings.locale).jobs;
   const commonMessages = getMessages(store.settings.locale).common;
-  const shouldWarnModelDownloadRequired = !store.settings.backendUrl.trim() && store.runtimeStatus.status !== "ready";
+  const operationUnavailable = getMessages(store.settings.locale).workbench.remoteOperationUnavailable;
   const sortedJobs = useMemo(
-    () => [...store.jobs].sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
-    [store.jobs],
+    () => store.jobs
+      .filter((job) => job.source === store.settings.processingMode)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+    [store.jobs, store.settings.processingMode],
   );
-  const completedJobs = store.jobs.filter((job) => job.overallStatus === "completed").length;
-  const processingJobs = store.jobs.filter((job) =>
+  const completedJobs = sortedJobs.filter((job) => job.overallStatus === "completed").length;
+  const processingJobs = sortedJobs.filter((job) =>
     ["queued", "transcribing", "speaker_processing", "summarizing"].includes(job.overallStatus),
   ).length;
-  const failedJobs = store.jobs.filter((job) => job.overallStatus === "failed").length;
-  const latestJob = sortedJobs[0] ?? null;
-  const selectedJob = selectedJobId
-    ? sortedJobs.find((job) => job.id === selectedJobId) ?? latestJob
-    : latestJob;
+  const failedJobs = sortedJobs.filter((job) => job.overallStatus === "failed").length;
 
   useEffect(() => {
-    void store.refreshJobs();
+    void store.refreshJobs().catch(() => undefined);
   }, []);
 
-  function isDeleting(jobId: string) {
-    return deletingJobId === jobId;
+  function isDeleting(job: MeetingJob) {
+    return deletingJobId === jobRefKey(jobRef(job));
   }
 
-  function isDeleteDisabled(status: string) {
-    return ["queued", "transcribing", "speaker_processing", "summarizing"].includes(status);
+  function supports(job: MeetingJob, operation: "jobs.read" | "jobs.result.read" | "jobs.retry" | "jobs.delete") {
+    return job.source === "local" || store.canRemoteOperation(operation);
   }
 
-  async function openJobDetail(jobId: string) {
-    await router.push(`/jobs/${jobId}`);
+  function supportsResult(job: MeetingJob) {
+    return supports(job, "jobs.read") && supports(job, "jobs.result.read");
   }
 
-  async function deleteJob(jobId: string) {
-    const job = store.getJobById(jobId);
+  function isDeleteDisabled(job: MeetingJob) {
+    return ["queued", "transcribing", "speaker_processing", "summarizing"].includes(job.overallStatus)
+      || !supports(job, "jobs.delete");
+  }
 
-    if (!job || isDeleteDisabled(job.overallStatus)) {
+  async function openJobDetail(job: MeetingJob) {
+    if (supports(job, "jobs.read")) {
+      await router.push(jobDetailPath(jobRef(job)));
+    }
+  }
+
+  async function deleteJob(job: MeetingJob) {
+    if (isDeleteDisabled(job)) {
       return;
     }
 
@@ -55,17 +68,20 @@ export default function JobsView() {
       return;
     }
 
-    setDeletingJobId(jobId);
+    setDeletingJobId(jobRefKey(jobRef(job)));
 
     try {
-      await store.deleteJob(jobId);
+      await store.deleteJob(jobRef(job));
     } finally {
       setDeletingJobId(null);
     }
   }
 
-  async function retryJob(jobId: string) {
-    if (shouldWarnModelDownloadRequired) {
+  async function retryJob(job: MeetingJob) {
+    if (!supports(job, "jobs.retry")) {
+      return;
+    }
+    if (job.source === "local" && !store.runtimeStatus.shellReady) {
       await message(commonMessages.modelUnavailableMessage, {
         title: commonMessages.modelUnavailableTitle,
         kind: "warning",
@@ -73,7 +89,7 @@ export default function JobsView() {
       return;
     }
 
-    await store.retryJob(jobId);
+    await store.retryJob(jobRef(job));
   }
 
   function formatCreatedAt(value: string) {
@@ -145,8 +161,7 @@ export default function JobsView() {
         </div>
       </article>
 
-      <div className="native-split-layout">
-        <article className="surface native-list-panel jobs-native-panel">
+      <article className="surface native-list-panel jobs-native-panel">
           <div className="section-heading">
             <div>
               <h3>{messages.queueTitle}</h3>
@@ -167,10 +182,9 @@ export default function JobsView() {
 
               {sortedJobs.map((job) => (
                 <div
-                  key={job.id}
-                  className={`jobs-row ${selectedJob?.id === job.id ? "selected" : ""}`}
-                  onClick={() => setSelectedJobId(job.id)}
-                  onDoubleClick={() => openJobDetail(job.id)}
+                  key={jobRefKey(jobRef(job))}
+                  className="jobs-row"
+                  onDoubleClick={() => void openJobDetail(job)}
                 >
                   <div className="jobs-primary">
                     <strong>{job.title}</strong>
@@ -205,21 +219,35 @@ export default function JobsView() {
                   </div>
 
                   <div className="jobs-actions">
-                    <Link className="text-button" to={`/jobs/${job.id}`} onClick={(event) => event.stopPropagation()}>
-                      {messages.details}
-                    </Link>
-                    {job.overallStatus === "completed" && (
-                      <Link className="primary-button small-button" to={`/jobs/${job.id}/workbench`} onClick={(event) => event.stopPropagation()}>
-                        {messages.workbench}
+                    {supports(job, "jobs.read") ? (
+                      <Link className="text-button" to={jobDetailPath(jobRef(job))} onClick={(event) => event.stopPropagation()}>
+                        {messages.details}
                       </Link>
+                    ) : (
+                      <button className="text-button" type="button" disabled title={store.remoteError ?? operationUnavailable}>
+                        {messages.details}
+                      </button>
+                    )}
+                    {job.overallStatus === "completed" && (
+                      supportsResult(job) ? (
+                        <Link className="primary-button small-button" to={jobWorkbenchPath(jobRef(job))} onClick={(event) => event.stopPropagation()}>
+                          {messages.workbench}
+                        </Link>
+                      ) : (
+                        <button className="primary-button small-button" type="button" disabled title={store.remoteError ?? operationUnavailable}>
+                          {messages.workbench}
+                        </button>
+                      )
                     )}
                     {job.overallStatus === "failed" && (
                       <button
                         className="secondary-button small-button"
                         type="button"
+                        disabled={!supports(job, "jobs.retry")}
+                        title={!supports(job, "jobs.retry") ? store.remoteError ?? operationUnavailable : undefined}
                         onClick={(event) => {
                           event.stopPropagation();
-                          void retryJob(job.id);
+                          void retryJob(job);
                         }}
                       >
                         {commonMessages.retry}
@@ -228,65 +256,25 @@ export default function JobsView() {
                     <button
                       className="text-button small-button jobs-delete-button"
                       type="button"
-                      disabled={isDeleteDisabled(job.overallStatus) || isDeleting(job.id)}
-                      title={isDeleteDisabled(job.overallStatus) ? messages.deleteDisabled : messages.deleteAction}
+                      disabled={isDeleteDisabled(job) || isDeleting(job)}
+                      title={!supports(job, "jobs.delete")
+                        ? store.remoteError ?? operationUnavailable
+                        : isDeleteDisabled(job)
+                          ? messages.deleteDisabled
+                          : messages.deleteAction}
                       onClick={(event) => {
                         event.stopPropagation();
-                        void deleteJob(job.id);
+                        void deleteJob(job);
                       }}
                     >
-                      {isDeleting(job.id) ? messages.deleting : commonMessages.delete}
+                      {isDeleting(job) ? messages.deleting : commonMessages.delete}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </article>
-
-        <aside className="surface native-inspector-panel">
-          <div className="section-heading">
-            <h3>{messages.colStatus}</h3>
-          </div>
-          <div className="native-stat-list">
-            <div>
-              <span>{messages.total}</span>
-              <strong>{sortedJobs.length}</strong>
-            </div>
-            <div>
-              <span>{messages.processing}</span>
-              <strong>{processingJobs}</strong>
-            </div>
-            <div>
-              <span>{messages.completed}</span>
-              <strong>{completedJobs}</strong>
-            </div>
-            <div>
-              <span>{messages.processFailed}</span>
-              <strong>{failedJobs}</strong>
-            </div>
-          </div>
-          {selectedJob && (
-            <div className="native-inspector-note jobs-selected-note">
-              <span>{messages.selectedTask}</span>
-              <strong>{selectedJob.title}</strong>
-              <p>{formatCreatedAt(selectedJob.createdAt)}</p>
-              <div className="job-meta-line">{selectedJob.sourceFiles.map((file) => file.name).join(" · ")}</div>
-              <div className="button-row jobs-inspector-actions">
-                <Link className="text-button small-button" to={`/jobs/${selectedJob.id}`}>
-                  {messages.details}
-                </Link>
-                {selectedJob.overallStatus === "completed" && (
-                  <Link className="primary-button small-button" to={`/jobs/${selectedJob.id}/workbench`}>
-                    {messages.workbench}
-                  </Link>
-                )}
-              </div>
-              <p>{messages.doubleClickHint}</p>
-            </div>
-          )}
-        </aside>
-      </div>
+      </article>
     </section>
   );
 }

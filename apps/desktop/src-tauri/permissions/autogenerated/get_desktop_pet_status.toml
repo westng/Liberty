@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-desktop-pet-status"
+description = "Enables the get_desktop_pet_status command without any pre-configured scope."
+commands.allow = ["get_desktop_pet_status"]
+
+[[permission]]
+identifier = "deny-get-desktop-pet-status"
+description = "Denies the get_desktop_pet_status command without any pre-configured scope."
+commands.deny = ["get_desktop_pet_status"]

@@ -3,6 +3,7 @@ import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentMessages } from "@/shared/i18n";
 import { applyLocalPetWorkflowEvent } from "@/shared/services/tauri/pet";
+import { publishAppStatus, runAppStatusAction } from "@/shared/services/ui/statusNotifications";
 import type { MeetingJob } from "@/shared/types/meeting";
 import { getPrimaryTranscriptSegments } from "@/shared/services/meeting/transcript";
 
@@ -90,6 +91,14 @@ export function buildExportPayload(job: MeetingJob, kind: ExportKind) {
 }
 
 export async function exportJob(job: MeetingJob, kind: ExportKind) {
+  if (kind === "word" && job.source !== "local") {
+    publishAppStatus(getCurrentMessages().export.remoteWordUnavailable, {
+      tone: "error",
+      durationMs: 7000,
+    });
+    return false;
+  }
+
   const payload = buildExportPayload(job, kind);
 
   const filePath = await save({
@@ -106,29 +115,30 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
     return false;
   }
 
-  if (kind === "word") {
-    await invoke("export_job_summary_docx", {
-      jobId: job.id,
-      summaryRunId: job.activeSummaryRunId ?? null,
-      filePath,
-    });
-    void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
-    return true;
-  }
+  return runAppStatusAction("exportFile", async () => {
+    if (kind === "word") {
+      await invoke("export_job_summary_docx", {
+        jobId: job.id,
+        summaryRunId: job.activeSummaryRunId ?? null,
+        filePath,
+      });
+      void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
+      return true;
+    }
 
-  try {
-    await writeTextFile(filePath, payload.content);
+    try {
+      await writeTextFile(filePath, payload.content);
+    } catch {
+      const blob = new Blob([payload.content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = payload.fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    }
+
     void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;
-  } catch {
-    const blob = new Blob([payload.content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = payload.fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
-    return true;
-  }
+  });
 }

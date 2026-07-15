@@ -1,6 +1,16 @@
 use crate::local_ai::GenerateAiSummaryInput;
 use crate::local_db::{MeetingJob, TranscriptSegment};
 
+pub(super) const TRANSCRIPT_START_MARKER: &str = "--- LIBERTY TRANSCRIPT START ---";
+pub(super) const TRANSCRIPT_END_MARKER: &str = "--- LIBERTY TRANSCRIPT END ---";
+pub(super) const REQUIRED_SPEAKERS_PREFIX: &str = "Required transcript speakers (JSON): ";
+
+const STRUCTURED_SUMMARY_REQUIREMENTS: &str = r#"Return one complete JSON object with every field below, even when a field is empty:
+{"title":"","overview":"","topics":[],"decisions":[],"actionItems":[],"risks":[],"followUps":[],"speakerReports":[],"globalSummary":[]}
+Each speakerReports item must use {"speakerLabel":"","department":"","weeklySummary":[],"nextWeekPlan":[],"summary":[]}.
+Keep transcript speaker labels verbatim. Include every required transcript speaker exactly once. Do not merge, rename, or omit speakers.
+Use arrays of strings for all list fields. actionItems items must use {"task":"","owner":"","dueDate":""}. Output JSON only."#;
+
 #[derive(Debug)]
 pub(super) struct PromptPreview {
     pub system: String,
@@ -8,11 +18,17 @@ pub(super) struct PromptPreview {
 }
 
 pub(super) fn build_summary_prompt_preview(input: &GenerateAiSummaryInput) -> PromptPreview {
-    let transcript = primary_transcript_segments(&input.job)
+    let segments = primary_transcript_segments(&input.job);
+    let transcript = segments
         .iter()
         .map(|segment| format_segment(segment, input.include_speaker, input.include_timestamp))
         .collect::<Vec<_>>()
         .join("\n");
+    let required_speakers = if input.include_speaker {
+        collect_speaker_labels(segments)
+    } else {
+        Vec::new()
+    };
 
     let mut lines = vec![
         format!("Meeting title: {}", input.job.title),
@@ -45,6 +61,10 @@ pub(super) fn build_summary_prompt_preview(input: &GenerateAiSummaryInput) -> Pr
             "Extra instructions: {}",
             non_empty(&input.extra_instructions).unwrap_or("none")
         ),
+        format!(
+            "{REQUIRED_SPEAKERS_PREFIX}{}",
+            serde_json::to_string(&required_speakers).unwrap_or_else(|_| "[]".into())
+        ),
     ];
 
     if input.use_member_mapping {
@@ -53,16 +73,42 @@ pub(super) fn build_summary_prompt_preview(input: &GenerateAiSummaryInput) -> Pr
 
     lines.push(String::new());
     lines.push("Please output JSON based on the following meeting content:".into());
+    lines.push(TRANSCRIPT_START_MARKER.into());
     lines.push(if transcript.trim().is_empty() {
         "Transcript is missing.".into()
     } else {
         transcript
     });
+    lines.push(TRANSCRIPT_END_MARKER.into());
 
     PromptPreview {
-        system: input.template.prompt.trim().to_string(),
+        system: format!(
+            "{}\n\n{}",
+            input.template.prompt.trim(),
+            STRUCTURED_SUMMARY_REQUIREMENTS
+        )
+        .trim()
+        .to_string(),
         user: lines.join("\n"),
     }
+}
+
+fn collect_speaker_labels(segments: &[TranscriptSegment]) -> Vec<String> {
+    let mut labels = Vec::new();
+    for segment in segments {
+        let Some(label) = segment
+            .speaker
+            .as_deref()
+            .map(str::trim)
+            .filter(|label| !label.is_empty())
+        else {
+            continue;
+        };
+        if !labels.iter().any(|existing| existing == label) {
+            labels.push(label.to_string());
+        }
+    }
+    labels
 }
 
 fn append_member_mapping(lines: &mut Vec<String>, input: &GenerateAiSummaryInput) {

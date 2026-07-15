@@ -252,13 +252,11 @@
 
 .content-shell:not(.settings-content-shell) .new-job-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 316px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
-.content-shell:not(.settings-content-shell) .new-job-composer,
-.content-shell:not(.settings-content-shell) .new-job-rail {
+.content-shell:not(.settings-content-shell) .new-job-composer {
   display: grid;
   gap: 14px;
   align-content: start;
@@ -277,7 +275,7 @@
   color: var(--text-main);
   font-size: 24px;
   font-weight: 700;
-  letter-spacing: -0.035em;
+  letter-spacing: 0;
 }
 
 .content-shell:not(.settings-content-shell) .new-job-page-head p {
@@ -288,19 +286,8 @@
   line-height: 1.5;
 }
 
-.content-shell:not(.settings-content-shell) .new-job-kicker {
-  margin: 0 0 5px !important;
-  color: var(--accent-strong) !important;
-  font-size: 12px !important;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-sheet,
-.content-shell:not(.settings-content-shell) .new-job-options-panel,
-.content-shell:not(.settings-content-shell) .new-job-submit-card,
-.content-shell:not(.settings-content-shell) .new-job-recent-card {
-  padding: 14px;
+.content-shell:not(.settings-content-shell) .new-job-sheet {
+  padding: 18px;
   border: 1px solid var(--native-panel-border);
   border-radius: var(--native-radius-panel);
   background: var(--native-panel-bg);
@@ -309,11 +296,11 @@
 
 .content-shell:not(.settings-content-shell) .new-job-sheet {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .content-shell:not(.settings-content-shell) .new-job-title-field {
-  padding-bottom: 14px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--native-panel-border);
 }
 
@@ -325,7 +312,7 @@
   background: transparent;
   font-size: 20px;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .content-shell:not(.settings-content-shell) .new-job-section,
@@ -408,6 +395,11 @@
   font-size: 12px;
 }
 
+.content-shell:not(.settings-content-shell) .new-job-file-box-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .content-shell:not(.settings-content-shell) .new-job-file-row {
   padding: 8px 0;
   border-color: var(--native-panel-border);
@@ -416,6 +408,64 @@
 .content-shell:not(.settings-content-shell) .new-job-file-name {
   font-size: 13px;
   font-weight: 400;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-panel {
+  padding: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--native-panel-border);
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 10px 0;
+  color: var(--text-main);
+  cursor: pointer;
+  list-style: none;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-summary::-webkit-details-marker {
+  display: none;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-summary::after {
+  content: "+";
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-panel[open] .new-job-options-summary::after {
+  content: "-";
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-summary h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 680;
+  letter-spacing: 0;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-summary p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-panel[open] .new-job-options-summary {
+  border-bottom: 1px solid var(--native-panel-border);
+}
+
+.content-shell:not(.settings-content-shell) .new-job-options-grid {
+  padding: 2px 0 12px;
 }
 
 .content-shell:not(.settings-content-shell) .new-job-option {
@@ -432,15 +482,13 @@
   border-bottom: 0;
 }
 
-.content-shell:not(.settings-content-shell) .new-job-option strong,
-.content-shell:not(.settings-content-shell) .new-job-check-list strong {
+.content-shell:not(.settings-content-shell) .new-job-option strong {
   color: var(--text-main);
   font-size: 13px;
   font-weight: 650;
 }
 
-.content-shell:not(.settings-content-shell) .new-job-option p,
-.content-shell:not(.settings-content-shell) .new-job-check-list span {
+.content-shell:not(.settings-content-shell) .new-job-option p {
   margin: 3px 0 0;
   color: var(--text-muted);
   font-size: 12px;
@@ -497,93 +545,55 @@
   resize: vertical;
 }
 
-.content-shell:not(.settings-content-shell) .new-job-status-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-status-grid div {
-  display: grid;
-  gap: 4px;
-  min-height: 56px;
-  align-content: center;
-  padding: 8px;
-  border-radius: var(--native-radius-control);
-  background: var(--native-subpanel-bg);
-}
-
-.content-shell:not(.settings-content-shell) .new-job-status-grid span {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-status-grid strong {
-  color: var(--text-main);
-  font-size: 18px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-check-list {
-  display: grid;
-  gap: 0;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--native-panel-border);
-}
-
-.content-shell:not(.settings-content-shell) .new-job-check-list div {
-  padding: 9px 0;
-}
-
 .content-shell:not(.settings-content-shell) .new-job-error {
-  margin-top: 10px;
+  margin: 0;
+}
+
+.content-shell:not(.settings-content-shell) .new-job-submit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 
 .content-shell:not(.settings-content-shell) .new-job-create-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  min-height: 38px;
-  margin-top: 12px;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-rail-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-recent-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--native-panel-border);
-}
-
-.content-shell:not(.settings-content-shell) .new-job-recent-row:last-child {
-  border-bottom: 0;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-recent-row h4 {
+  width: auto;
+  min-width: 180px;
+  min-height: 44px;
   margin: 0;
-  color: var(--text-main);
-  font-size: 13px;
-  font-weight: 650;
 }
 
-.content-shell:not(.settings-content-shell) .new-job-recent-row p {
-  margin: 3px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.content-shell:not(.settings-content-shell) .new-job-file-row > div:first-child,
-.content-shell:not(.settings-content-shell) .new-job-recent-row > div:first-child {
+.content-shell:not(.settings-content-shell) .new-job-file-row > div:first-child {
   min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .content-shell:not(.settings-content-shell) .new-job-options-summary {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .content-shell:not(.settings-content-shell) .new-job-option,
+  .content-shell:not(.settings-content-shell) .new-job-submit-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .content-shell:not(.settings-content-shell) .new-job-option select,
+  .content-shell:not(.settings-content-shell) .new-job-option label,
+  .content-shell:not(.settings-content-shell) .new-job-create-button {
+    width: 100%;
+  }
+
+  .content-shell:not(.settings-content-shell) .new-job-file-box-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .content-shell:not(.settings-content-shell) .new-job-file-box-actions {
+    justify-content: flex-start;
+  }
 }

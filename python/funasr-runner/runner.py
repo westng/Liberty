@@ -78,6 +78,16 @@ def parse_positive_int(value: str | None, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
+def resolve_model_profile() -> str:
+    profile = str(os.getenv("FUNASR_PROFILE", "") or "").strip().lower()
+    if profile in {"sensevoice", "sensevoice-small"}:
+        return "sensevoice"
+    model_name = str(os.getenv("FUNASR_MODEL", "") or "").strip().lower()
+    if "sensevoice" in model_name:
+        return "sensevoice"
+    return "paraformer"
+
+
 def resolve_requested_device() -> str:
     requested = str(os.getenv("FUNASR_DEVICE", "auto") or "auto").strip().lower()
     if requested in {"cpu", "mps", "cuda"}:
@@ -107,12 +117,15 @@ def detect_best_device() -> str:
 
 
 def build_model(auto_model_cls, wants_speaker: bool) -> tuple[object, str]:
+    profile = resolve_model_profile()
+    default_model = "iic/SenseVoiceSmall" if profile == "sensevoice" else "paraformer-zh"
     model_kwargs = {
-        "model": os.getenv("FUNASR_MODEL", "paraformer-zh"),
+        "model": os.getenv("FUNASR_MODEL", default_model),
         "vad_model": os.getenv("FUNASR_VAD_MODEL", "fsmn-vad"),
-        "punc_model": os.getenv("FUNASR_PUNC_MODEL", "ct-punc"),
         "disable_update": True,
     }
+    if profile != "sensevoice":
+        model_kwargs["punc_model"] = os.getenv("FUNASR_PUNC_MODEL", "ct-punc")
     if wants_speaker:
         model_kwargs["spk_model"] = os.getenv("FUNASR_SPK_MODEL", "cam++")
 
@@ -396,7 +409,8 @@ def main():
     batch_size_s = parse_positive_int(os.getenv("FUNASR_BATCH_SIZE_S"), 300)
     log(
         "FunASR runtime:"
-        f" device={resolved_device}"
+        f" profile={resolve_model_profile()}"
+        f", device={resolved_device}"
         f", batch_size_s={batch_size_s}"
         f", threads={os.getenv('OMP_NUM_THREADS', '1')}"
         f", speaker={'true' if wants_speaker else 'false'}"

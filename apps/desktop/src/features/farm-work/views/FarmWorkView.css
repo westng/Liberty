@@ -1,0 +1,684 @@
+.farm-work-page {
+  position: relative;
+  height: calc(100vh - 94px);
+  min-height: 520px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--native-panel-border);
+  border-radius: var(--native-radius-panel);
+  background: #6fa943;
+}
+
+.farm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 24, 18, 0.32);
+  backdrop-filter: blur(4px);
+}
+
+.farm-dialog {
+  width: min(420px, calc(100vw - 48px));
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--native-panel-border);
+  border-radius: 10px;
+  background: var(--native-panel-bg);
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.24);
+}
+
+.farm-plant-dialog {
+  width: min(560px, calc(100vw - 48px));
+}
+
+.farm-dialog-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.farm-dialog h3,
+.farm-dialog p {
+  margin: 0;
+}
+
+.farm-dialog h3 {
+  font-size: 18px;
+}
+
+.farm-dialog p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.farm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.farm-dialog-actions button {
+  min-height: 38px;
+}
+
+.farm-plant-choice-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: min(430px, calc(100vh - 260px));
+  overflow: auto;
+}
+
+.farm-plant-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.farm-plant-choice span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.farm-plant-choice small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.farm-plant-choice em {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.farm-plant-choice:hover:not(:disabled),
+.farm-plant-choice:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 62%, white);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-input));
+  outline: none;
+}
+
+.farm-plant-choice.unavailable {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.farm-plant-choice.unavailable em {
+  color: var(--danger);
+}
+
+.farm-work-hero {
+  position: absolute;
+  inset: 14px 14px auto;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.farm-work-hero > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(28, 43, 23, 0.72);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(25, 46, 22, 0.22);
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.farm-work-hero h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.farm-work-hero .native-back-link {
+  min-height: 30px;
+  margin: 0;
+  padding: 0 9px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.farm-work-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.farm-work-stat-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(28, 43, 23, 0.68);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  box-shadow: 0 10px 28px rgba(25, 46, 22, 0.18);
+  backdrop-filter: blur(14px);
+}
+
+.farm-work-stat-strip strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.farm-game-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.farm-scene-viewport {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  cursor: grab;
+  touch-action: none;
+  background: #6fa943;
+}
+
+.farm-scene-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.farm-scene-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1536px;
+  height: 1024px;
+  transform-origin: 0 0;
+  transition: transform 0.18s ease-out;
+}
+
+.farm-scene-viewport.is-dragging .farm-scene-world {
+  transition: none;
+}
+
+.farm-scene-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 1536px;
+  height: 1024px;
+  object-fit: cover;
+  user-select: none;
+  pointer-events: none;
+}
+
+.farm-patrol-dog {
+  position: absolute;
+  left: 190px;
+  top: 700px;
+  width: 180px;
+  height: 150px;
+  pointer-events: none;
+  transform-origin: 50% 86%;
+  animation: farm-dog-patrol 18s linear infinite;
+  z-index: 5;
+}
+
+.farm-patrol-dog-facing {
+  display: block;
+  width: 180px;
+  height: 150px;
+  transform-origin: 50% 86%;
+  animation: farm-dog-facing 18s step-end infinite;
+}
+
+.farm-patrol-dog-sprite {
+  display: block;
+  width: 180px;
+  height: 150px;
+  background-repeat: no-repeat;
+  background-size: 1440px 150px;
+  filter: drop-shadow(0 12px 10px rgba(45, 55, 28, 0.2));
+  animation: farm-dog-walk 0.72s steps(8) infinite;
+}
+
+.farm-map-plot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--plot-width);
+  height: var(--plot-height);
+  overflow: visible;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: #fdf8dc;
+  box-shadow: none;
+  cursor: pointer;
+  transform: translate3d(var(--plot-x), var(--plot-y), 0);
+  outline: none;
+  transition: filter 0.18s ease;
+  z-index: 6;
+}
+
+.farm-plot-art-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease;
+}
+
+.farm-plot-soil-layer {
+  z-index: 1;
+}
+
+.farm-plot-crop-layer {
+  z-index: 2;
+  transform-origin: center center;
+}
+
+.farm-plot-crop-layer-sprout {
+  opacity: 0.78;
+  transform: translateY(-18px) scale(0.48);
+}
+
+.farm-plot-crop-layer-care {
+  opacity: 0.9;
+  transform: translateY(-10px) scale(0.68);
+}
+
+.farm-plot-crop-layer-grown {
+  opacity: 1;
+  transform: translateY(-4px) scale(0.84);
+}
+
+.farm-plot-crop-layer-mature {
+  opacity: 1;
+  transform: scale(0.96);
+}
+
+.farm-map-plot:hover,
+.farm-map-plot:focus-visible {
+  background: transparent;
+  outline: none;
+  filter: drop-shadow(0 10px 18px rgba(75, 62, 24, 0.2));
+}
+
+.farm-map-plot.selected {
+  filter: drop-shadow(0 12px 18px rgba(64, 83, 31, 0.2));
+}
+
+.farm-map-plot-mature {
+  box-shadow: none;
+}
+
+.farm-map-plot-label {
+  position: absolute;
+  left: 62px;
+  right: 62px;
+  bottom: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(45, 67, 28, 0.72);
+  box-shadow: 0 12px 18px rgba(35, 51, 32, 0.2);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.farm-map-plot:hover .farm-map-plot-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.farm-map-plot-label strong,
+.farm-map-plot-label em {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+}
+
+.farm-map-plot-label strong {
+  font-size: 13px;
+}
+
+.farm-map-plot-label em {
+  color: rgba(255, 247, 230, 0.82);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.farm-map-progress {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  bottom: 124px;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(46, 58, 24, 0.28);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 4;
+}
+
+.farm-map-plot:hover .farm-map-progress {
+  opacity: 1;
+}
+
+.farm-map-progress span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8ed66c, #f1d86b);
+}
+
+.farm-effect {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 76px;
+  height: 76px;
+  margin-left: -38px;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.farm-effect-plant::before,
+.farm-effect-harvest::before {
+  content: "+";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 244, 177, 0.88);
+  color: #41622f;
+  font-size: 30px;
+  font-weight: 900;
+  animation: farm-pop-float 1.25s ease-out both;
+}
+
+.farm-effect-water::before,
+.farm-effect-water::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(132, 217, 255, 0.9);
+  animation: farm-water-drop 0.9s ease-out both;
+}
+
+.farm-effect-water::before {
+  left: 18px;
+  top: -6px;
+}
+
+.farm-effect-water::after {
+  right: 18px;
+  top: 6px;
+  animation-delay: 0.12s;
+}
+
+.farm-plot-actions {
+  position: absolute;
+  left: 50%;
+  top: 48px;
+  min-width: 74px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #31583a;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 14px 24px rgba(45, 65, 41, 0.22);
+  opacity: 0.94;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: farm-action-bubble 1.4s ease-in-out infinite;
+  z-index: 8;
+}
+
+.farm-map-plot-empty .farm-plot-actions,
+.farm-map-plot-needs_water .farm-plot-actions,
+.farm-map-plot-mature .farm-plot-actions {
+  background: rgba(255, 255, 255, 0.96);
+  color: #294f34;
+}
+
+.farm-map-plot:hover .farm-plot-actions {
+  opacity: 1;
+}
+
+.farm-game-hud {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 20;
+  width: min(360px, calc(100% - 28px));
+  pointer-events: none;
+}
+
+.farm-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(28, 43, 23, 0.76);
+  color: #fff;
+  box-shadow: 0 18px 42px rgba(25, 46, 22, 0.26);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.farm-panel .section-heading h3 {
+  margin-top: 2px;
+  color: #fff;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.farm-panel .eyebrow {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 10px;
+}
+
+.farm-action-stack {
+  display: grid;
+  gap: 9px;
+}
+
+.farm-selected-status {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.farm-selected-status span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.farm-main-action:focus-visible,
+.farm-work-page .native-back-link:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 70%, white);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.farm-main-action {
+  width: 100%;
+  min-height: 38px;
+}
+
+@media (max-width: 760px) {
+  .farm-work-hero {
+    inset: 10px 10px auto;
+  }
+
+  .farm-work-stat-strip {
+    display: none;
+  }
+
+  .farm-plant-choice-list {
+    grid-template-columns: 1fr;
+  }
+
+  .farm-game-hud {
+    left: 10px;
+    bottom: 10px;
+    width: min(340px, calc(100% - 20px));
+  }
+}
+
+@keyframes farm-ready-glow {
+  0%, 100% {
+    box-shadow: inset 0 0 0 2px rgba(255, 244, 148, 0.12), 0 0 12px rgba(255, 230, 106, 0.12);
+  }
+  50% {
+    box-shadow: inset 0 0 0 2px rgba(255, 244, 148, 0.24), 0 0 20px rgba(255, 230, 106, 0.2);
+  }
+}
+
+@keyframes farm-pop-float {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-42px) scale(1.1);
+  }
+}
+
+@keyframes farm-action-bubble {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-5px);
+  }
+}
+
+@keyframes farm-dog-walk {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -1440px 0;
+  }
+}
+
+@keyframes farm-dog-patrol {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.78);
+  }
+  18% {
+    transform: translate3d(330px, -44px, 0) scale(0.78);
+  }
+  34% {
+    transform: translate3d(640px, -12px, 0) scale(0.78);
+  }
+  50% {
+    transform: translate3d(880px, 74px, 0) scale(0.78);
+  }
+  68% {
+    transform: translate3d(610px, 142px, 0) scale(0.78);
+  }
+  84% {
+    transform: translate3d(255px, 96px, 0) scale(0.78);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.78);
+  }
+}
+
+@keyframes farm-dog-facing {
+  0%, 49.999% {
+    transform: scaleX(1);
+  }
+  50%, 99.999% {
+    transform: scaleX(-1);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes farm-water-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-38px) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(48px) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .farm-map-plot-mature,
+  .farm-patrol-dog,
+  .farm-patrol-dog-facing,
+  .farm-patrol-dog-sprite,
+  .farm-effect::before,
+  .farm-effect::after {
+    animation: none !important;
+  }
+}

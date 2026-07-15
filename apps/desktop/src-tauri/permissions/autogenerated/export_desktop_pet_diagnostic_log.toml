@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-export-desktop-pet-diagnostic-log"
+description = "Enables the export_desktop_pet_diagnostic_log command without any pre-configured scope."
+commands.allow = ["export_desktop_pet_diagnostic_log"]
+
+[[permission]]
+identifier = "deny-export-desktop-pet-diagnostic-log"
+description = "Denies the export_desktop_pet_diagnostic_log command without any pre-configured scope."
+commands.deny = ["export_desktop_pet_diagnostic_log"]

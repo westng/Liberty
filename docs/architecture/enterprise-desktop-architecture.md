@@ -23,7 +23,7 @@ Windows x86 is a separately validated platform because Python runtime availabili
 ### Tauri Backend
 
 - `commands`: Tauri command adapters. They validate transport inputs and call application services.
-- `application`: use cases such as creating jobs, retrying jobs, installing runtime bundles, and generating summaries.
+- `application`: use cases such as creating jobs, retrying jobs, installing runtime assets, and generating summaries.
 - `domain`: entities, value objects, state machines, policies, and typed errors.
 - `infrastructure`: SQLite repositories, file system access, Python runner integration, HTTP AI clients, OS services, and platform-specific implementations.
 
@@ -62,6 +62,19 @@ The fourth refinement pass reduces remaining large orchestration files:
 - settings page state and runtime-panel calculations live in
   `features/settings/application`, leaving `SettingsView.tsx` focused on layout
 
+The current pet and operations pass adds these user-facing feature modules and
+repository boundaries:
+
+- `features/pet-check-in`: daily check-in, 14-day reward calendar, history, and
+  make-up ticket flow
+- `features/pet-redeem-key`: local redeem-key entry and redemption history
+- `infrastructure/repositories/pet_check_in.rs`: reward-cycle rules,
+  check-in persistence, make-up window, and ticket consumption
+- `infrastructure/repositories/pet_redeem_key.rs`: redeem-key normalization,
+  HMAC/signature validation, reward granting, and duplicate prevention
+- `commands/diagnostics.rs`: system diagnostics and desktop-pet diagnostic log
+  export
+
 ## Data And Migration
 
 - SQLite schema changes are versioned migrations, not ad hoc `ALTER TABLE` statements.
@@ -80,6 +93,23 @@ The enterprise job runner owns all long-running local work:
 - process protocol: Python runner emits JSON lines for progress, result, and error events
 
 Text logs are a user-facing projection of structured events, not the only source of operational truth.
+
+## Runtime Management
+
+The managed runtime is acquired by the desktop client, not by a release workflow
+that silently embeds opaque environment assets. `runtime-manifest.json` is the
+source of truth for:
+
+- runtime version and Python version
+- supported platform IDs and ASR backend
+- Python bundle URLs and executable candidates
+- ffmpeg bundle URLs and executable candidates
+- selectable download sources, pip indexes, and model endpoints
+
+Settings exposes the Environment & Models flow. Users may choose a configured
+download source or manually specify a Python path. Placeholder or missing asset
+URLs must fail visibly during runtime installation instead of pretending a
+source is usable.
 
 ## Security Baseline
 
@@ -122,10 +152,12 @@ Release workflows run after quality workflows pass.
 
 Each supported platform gets:
 
-- independent runtime bundle
-- runtime manifest and checksum validation
+- independent runtime manifest entries and platform-specific download metadata
+- runtime asset reachability or checksum validation where assets are configured
 - platform-specific smoke validation
 - separate release artifact naming
 - signing and notarization strategy where applicable
 
-macOS artifacts must distinguish Apple Silicon and Intel builds. Windows x86 and x64 must never share runtime bundle assumptions.
+macOS artifacts must distinguish Apple Silicon and Intel builds. Windows x86
+and x64 must never share runtime assumptions; Windows x86 may be present in the
+platform matrix while client-side local ASR download remains unsupported.

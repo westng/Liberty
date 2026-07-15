@@ -9,6 +9,11 @@ import { exportJob } from "@/shared/services/export/jobExport";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { getPrimaryTranscriptSegments } from "@/shared/services/meeting/transcript";
 import { openAiSummaryWindow, openMeetingNotesWindow } from "@/shared/services/ui/windows";
+import {
+  jobDetailPath,
+  jobRef,
+  useBoundJobRouteRef,
+} from "./jobRoutes";
 
 const ALL_SPEAKERS = "__all__";
 
@@ -17,14 +22,38 @@ export default function WorkbenchView() {
   const store = useMeetingStore();
   const aiStore = useAiStore();
   const jobId = router.params.id ?? "";
-  const job = store.getJobById(jobId);
+  const routeJobRef = useBoundJobRouteRef(
+    jobId,
+    store.settingsLoaded,
+    store.settings.processingMode,
+  );
+  const candidateJob = routeJobRef
+    ? store.getJobById(routeJobRef.jobId, routeJobRef.source)
+    : undefined;
+  const canReadJobResult = Boolean(
+    candidateJob
+    && (
+      candidateJob.source === "local"
+      || (
+        store.canRemoteOperation("jobs.read")
+        && store.canRemoteOperation("jobs.result.read")
+      )
+    ),
+  );
+  const job = canReadJobResult ? candidateJob : undefined;
   const [query, setQuery] = useState("");
   const [selectedSpeaker, setSelectedSpeaker] = useState(ALL_SPEAKERS);
   const [isExporting, setIsExporting] = useState(false);
   const [isRenamingSpeaker, setIsRenamingSpeaker] = useState(false);
   const messages = getMessages(store.settings.locale).workbench;
   const commonMessages = getMessages(store.settings.locale).common;
+  const remoteOperationUnavailable = messages.remoteOperationUnavailable;
   const transcriptSegments = useMemo(() => (job ? getPrimaryTranscriptSegments(job) : []), [job]);
+  const canRenameSpeaker = Boolean(
+    job && (job.source === "local" || store.canRemoteOperation("transcript.speakers.rename")),
+  );
+  const canOpenNotes = job?.source === "local";
+  const canExportWord = job?.source === "local";
 
   function normalizeSpeakerLabel(value?: string) {
     return value?.trim() || commonMessages.unknownSpeaker;
@@ -58,20 +87,23 @@ export default function WorkbenchView() {
   const activeTemplateName = activeSummaryRun ? aiStore.getTemplateById(activeSummaryRun.templateId)?.name : "";
 
   useEffect(() => {
-    if (jobId) {
-      void store.refreshJob(jobId);
+    if (routeJobRef) {
+      void store.refreshJobResult(routeJobRef).catch(() => undefined);
     }
-  }, [jobId]);
+  }, [routeJobRef?.jobId, routeJobRef?.source]);
 
   async function doExport(kind: "transcript" | "notes" | "bundle" | "word") {
     if (!job) {
+      return;
+    }
+    if (kind === "word" && !canExportWord) {
       return;
     }
 
     setIsExporting(true);
 
     try {
-      const exportSnapshot = kind === "word" ? await store.refreshJob(job.id) : job;
+      const exportSnapshot = kind === "word" ? await store.refreshJobResult(jobRef(job)) : job;
       if (exportSnapshot) {
         await exportJob(exportSnapshot, kind);
       }
@@ -81,23 +113,23 @@ export default function WorkbenchView() {
   }
 
   async function launchAiSummary() {
-    if (!job) {
+    if (!job || job.source !== "local") {
       return;
     }
 
-    await openAiSummaryWindow(job.id, job.title);
+    await openAiSummaryWindow(job.id, job.title, job.source);
   }
 
   async function openNotes() {
-    if (!job) {
+    if (!job || !canOpenNotes) {
       return;
     }
 
-    await openMeetingNotesWindow(job.id, job.title);
+    await openMeetingNotesWindow(job.id, job.title, job.source);
   }
 
   async function renameSpeaker(fromSpeaker: string, toSpeaker: string) {
-    if (!job) {
+    if (!job || !canRenameSpeaker) {
       return;
     }
 
@@ -128,7 +160,7 @@ export default function WorkbenchView() {
     setIsRenamingSpeaker(true);
 
     try {
-      await store.renameSpeaker(job.id, fromSpeaker, targetLabel);
+      await store.renameSpeaker(jobRef(job), fromSpeaker, targetLabel);
       if (selectedSpeaker === sourceLabel) {
         setSelectedSpeaker(targetLabel);
       }
@@ -144,7 +176,7 @@ export default function WorkbenchView() {
           <article className="surface native-page-hero full-span workbench-hero">
             <div className="job-title-line workbench-hero-head">
               <div className="native-title-stack">
-                <Link className="text-button small-button native-back-link" to={`/jobs/${job.id}`}>
+                <Link className="text-button small-button native-back-link" to={jobDetailPath(jobRef(job))}>
                   {messages.backToDetail}
                 </Link>
                 <div>
@@ -156,10 +188,22 @@ export default function WorkbenchView() {
             </div>
 
             <div className="workbench-hero-actions">
-              <button className="primary-button" type="button" disabled={!transcriptSegments.length} onClick={launchAiSummary}>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!transcriptSegments.length || job.source !== "local"}
+                title={job.source !== "local" ? remoteOperationUnavailable : undefined}
+                onClick={launchAiSummary}
+              >
                 {messages.aiSummary}
               </button>
-              <button className="secondary-button" type="button" onClick={openNotes}>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!canOpenNotes}
+                title={!canOpenNotes ? remoteOperationUnavailable : undefined}
+                onClick={openNotes}
+              >
                 {messages.viewNotes}
               </button>
               <button className="primary-button" type="button" onClick={() => doExport("bundle")}>
@@ -171,7 +215,13 @@ export default function WorkbenchView() {
               <button className="secondary-button" type="button" onClick={() => doExport("notes")}>
                 {messages.exportNotes}
               </button>
-              <button className="secondary-button" type="button" onClick={() => doExport("word")}>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!canExportWord}
+                title={!canExportWord ? remoteOperationUnavailable : undefined}
+                onClick={() => doExport("word")}
+              >
                 {messages.exportWord}
               </button>
             </div>
@@ -216,7 +266,7 @@ export default function WorkbenchView() {
             <TranscriptTimeline
               segments={speakerFilteredSegments}
               query={query}
-              busy={isRenamingSpeaker}
+              busy={isRenamingSpeaker || !canRenameSpeaker}
               onRenameSpeaker={renameSpeaker}
             />
           </article>

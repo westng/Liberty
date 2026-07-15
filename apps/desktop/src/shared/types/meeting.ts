@@ -14,6 +14,7 @@ export type LiquidGlassStyle = "transparent" | "tinted";
 export type LocaleCode = "zh-CN" | "en-US";
 export type LocalAsrDevice = "auto" | "cpu" | "mps" | "cuda";
 export type RuntimeSource = "managed" | "system";
+export type ProcessingMode = "local" | "remote";
 export type RuntimeComponentId = "python" | "ffmpeg" | "model";
 export type RuntimeComponentAvailability = "unavailable" | "ready" | "unsupported";
 export type RuntimeOperationKind =
@@ -137,14 +138,22 @@ export interface AiModelConfig {
   id: string;
   name: string;
   baseUrl: string;
-  apiKey: string;
-  apiKeyRef?: string;
   model: string;
   enabled: boolean;
   isDefault: boolean;
+  credentialPresent: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
+export type AiModelCredentialUpdate =
+  | { action: "keep" }
+  | { action: "set"; value: string }
+  | { action: "clear" };
+
+export type AiModelSaveInput = Omit<AiModelConfig, "credentialPresent"> & {
+  credential: AiModelCredentialUpdate;
+};
 
 export interface AiSummaryTemplate {
   id: string;
@@ -275,7 +284,7 @@ export interface PetMilestoneCounter {
 
 export interface PetStoreCatalogItem {
   itemKey: string;
-  itemType: "pet" | "cosmetic" | "theme" | "tool" | "food" | "badge" | "none";
+  itemType: "pet" | "cosmetic" | "theme" | "tool" | "food" | "seed" | "badge" | "none";
   slot: "pet" | "accessory" | "scene" | "badge" | "consumable" | "none";
   nameZh: string;
   nameEn: string;
@@ -322,6 +331,167 @@ export interface PetStoreState {
   equipment: PetEquipmentState;
   counters: PetMilestoneCounter[];
   economy: PetEconomyEntry[];
+}
+
+export type FarmPlotStatus = "empty" | "planted" | "needs_water" | "mature";
+export type WorkMapStatus = "locked" | "idle" | "running" | "needsCare" | "claimable";
+
+export interface FarmCropConfig {
+  cropKey: string;
+  seedItemKey: string;
+  nameZh: string;
+  nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  durationSeconds: number;
+  waterRequired: number;
+  primaryRewardItemKey: string;
+  primaryRewardQuantity: number;
+  bonusRewardItemKey?: string;
+  bonusChancePercent: number;
+  lpMin: number;
+  lpMax: number;
+}
+
+export interface FarmPlot {
+  id: string;
+  plotIndex: number;
+  cropKey: string;
+  status: FarmPlotStatus;
+  stageIndex: number;
+  plantedAt?: string;
+  lastWateredAt?: string;
+  nextCareAt?: string;
+  matureAt?: string;
+  updatedAt: string;
+  crop?: FarmCropConfig;
+  progressRatio: number;
+  remainingSeconds: number;
+}
+
+export interface FarmRewardItem {
+  itemKey: string;
+  quantity: number;
+  rewardType: "primary" | "bonus";
+}
+
+export interface FarmHarvestLedgerEntry {
+  id: string;
+  plotId: string;
+  cropKey: string;
+  rewards: FarmRewardItem[];
+  lpReward: number;
+  createdAt: string;
+}
+
+export interface FarmState {
+  plots: FarmPlot[];
+  crops: FarmCropConfig[];
+  harvests: FarmHarvestLedgerEntry[];
+  mapStatus: WorkMapStatus;
+  updatedAt: string;
+}
+
+export interface FarmHarvestResult {
+  state: FarmState;
+  harvest: FarmHarvestLedgerEntry;
+}
+
+export interface WorkMapSummary {
+  status: WorkMapStatus;
+  activePlots: number;
+  needsCarePlots: number;
+  maturePlots: number;
+}
+
+export interface WorkMap {
+  id: string;
+  nameZh: string;
+  nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  category: string;
+  status: WorkMapStatus;
+  route: string;
+  outputs: string[];
+  enabled: boolean;
+  summary: WorkMapSummary;
+}
+
+export interface WorkMarketState {
+  maps: WorkMap[];
+  updatedAt: string;
+}
+
+export interface WorkGameJobConfig {
+  gameKey: string;
+  jobKey: string;
+  slotIndex: number;
+  nameZh: string;
+  nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  durationSeconds: number;
+  careRequired: number;
+  primaryRewardItemKey: string;
+  primaryRewardQuantity: number;
+  bonusRewardItemKey?: string;
+  bonusChancePercent: number;
+  lpMin: number;
+  lpMax: number;
+  careActionsZh: string[];
+  careActionsEn: string[];
+}
+
+export interface WorkGameTask {
+  id: string;
+  gameKey: string;
+  slotIndex: number;
+  jobKey: string;
+  status: WorkMapStatus;
+  stageIndex: number;
+  startedAt?: string;
+  lastCaredAt?: string;
+  nextCareAt?: string;
+  claimableAt?: string;
+  updatedAt: string;
+  job?: WorkGameJobConfig;
+  progressRatio: number;
+  remainingSeconds: number;
+}
+
+export interface WorkGameRewardItem {
+  itemKey: string;
+  quantity: number;
+  rewardType: "primary" | "bonus";
+}
+
+export interface WorkGameRewardLedgerEntry {
+  id: string;
+  gameKey: string;
+  taskId: string;
+  jobKey: string;
+  rewards: WorkGameRewardItem[];
+  lpReward: number;
+  createdAt: string;
+}
+
+export interface WorkGameState {
+  gameKey: string;
+  nameZh: string;
+  nameEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
+  mapStatus: WorkMapStatus;
+  tasks: WorkGameTask[];
+  jobs: WorkGameJobConfig[];
+  rewards: WorkGameRewardLedgerEntry[];
+  updatedAt: string;
+}
+
+export interface WorkGameClaimResult {
+  state: WorkGameState;
+  reward: WorkGameRewardLedgerEntry;
 }
 
 export interface PetBlindBoxDrawEntry {
@@ -478,6 +648,7 @@ export interface AiSummaryRun {
 
 export interface MeetingJob {
   id: string;
+  source: ProcessingMode;
   title: string;
   sourceFiles: MeetingSourceFile[];
   durationMinutes: number;
@@ -506,6 +677,12 @@ export interface MeetingJob {
   processLog?: string;
 }
 
+export interface MeetingJobRef {
+  jobId: string;
+  source: ProcessingMode;
+  windowScopeToken?: string;
+}
+
 export interface MeetingSourceFile {
   id: string;
   name: string;
@@ -529,7 +706,8 @@ export interface SettingsState {
   accentColor: string;
   locale: LocaleCode;
   backendUrl: string;
-  apiToken: string;
+  apiTokenConfigured: boolean;
+  processingMode: ProcessingMode;
   defaultHotwords: string;
   summaryTemplate: string;
   concurrency: number;
@@ -542,6 +720,27 @@ export interface SettingsState {
   localAsrThreads: number;
   localAsrBatchSizeSeconds: number;
   runtimeDownloadSource: string;
+  settingsRevision?: number;
+}
+
+export type SettingsCredentialUpdate =
+  | { action: "keep" }
+  | { action: "set"; value: string }
+  | { action: "clear" };
+
+export interface SettingsSnapshot extends SettingsState {
+  settingsRevision: number;
+}
+
+export type UiPreferences = Pick<
+  SettingsState,
+  "themeMode" | "liquidGlassStyle" | "accentColor" | "locale"
+>;
+
+export interface SettingsCommandError {
+  code: "settings_conflict" | "settings_save_failed";
+  message: string;
+  current?: SettingsSnapshot;
 }
 
 export interface RuntimeArtifactState {

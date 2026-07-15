@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-purchase-pet-store-item"
+description = "Enables the purchase_pet_store_item command without any pre-configured scope."
+commands.allow = ["purchase_pet_store_item"]
+
+[[permission]]
+identifier = "deny-purchase-pet-store-item"
+description = "Denies the purchase_pet_store_item command without any pre-configured scope."
+commands.deny = ["purchase_pet_store_item"]

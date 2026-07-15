@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-get-job-result"
+description = "Enables the remote_get_job_result command without any pre-configured scope."
+commands.allow = ["remote_get_job_result"]
+
+[[permission]]
+identifier = "deny-remote-get-job-result"
+description = "Denies the remote_get_job_result command without any pre-configured scope."
+commands.deny = ["remote_get_job_result"]

@@ -17,13 +17,13 @@
   <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111" alt="React 19"></a>
   <a href="apps/desktop/package.json"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" alt="TypeScript 5"></a>
   <a href="apps/desktop/src-tauri/Cargo.toml"><img src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" alt="Rust stable"></a>
-  <a href="python/funasr-runner/requirements.txt"><img src="https://img.shields.io/badge/Python-3.9-3776AB?logo=python&logoColor=white" alt="Python 3.9"></a>
+  <a href="apps/desktop/src-tauri/resources/runtime-manifest.json"><img src="https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white" alt="Python 3.10"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
 </p>
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-Liberty 是一款本地优先的桌面会议处理应用。当前前端使用 React，桌面壳基于 Tauri 2，原生能力由 Rust 提供，转写链路由内置 Python 3.9 运行时与 FunASR Runner 驱动。应用既可以使用本地 SQLite 和托管运行时独立完成会议处理，也保留了可选远端后端入口。
+Liberty 是一款本地优先的桌面会议处理应用。当前前端使用 React，桌面壳基于 Tauri 2，原生能力由 Rust 提供，转写链路由托管 Python 3.10.17 运行时与 FunASR Runner 驱动。应用既可以使用本地 SQLite 和托管运行时独立完成会议处理，也保留了可选远端后端入口。
 
 ![Liberty 创建任务](docs/images/ScreenShot_2026-05-21_191840_759.png)
 
@@ -34,15 +34,15 @@ Liberty 是一款本地优先的桌面会议处理应用。当前前端使用 Re
 ## 当前能力
 
 - 通过桌面文件选择器创建会议任务，支持本地音频和视频文件。
-- 本地模式下使用托管 Python 3.9 运行时、FunASR Runner 和 ffmpeg 处理单个本地文件。
+- 本地模式下使用托管 Python 3.10.17 运行时、FunASR Runner 和 ffmpeg 处理单个本地文件。
 - 支持转写、说话人分离、任务日志、处理耗时、失败原因和重试。
 - 支持 OpenAI 兼容模型配置、总结模板、AI 总结窗口、多次总结记录和当前总结切换。
 - 支持逐字稿查看、讲话人筛选、讲话人重命名、会议纪要窗口和结果工作台。
 - 支持导出逐字稿 TXT、纪要 Markdown、整包 Markdown 和正式会议纪要 DOCX。
 - 支持人员管理、Excel 导入导出、会议记录人和部门排序信息。
 - 支持中英文界面、自动/亮色/暗色主题、透明/着色玻璃样式和主题色切换。
-- 支持系统诊断面板，展示平台矩阵、数据库版本、运行时状态和安全基线。
-- 支持桌面宠物、255 级成长、LP 钱包、宠物商店、个人仓库、每日免费盲盒、商品详情窗口和原生桌宠渲染。
+- 支持系统诊断面板，展示平台矩阵、数据库版本、运行时状态、安全基线，并可导出桌宠诊断日志。
+- 支持桌面宠物、255 级成长、LP 钱包、宠物商店、个人仓库、每日免费盲盒、每日签到、补签、惊喜礼盒、兑换中心、商品详情窗口和原生桌宠渲染。
 
 ## 运行模式
 
@@ -52,10 +52,10 @@ Liberty 是一款本地优先的桌面会议处理应用。当前前端使用 Re
 
 本地模式包含：
 
-- `runtime-manifest.json` 描述的 Python、ffmpeg 和模型资源。
+- `runtime-manifest.json` 描述的 Python、ffmpeg、下载源和模型端点。
 - `python/funasr-runner/` 中的本地转写 Runner。
 - `apps/desktop/src-tauri/src/local_jobs.rs` 中的任务创建、执行、重试和日志同步。
-- `apps/desktop/src-tauri/src/local_runtime/` 中的运行时安装、校验、预热和日志。
+- `apps/desktop/src-tauri/src/local_runtime/` 中的运行时安装、下载源选择、校验、预热和日志。
 - SQLite 中的任务、转写分段、AI 总结、人员、设置和宠物数据。
 
 当前本地任务只处理一个带本地路径的文件。多文件输入在本地模式下会保留最后选择的文件。
@@ -72,7 +72,7 @@ AI 接口由 Rust 侧 `local_ai` 模块请求 OpenAI 兼容接口。模型 API K
 
 ### 宠物链路
 
-宠物链路是主会议流程之外的本地陪伴系统。当前宠物规则统一收敛在宠物系统说明中：工作行为是主线成长来源，LP 是本地奖励点数，食物提供固定成长值，每日盲盒是免费本地福利。应用启动会尝试同步桌宠状态，但宠物加载失败不会阻塞主窗口。
+宠物链路是主会议流程之外的本地陪伴系统。当前宠物规则统一收敛在宠物系统说明中：工作行为是主线成长来源，LP 是本地奖励点数，食物提供固定成长值，每日盲盒、每日签到、补签票券、惊喜礼盒和兑换 Key 都是本地福利/运营入口。应用启动会尝试同步桌宠状态，但宠物加载失败不会阻塞主窗口。
 
 完整说明见 [docs/pet-system.md](./docs/pet-system.md)。
 
@@ -84,7 +84,7 @@ AI 接口由 Rust 侧 `local_ai` 模块请求 OpenAI 兼容接口。模型 API K
 | 前端 | React 19 + TypeScript + Vite |
 | 路由 | 项目内轻量 RouterContext |
 | 原生能力 | Rust、Tauri commands、SQLite、系统凭据、DOCX/XLSX 处理 |
-| 本地转写 | Python 3.9.25 + FunASR Runner + ffmpeg |
+| 本地转写 | Python 3.10.17 + FunASR Runner + ffmpeg |
 | 本地存储 | SQLite，`rusqlite` bundled |
 | AI 接口 | OpenAI 兼容 Chat Completions |
 | 桌宠渲染 | macOS AppKit 私有 API + Windows GDI/Win32 |
@@ -131,6 +131,8 @@ AI 接口由 Rust 侧 `local_ai` 模块请求 OpenAI 兼容接口。模型 API K
 - `宠物中心`：查看宠物等级、累计成长值、阶段、事件、桌面行为和互动入口。
 - `宠物商店`：查看 LP、商品目录、个人仓库、装备、使用食物/道具和商品详情。
 - `每日盲盒`：每天 10 次免费本地福利，奖池来自宠物商店但排除宠物本体。
+- `每日签到`：查看连续签到、奖励日历、历史记录，领取签到奖励或使用补签票券。
+- `兑换中心`：输入本地校验的兑换 Key，领取 LP、成长值或宠物道具，并查看本机兑换记录。
 
 ## 本地数据
 
@@ -141,7 +143,7 @@ SQLite 当前保存：
 - AI 模型、总结模板、总结运行记录和当前选中总结。
 - 会议人员、部门、排序和会议记录人。
 - 宠物档案、桌面行为设置、成长事件、阶段装扮和等级快照。
-- LP 钱包、商品仓库、经济流水、里程碑计数和每日盲盒历史。
+- LP 钱包、商品仓库、经济流水、里程碑计数、每日盲盒历史、签到记录、每日免费领取状态和兑换记录。
 
 数据库 schema 由 `apps/desktop/src-tauri/src/local_db/schema.rs` 创建，迁移版本由 `infrastructure/migrations.rs` 维护。
 
@@ -203,8 +205,9 @@ pnpm check
 ## 注意事项
 
 - 当前前端使用 React/TSX。
-- 本地模式默认使用内置运行时，也允许在设置中手动指定 Python 路径。
+- 本地模式默认使用客户端自助下载的托管运行时，也允许在设置中手动指定 Python 路径。
 - 本地任务执行依赖 ffmpeg、Python Runner 和模型资源，运行时不完整时会进入 `repair_required`。
+- 运行时下载源由 `runtime-manifest.json` 和系统设置中的「环境&模型」选择共同决定；下载源必须是真实可达地址，不能用占位源冒充可用资源。
 - 正式会议纪要 DOCX 使用 `apps/desktop/src-tauri/resources/templates/meeting-minutes.docx` 模板。
 - 宠物系统是本地奖励和陪伴系统，不包含真钱支付、充值、交易或排行榜；每日盲盒是免费福利，不消耗 LP、不出售次数、不关联付费概率掉落。
 

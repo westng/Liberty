@@ -1,7 +1,7 @@
 {
-  "runtimeVersion": "2026.06.05-client-download.1",
+  "runtimeVersion": "2026.07.15-supply-chain.2",
   "pythonVersion": "3.10.17",
-  "modelSetVersion": "paraformer-zh-2026.07.15.1",
+  "modelSetVersion": "paraformer-zh-2026.07.15.2",
   "modelProfile": "paraformer",
   "downloadSources": [
     {
@@ -38,7 +38,8 @@
         "urls": {
           "official": "https://github.com/astral-sh/python-build-standalone/releases/download/20250529/cpython-3.10.17%2B20250529-aarch64-apple-darwin-install_only_stripped.tar.gz",
           "nju": "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone/20250529/cpython-3.10.17+20250529-aarch64-apple-darwin-install_only_stripped.tar.gz"
-        }
+        },
+        "sha256": "366d037181b1cea0a7a8b1457874a0cdfbb795815d07ae25c55ef1461aa487ef"
       },
       "pythonExecutableCandidates": [
         "python/install/bin/python3",
@@ -47,10 +48,11 @@
         "python/bin/python"
       ],
       "ffmpegBundle": {
-        "fileName": "ffmpeg-macos-universal.zip",
+        "fileName": "ffmpeg-8.1.2-macos-arm64.zip",
         "urls": {
-          "official": "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-        }
+          "official": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1783011502_8.1.2/ffmpeg.zip"
+        },
+        "sha256": "ef1aa60006c7b77ce170c1608c08d8e4ba1c30c5746f2ac986ded932d0ac2c3c"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg"
@@ -64,7 +66,8 @@
         "urls": {
           "official": "https://github.com/astral-sh/python-build-standalone/releases/download/20250529/cpython-3.10.17%2B20250529-x86_64-apple-darwin-install_only_stripped.tar.gz",
           "nju": "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone/20250529/cpython-3.10.17+20250529-x86_64-apple-darwin-install_only_stripped.tar.gz"
-        }
+        },
+        "sha256": "cb45a45bcbdf00a4808f48fbf344f597a01e66c5ed83a7e388883c86844bd2f1"
       },
       "pythonExecutableCandidates": [
         "python/install/bin/python3",
@@ -73,10 +76,11 @@
         "python/bin/python"
       ],
       "ffmpegBundle": {
-        "fileName": "ffmpeg-macos-universal.zip",
+        "fileName": "ffmpeg-8.1.2-macos-x86_64.zip",
         "urls": {
-          "official": "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip"
-        }
+          "official": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1783018342_8.1.2/ffmpeg.zip"
+        },
+        "sha256": "a52ef43883f44c219766d4b3bdde4e635b35465d0b704c01c3a0566b59775df9"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/ffmpeg"
@@ -90,7 +94,8 @@
         "urls": {
           "official": "https://github.com/astral-sh/python-build-standalone/releases/download/20250529/cpython-3.10.17%2B20250529-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
           "nju": "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone/20250529/cpython-3.10.17+20250529-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
-        }
+        },
+        "sha256": "775558a9ad71d42afb168ff76f6db6fa4bf512e933b888e55c8f0557860eac83"
       },
       "pythonExecutableCandidates": [
         "python/install/python.exe",
@@ -99,10 +104,11 @@
         "python/python3.exe"
       ],
       "ffmpegBundle": {
-        "fileName": "ffmpeg-master-latest-win64-gpl.zip",
+        "fileName": "ffmpeg-N-125608-g150f7d15df-win64-gpl.zip",
         "urls": {
-          "official": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-        }
+          "official": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-14-13-19/ffmpeg-N-125608-g150f7d15df-win64-gpl.zip"
+        },
+        "sha256": "4ebe499c64217ebe63628381fa561908f9dfc5cc776d918fd6c61ccdd6988f6c"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/bin/ffmpeg.exe",
@@ -118,7 +124,8 @@
         "urls": {
           "official": "https://github.com/astral-sh/python-build-standalone/releases/download/20250529/cpython-3.10.17%2B20250529-i686-pc-windows-msvc-install_only_stripped.tar.gz",
           "nju": "https://mirror.nju.edu.cn/github-release/astral-sh/python-build-standalone/20250529/cpython-3.10.17+20250529-i686-pc-windows-msvc-install_only_stripped.tar.gz"
-        }
+        },
+        "sha256": "f411aa385e5034c1eb07e0c038296725a3cc357d9b5942cc7d350ac916a77b77"
       },
       "pythonExecutableCandidates": [
         "python/install/python.exe",
@@ -127,10 +134,11 @@
         "python/python3.exe"
       ],
       "ffmpegBundle": {
-        "fileName": "ffmpeg-master-latest-win32-gpl.zip",
+        "fileName": "ffmpeg-N-125551-ga09be9b91e-win32-gpl.zip",
         "urls": {
-          "official": "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip"
-        }
+          "official": "https://github.com/defisym/FFmpeg-Builds-Win32/releases/download/autobuild-2026-07-12-13-27/ffmpeg-N-125551-ga09be9b91e-win32-gpl.zip"
+        },
+        "sha256": "be014e310f213140c933468cf3ccd7e022facf38c303ee5f3d83fea24b744f8c"
       },
       "ffmpegExecutableCandidates": [
         "ffmpeg/bin/ffmpeg.exe",

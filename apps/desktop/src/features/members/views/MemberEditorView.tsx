@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { createLocalMembersService } from "@/shared/services/tauri/members";
+import { publishEntityChanged } from "@/shared/services/ui/windows";
+import { destroyCurrentWindow, setCurrentWindowTitle } from "@/shared/services/tauri/window";
 import type { MeetingMember } from "@/shared/types/meeting";
 
 const membersService = createLocalMembersService();
@@ -25,12 +27,38 @@ export default function MemberEditorView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [draft, setDraft] = useState<MeetingMember>(() => createDraft());
+  const [dirty, setDirty] = useState(false);
   const messages = getMessages(meetingStore.settings.locale).members;
   const commonMessages = getMessages(meetingStore.settings.locale).common;
 
   useEffect(() => {
-    void initialize();
+    void initialize().catch((error) => {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    });
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | null = null;
+    void getCurrentWindow().onCloseRequested(async (event) => {
+      if (!dirty) return;
+      event.preventDefault();
+      const shouldClose = await confirm(messages.reset, {
+        title: commonMessages.closeWindow,
+        kind: "warning",
+        okLabel: commonMessages.closeWindow,
+        cancelLabel: commonMessages.cancel,
+      });
+      if (shouldClose) await destroyCurrentWindow();
+    }).then((stop) => {
+      if (active) unlisten = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [dirty, messages, commonMessages]);
 
   async function initialize() {
     await meetingStore.ensureSettingsLoaded();
@@ -42,6 +70,7 @@ export default function MemberEditorView() {
       if (member) {
         setSelectedId(member.id);
         setDraft(createDraft(member));
+        setDirty(false);
         await syncWindowTitle(true);
         return;
       }
@@ -52,6 +81,7 @@ export default function MemberEditorView() {
 
   function patchDraft(patch: Partial<MeetingMember>) {
     setDraft((current) => ({ ...current, ...patch }));
+    setDirty(true);
   }
 
   function validateDraft() {
@@ -66,7 +96,7 @@ export default function MemberEditorView() {
 
   async function syncWindowTitle(isEdit: boolean) {
     try {
-      await getCurrentWindow().setTitle(isEdit ? messages.editorEditTitle : messages.editorNewTitle);
+      await setCurrentWindowTitle(isEdit ? messages.editorEditTitle : messages.editorNewTitle);
     } catch {
       // ignore
     }
@@ -90,11 +120,17 @@ export default function MemberEditorView() {
       updatedAt: now,
     };
 
-    await membersService.saveMember(nextMember);
-    setSelectedId(nextMember.id);
-    setDraft({ ...nextMember });
-    setErrorMessage("");
-    await syncWindowTitle(true);
+    try {
+      await membersService.saveMember(nextMember);
+      setSelectedId(nextMember.id);
+      setDraft({ ...nextMember });
+      setDirty(false);
+      setErrorMessage("");
+      await publishEntityChanged({ entity: "member", id: nextMember.id, action: "saved" }).catch(() => undefined);
+      await syncWindowTitle(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function removeMember() {
@@ -112,13 +148,28 @@ export default function MemberEditorView() {
       return;
     }
 
-    await membersService.deleteMember(selectedId);
-    resetDraft();
+    try {
+      await membersService.deleteMember(selectedId);
+      await publishEntityChanged({ entity: "member", id: selectedId, action: "deleted" }).catch(() => undefined);
+      resetDraft(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
-  function resetDraft() {
+  async function resetDraft(force = false) {
+    if (!force && dirty) {
+      const confirmed = await confirm(messages.reset, {
+        title: messages.reset,
+        kind: "warning",
+        okLabel: messages.reset,
+        cancelLabel: commonMessages.cancel,
+      });
+      if (!confirmed) return;
+    }
     setSelectedId(null);
     setDraft(createDraft());
+    setDirty(false);
     setErrorMessage("");
     void syncWindowTitle(false);
   }
@@ -165,7 +216,7 @@ export default function MemberEditorView() {
           <button className="primary-button" type="button" onClick={saveMember}>
             {messages.save}
           </button>
-          <button className="secondary-button" type="button" onClick={resetDraft}>
+          <button className="secondary-button" type="button" onClick={() => void resetDraft()}>
             {messages.reset}
           </button>
           {selectedId && (

@@ -109,6 +109,11 @@ body,
   gap: 14px;
   padding: 6px 8px 12px;
   overflow: auto;
+  scrollbar-width: none;
+}
+
+.nav-list::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-section {
@@ -258,6 +263,62 @@ body,
 
 .content-body {
   padding-bottom: 0;
+}
+
+.content-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 26px;
+  min-width: 0;
+  padding: 0 12px;
+  border-top: 1px solid var(--native-separator);
+  background: color-mix(in srgb, var(--native-content-bg) 94%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.content-statusbar-message {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.content-statusbar-message > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-statusbar-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+
+.content-statusbar[data-tone="progress"] .content-statusbar-dot {
+  background: var(--warning);
+}
+
+.content-statusbar[data-tone="success"] .content-statusbar-dot {
+  background: var(--success);
+}
+
+.content-statusbar[data-tone="error"] .content-statusbar-dot {
+  background: var(--danger);
+}
+
+.content-statusbar-version {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
 }
 
 .content-shell:not(.settings-content-shell) .surface,

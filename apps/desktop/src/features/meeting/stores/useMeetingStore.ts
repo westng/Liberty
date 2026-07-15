@@ -1,28 +1,38 @@
 import { useSyncExternalStore } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   defaultSettings,
   isManagedRuntimeReady,
   normalizeSettings,
-  shouldUseLocalDataSource,
 } from "@/features/meeting/application/settingsPolicy";
-import { hasActiveLocalJobs, mergeJobSnapshot } from "@/features/meeting/application/jobSnapshots";
+import { hasActiveJobs, mergeJobSnapshot } from "@/features/meeting/application/jobSnapshots";
 import { createPollingScheduler } from "@/features/meeting/application/polling";
 import { applyAppearance } from "@/shared/services/ui/appearance";
-import { createEmptyMeetingSummary, summaryResultToMeetingSummary } from "@/shared/services/ai/storage";
+import { runAppStatusAction } from "@/shared/services/ui/statusNotifications";
+import { publishEntityChanged } from "@/shared/services/ui/windows";
 import { createLocalAiService } from "@/shared/services/tauri/ai";
 import { createLocalMeetingService } from "@/shared/services/tauri/meeting";
 import { applyLocalPetWorkflowEvent } from "@/shared/services/tauri/pet";
 import { createLocalRuntimeService } from "@/shared/services/tauri/runtime";
-import { createLocalSettingsService } from "@/shared/services/tauri/settings";
-import { createMeetingApi } from "@/shared/services/remote/meetingApi";
+import {
+  createLocalSettingsService,
+  SettingsConflictError,
+} from "@/shared/services/tauri/settings";
+import {
+  createMeetingApi,
+  type RemoteMeetingCapabilities,
+  type RemoteMeetingOperation,
+} from "@/shared/services/remote/meetingApi";
 import type {
-  AiSummaryRun,
   ManagedRuntimeStatus,
   MeetingJob,
+  MeetingJobRef,
   NewMeetingJobInput,
+  ProcessingMode,
   RuntimeComponentId,
   RuntimeComponentState,
   RuntimeSource,
+  SettingsCredentialUpdate,
   SettingsState,
 } from "@/shared/types/meeting";
 import type { RuntimeDownloadSourceOption } from "@/shared/services/tauri/runtime";
@@ -34,7 +44,38 @@ type MeetingState = {
   runtimeInstallLog: string;
   runtimeDownloadSources: RuntimeDownloadSourceOption[];
   settingsLoaded: boolean;
+  settingsLoadError: string | null;
+  remoteStatus: "idle" | "checking" | "ready" | "unavailable";
+  remoteCapabilities: RemoteMeetingCapabilities | null;
+  remoteError: string | null;
 };
+
+type JobIdentity = Pick<MeetingJobRef, "jobId" | "source">;
+type JobRequestFence = JobIdentity & {
+  key: string;
+  sequence: number;
+  sourceGeneration: number;
+  writeGeneration: number;
+};
+type JobMutationFence = JobIdentity & {
+  key: string;
+  sequence: number;
+  sourceGeneration: number;
+};
+type SettingsSaveIntent = {
+  base: SettingsState;
+  next: SettingsState;
+  credential: SettingsCredentialUpdate;
+};
+
+const CLIENT_REMOTE_OPERATIONS = new Set<RemoteMeetingOperation>([
+  "jobs.list",
+  "jobs.read",
+  "jobs.result.read",
+  "jobs.retry",
+  "jobs.delete",
+  "transcript.speakers.rename",
+]);
 
 const initialRuntimeStatus: ManagedRuntimeStatus = {
   platformId: "",
@@ -72,17 +113,44 @@ let state: MeetingState = {
   runtimeInstallLog: "",
   runtimeDownloadSources: [],
   settingsLoaded: false,
+  settingsLoadError: null,
+  remoteStatus: "idle",
+  remoteCapabilities: null,
+  remoteError: null,
 };
 
 const listeners = new Set<() => void>();
 const localAiService = createLocalAiService();
+const localMeetingService = createLocalMeetingService();
 const localRuntimeService = createLocalRuntimeService();
 const localSettingsService = createLocalSettingsService();
+const remoteMeetingApi = createMeetingApi();
 let settingsLoadPromise: Promise<void> | null = null;
+let globalServicesPromise: Promise<void> | null = null;
+let globalServicesInitialized = false;
 let runtimeInstallPromise: Promise<ManagedRuntimeStatus> | null = null;
-const hydratedJobIds = new Set<string>();
+const hydratedJobIds: Record<ProcessingMode, Set<string>> = {
+  local: new Set<string>(),
+  remote: new Set<string>(),
+};
 const localJobPolling = createPollingScheduler();
 const runtimeInstallPolling = createPollingScheduler();
+let globalPollingEnabled = false;
+let jobListRequestSequence = 0;
+const jobRequestSequences = new Map<string, number>();
+const jobMutationSequences = new Map<string, number>();
+const sourceRequestGenerations: Record<ProcessingMode, number> = { local: 0, remote: 0 };
+const sourceWriteGenerations: Record<ProcessingMode, number> = { local: 0, remote: 0 };
+let remoteHandshakeSequence = 0;
+let remoteHandshakePromise: Promise<RemoteMeetingCapabilities> | null = null;
+let remoteHandshakeRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+let remoteHandshakeRetryAttempt = 0;
+let remoteConnectionWasReady = false;
+let settingsSaveQueue: Promise<unknown> = Promise.resolve();
+let settingsSaveProjection: SettingsState = state.settings;
+let pendingSettingsSaves = 0;
+
+const REMOTE_HANDSHAKE_RETRY_DELAYS_MS = [2_000, 5_000, 15_000] as const;
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -100,51 +168,357 @@ function getSnapshot() {
   return state;
 }
 
-function getApi() {
-  return state.settings.backendUrl
-    ? createMeetingApi(state.settings.backendUrl, state.settings.apiToken)
-    : null;
+function isMainWindow() {
+  return getCurrentWindow().label === "main";
+}
+
+function capabilityUnavailable(message: string) {
+  const error = new Error(`capability_unavailable: ${message}`);
+  error.name = "CapabilityUnavailableError";
+  return error;
 }
 
 function getLocalMode() {
-  return isManagedRuntimeReady(state.runtimeStatus);
+  return state.settings.processingMode === "local";
 }
 
-async function refreshLocalJobs() {
-  try {
-    applyJobListSnapshot(await createLocalMeetingService().listJobs());
-  } catch {
-    // Keep the last known local state when polling fails.
+function jobIdentityKey(reference: JobIdentity) {
+  return JSON.stringify([reference.source, reference.jobId]);
+}
+
+function invalidateJobSource(source: ProcessingMode, clearHydratedJobs = false) {
+  sourceRequestGenerations[source] += 1;
+  sourceWriteGenerations[source] += 1;
+  jobListRequestSequence += 1;
+  if (clearHydratedJobs) {
+    hydratedJobIds[source].clear();
   }
 }
 
-function applyJobListSnapshot(incomingJobs: MeetingJob[]) {
-  const existingById = new Map(state.jobs.map((job) => [job.id, job]));
-  setState({
-    jobs: incomingJobs.map((job) => mergeJobSnapshot(existingById.get(job.id), job, hydratedJobIds)),
-  });
-  syncLocalPolling();
+function beginJobRequest(reference: JobIdentity): JobRequestFence {
+  const key = jobIdentityKey(reference);
+  const sequence = (jobRequestSequences.get(key) ?? 0) + 1;
+  jobRequestSequences.set(key, sequence);
+  return {
+    ...reference,
+    key,
+    sequence,
+    sourceGeneration: sourceRequestGenerations[reference.source],
+    writeGeneration: sourceWriteGenerations[reference.source],
+  };
 }
 
-function syncLocalPolling() {
-  const shouldPoll = shouldUseLocalDataSource(state.settings);
-  const pollingIntervalMs = hasActiveLocalJobs(state.jobs) ? 1500 : 15000;
-  localJobPolling.sync(shouldPoll, pollingIntervalMs, () => {
-    void refreshLocalJobs();
+function isJobRequestCurrent(fence: JobRequestFence) {
+  return jobRequestSequences.get(fence.key) === fence.sequence
+    && sourceRequestGenerations[fence.source] === fence.sourceGeneration
+    && sourceWriteGenerations[fence.source] === fence.writeGeneration;
+}
+
+function beginJobMutation(reference: JobIdentity): JobMutationFence {
+  const key = jobIdentityKey(reference);
+  const sequence = (jobMutationSequences.get(key) ?? 0) + 1;
+  jobMutationSequences.set(key, sequence);
+  sourceWriteGenerations[reference.source] += 1;
+  return {
+    ...reference,
+    key,
+    sequence,
+    sourceGeneration: sourceRequestGenerations[reference.source],
+  };
+}
+
+function isJobMutationCurrent(fence: JobMutationFence) {
+  return jobMutationSequences.get(fence.key) === fence.sequence
+    && sourceRequestGenerations[fence.source] === fence.sourceGeneration;
+}
+
+function commitJobMutation(fence: JobMutationFence) {
+  if (!isJobMutationCurrent(fence)) {
+    return false;
+  }
+  sourceWriteGenerations[fence.source] += 1;
+  return true;
+}
+
+function cancelRemoteHandshakeRetry(resetAttempt = false) {
+  if (remoteHandshakeRetryTimer !== null) {
+    globalThis.clearTimeout(remoteHandshakeRetryTimer);
+    remoteHandshakeRetryTimer = null;
+  }
+  if (resetAttempt) {
+    remoteHandshakeRetryAttempt = 0;
+  }
+}
+
+function scheduleInitialRemoteHandshakeRetry() {
+  if (
+    remoteConnectionWasReady
+    || remoteHandshakeRetryTimer !== null
+    || remoteHandshakeRetryAttempt >= REMOTE_HANDSHAKE_RETRY_DELAYS_MS.length
+    || !globalPollingEnabled
+    || state.settings.processingMode !== "remote"
+  ) {
+    return;
+  }
+
+  const delayMs = REMOTE_HANDSHAKE_RETRY_DELAYS_MS[remoteHandshakeRetryAttempt];
+  remoteHandshakeRetryAttempt += 1;
+  remoteHandshakeRetryTimer = globalThis.setTimeout(() => {
+    remoteHandshakeRetryTimer = null;
+    if (
+      remoteConnectionWasReady
+      || !globalPollingEnabled
+      || state.settings.processingMode !== "remote"
+      || state.remoteStatus !== "unavailable"
+    ) {
+      return;
+    }
+
+    void requestRemoteCapabilities(true, false)
+      .then(() => refreshJobs())
+      .catch(() => undefined);
+  }, delayMs);
+}
+
+function resetRemoteConnection() {
+  cancelRemoteHandshakeRetry(true);
+  remoteConnectionWasReady = false;
+  remoteHandshakeSequence += 1;
+  remoteHandshakePromise = null;
+  setState({
+    remoteStatus: "idle",
+    remoteCapabilities: null,
+    remoteError: null,
   });
+  syncJobPolling();
+}
+
+function remoteErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function degradeRemoteConnection(error: unknown, requestSequence: number) {
+  if (requestSequence !== remoteHandshakeSequence) {
+    return;
+  }
+  remoteHandshakeSequence += 1;
+  remoteHandshakePromise = null;
+  invalidateJobSource("remote");
+  setState({
+    remoteStatus: "unavailable",
+    remoteCapabilities: null,
+    remoteError: remoteErrorMessage(error),
+  });
+  syncJobPolling();
+}
+
+async function requestRemoteCapabilities(force = false, resetRetryBudget = false) {
+  await ensureSettingsLoaded();
+  if (!isMainWindow()) {
+    throw capabilityUnavailable("独立窗口不允许连接远端会议服务。");
+  }
+  if (resetRetryBudget) {
+    cancelRemoteHandshakeRetry(true);
+  }
+  if (!state.settings.backendUrl.trim()) {
+    cancelRemoteHandshakeRetry(true);
+    const message = "capability_unavailable: 远端模式未配置在线后端地址。";
+    setState({
+      remoteStatus: "unavailable",
+      remoteCapabilities: null,
+      remoteError: message,
+    });
+    syncJobPolling();
+    throw new Error(message);
+  }
+  if (!force && state.remoteStatus === "ready" && state.remoteCapabilities) {
+    return state.remoteCapabilities;
+  }
+  if (!force && remoteHandshakePromise) {
+    return remoteHandshakePromise;
+  }
+
+  if (force) {
+    invalidateJobSource("remote");
+  }
+  const requestSequence = ++remoteHandshakeSequence;
+  setState({ remoteStatus: "checking", remoteCapabilities: null, remoteError: null });
+  syncJobPolling();
+  const request = remoteMeetingApi.getCapabilities()
+    .then((capabilities) => {
+      if (requestSequence === remoteHandshakeSequence) {
+        remoteConnectionWasReady = true;
+        cancelRemoteHandshakeRetry(true);
+        setState({
+          remoteStatus: "ready",
+          remoteCapabilities: capabilities,
+          remoteError: null,
+        });
+        syncJobPolling();
+      }
+      return capabilities;
+    })
+    .catch((error) => {
+      if (requestSequence === remoteHandshakeSequence) {
+        setState({
+          remoteStatus: "unavailable",
+          remoteCapabilities: null,
+          remoteError: remoteErrorMessage(error),
+        });
+        syncJobPolling();
+        scheduleInitialRemoteHandshakeRetry();
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (remoteHandshakePromise === request) {
+        remoteHandshakePromise = null;
+      }
+    });
+  remoteHandshakePromise = request;
+  return request;
+}
+
+async function ensureRemoteCapabilities(force = false) {
+  return requestRemoteCapabilities(force, force);
+}
+
+async function runRemoteOperation<T>(
+  operation: RemoteMeetingOperation,
+  request: (capabilities: RemoteMeetingCapabilities) => Promise<T>,
+): Promise<T>;
+async function runRemoteOperation<T>(
+  operation: RemoteMeetingOperation,
+  request: (capabilities: RemoteMeetingCapabilities) => Promise<T>,
+  isCurrent: () => boolean,
+): Promise<T | undefined>;
+async function runRemoteOperation<T>(
+  operation: RemoteMeetingOperation,
+  request: (capabilities: RemoteMeetingCapabilities) => Promise<T>,
+  isCurrent?: () => boolean,
+): Promise<T | undefined> {
+  const capabilities = await requireRemoteOperation(operation);
+  if (isCurrent && !isCurrent()) {
+    return undefined;
+  }
+  const requestSequence = remoteHandshakeSequence;
+  try {
+    return await request(capabilities);
+  } catch (error) {
+    degradeRemoteConnection(error, requestSequence);
+    throw error;
+  }
+}
+
+async function requireRemoteOperation(operation: RemoteMeetingOperation) {
+  const capabilities = await ensureRemoteCapabilities();
+  if (
+    !CLIENT_REMOTE_OPERATIONS.has(operation)
+    || !capabilities.operations.includes(operation)
+  ) {
+    throw capabilityUnavailable(`远端服务当前不支持 ${operation} 操作。`);
+  }
+  return capabilities;
+}
+
+function canRemoteOperation(operation: RemoteMeetingOperation) {
+  return CLIENT_REMOTE_OPERATIONS.has(operation)
+    && state.remoteStatus === "ready"
+    && Boolean(state.remoteCapabilities?.operations.includes(operation));
+}
+
+function requireJobSource(job: MeetingJob) {
+  if (job.source !== "local" && job.source !== "remote") {
+    throw new Error("任务缺少明确的数据源，请刷新任务列表后重试。");
+  }
+  return job.source;
+}
+
+function withJobSource(job: MeetingJob, source: "local" | "remote"): MeetingJob {
+  return { ...job, source };
+}
+
+async function refreshPolledJobs() {
+  try {
+    await refreshJobs();
+  } catch {
+    // Keep the last known state when background polling fails.
+  }
+}
+
+function applyJobListSnapshot(incomingJobs: MeetingJob[], source: "local" | "remote") {
+  const existingById = new Map(
+    state.jobs
+      .filter((job) => job.source === source)
+      .map((job) => [job.id, job]),
+  );
+  setState({
+    jobs: [
+      ...incomingJobs.map((job) => mergeJobSnapshot(
+        existingById.get(job.id),
+        withJobSource(job, source),
+        hydratedJobIds[source],
+      )),
+      ...state.jobs.filter((job) => job.source !== source),
+    ],
+  });
+  syncJobPolling();
+}
+
+function syncJobPolling() {
+  const shouldPoll = globalPollingEnabled
+    && state.settingsLoaded
+    && (
+      state.settings.processingMode === "local"
+      || canRemoteOperation("jobs.list")
+    );
+  const pollingIntervalMs = hasActiveJobs(
+    state.jobs.filter((job) => job.source === state.settings.processingMode),
+  ) ? 1500 : 15000;
+  localJobPolling.sync(shouldPoll, pollingIntervalMs, () => {
+    return refreshPolledJobs();
+  });
+}
+
+function setGlobalEffectsEnabled(enabled: boolean) {
+  globalPollingEnabled = enabled;
+  if (!enabled) {
+    cancelRemoteHandshakeRetry();
+  }
+  syncJobPolling();
+  if (enabled) {
+    void ensureGlobalServicesInitialized().catch(() => undefined);
+  }
 }
 
 function syncRuntimePolling() {
-  const shouldPoll = [
+  const shouldPoll = globalPollingEnabled && state.settingsLoaded && [
     state.runtimeStatus.python,
     state.runtimeStatus.ffmpeg,
     state.runtimeStatus.models,
   ].some((component) =>
     ["detecting", "downloading", "installing", "validating"].includes(component.operation.kind));
   runtimeInstallPolling.sync(shouldPoll, 1500, () => {
-    void refreshRuntimeStatus();
-    void refreshRuntimeInstallLog();
+    return Promise.all([refreshRuntimeStatus(), refreshRuntimeInstallLog()]).then(() => undefined);
   });
+}
+
+function settingsLoadFailure(error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  const message = `完整设置加载失败，已阻止任务操作：${detail}`;
+  setState({ settingsLoaded: false, settingsLoadError: message });
+  globalServicesInitialized = false;
+  syncJobPolling();
+  syncRuntimePolling();
+  return new Error(message);
+}
+
+async function loadMainSettingsSnapshot() {
+  try {
+    return normalizeSettings(await localSettingsService.getSettings());
+  } catch (error) {
+    throw settingsLoadFailure(error);
+  }
 }
 
 async function ensureSettingsLoaded(force = false) {
@@ -152,34 +526,77 @@ async function ensureSettingsLoaded(force = false) {
     return;
   }
 
-  if (settingsLoadPromise && !force) {
+  if (settingsLoadPromise) {
     return settingsLoadPromise;
   }
 
+  if (isMainWindow() && state.settingsLoadError && !force) {
+    throw new Error(state.settingsLoadError);
+  }
+
+  if (force) {
+    setState({ settingsLoaded: false, settingsLoadError: null });
+  }
+
   settingsLoadPromise = (async () => {
-    try {
-      const loaded = await localSettingsService.getSettings();
-      setState({ settings: normalizeSettings(loaded) });
-    } catch {
-      setState({ settings: normalizeSettings() });
+    if (isMainWindow()) {
+      const settings = await loadMainSettingsSnapshot();
+      setState({ settings, settingsLoaded: true, settingsLoadError: null });
+    } else {
+      try {
+        const preferences = await localSettingsService.getUiPreferences();
+        setState({
+          settings: normalizeSettings({ ...defaultSettings, ...preferences }),
+          settingsLoaded: true,
+          settingsLoadError: null,
+        });
+      } catch {
+        setState({
+          settings: normalizeSettings({ ...defaultSettings }),
+          settingsLoaded: true,
+          settingsLoadError: null,
+        });
+      }
     }
 
-    await refreshRuntimeStatus();
-    await refreshRuntimeDownloadSources();
-    await detectSelectedSystemComponents();
-    setState({ settingsLoaded: true });
     applyAppearance(state.settings);
-    syncLocalPolling();
+    syncJobPolling();
     syncRuntimePolling();
-
-    if (shouldUseLocalDataSource(state.settings)) {
-      await refreshLocalJobs();
-    }
   })().finally(() => {
     settingsLoadPromise = null;
   });
 
   return settingsLoadPromise;
+}
+
+async function ensureGlobalServicesInitialized() {
+  if (!globalPollingEnabled || globalServicesInitialized) {
+    return;
+  }
+  if (globalServicesPromise) {
+    return globalServicesPromise;
+  }
+
+  globalServicesPromise = (async () => {
+    await ensureSettingsLoaded();
+    if (!globalPollingEnabled) {
+      return;
+    }
+    await refreshRuntimeStatus();
+    await refreshRuntimeDownloadSources();
+    await detectSelectedSystemComponents();
+    if (state.settings.processingMode === "remote") {
+      await ensureRemoteCapabilities();
+    }
+    await refreshJobs();
+    globalServicesInitialized = true;
+    syncJobPolling();
+    syncRuntimePolling();
+  })().finally(() => {
+    globalServicesPromise = null;
+  });
+
+  return globalServicesPromise;
 }
 
 async function detectSelectedSystemComponents() {
@@ -199,18 +616,33 @@ async function detectSelectedSystemComponents() {
 }
 
 function replaceJob(job: MeetingJob) {
-  setState({ jobs: [job, ...state.jobs.filter((item) => item.id !== job.id)] });
+  setState({
+    jobs: [
+      job,
+      ...state.jobs.filter((item) => item.id !== job.id || item.source !== job.source),
+    ],
+  });
   return job;
 }
 
 async function refreshRuntimeStatus() {
+  const previousStatus = state.runtimeStatus;
   try {
-    setState({ runtimeStatus: await localRuntimeService.getStatus() });
+    const runtimeStatus = await localRuntimeService.getStatus();
+    const detectionFinished = (["python", "ffmpeg"] as const).some((component) =>
+      previousStatus[component].operation.kind === "detecting"
+      && runtimeStatus[component].operation.kind !== "detecting");
+    if (detectionFinished && isMainWindow()) {
+      const settings = await loadMainSettingsSnapshot();
+      setState({ runtimeStatus, settings });
+    } else {
+      setState({ runtimeStatus });
+    }
   } catch {
     setState({ runtimeStatus: initialRuntimeStatus });
   }
 
-  syncLocalPolling();
+  syncJobPolling();
   syncRuntimePolling();
 
   return state.runtimeStatus;
@@ -244,7 +676,7 @@ async function beginManagedRuntimeInstall() {
   runtimeInstallPromise = (async () => {
     setState({ runtimeStatus: await localRuntimeService.install() });
     await refreshRuntimeInstallLog();
-    syncLocalPolling();
+    syncJobPolling();
     syncRuntimePolling();
     return state.runtimeStatus;
   })().finally(() => {
@@ -260,64 +692,144 @@ function sleep(ms: number) {
 
 async function refreshJobs() {
   await ensureSettingsLoaded();
+  if (!isMainWindow()) {
+    throw capabilityUnavailable("独立窗口不允许读取任务列表。");
+  }
+  const requestSequence = ++jobListRequestSequence;
+  const processingMode = state.settings.processingMode;
+  const sourceGeneration = sourceRequestGenerations[processingMode];
+  const writeGeneration = sourceWriteGenerations[processingMode];
+  const isCurrent = () => requestSequence === jobListRequestSequence
+    && processingMode === state.settings.processingMode
+    && sourceGeneration === sourceRequestGenerations[processingMode]
+    && writeGeneration === sourceWriteGenerations[processingMode];
+  const incomingJobs = processingMode === "local"
+    ? await localMeetingService.listJobs()
+    : await runRemoteOperation(
+        "jobs.list",
+        (capabilities) => remoteMeetingApi.listJobs(capabilities),
+        isCurrent,
+      );
 
-  if (shouldUseLocalDataSource(state.settings)) {
-    applyJobListSnapshot(await createLocalMeetingService().listJobs());
+  if (!incomingJobs || !isCurrent()) {
     return state.jobs;
   }
 
-  const api = getApi();
-  if (!api) {
-    return state.jobs;
-  }
-
-  try {
-    setState({ jobs: await api.listJobs() });
-    return state.jobs;
-  } catch {
-    return state.jobs;
-  }
+  applyJobListSnapshot(incomingJobs, processingMode);
+  return state.jobs;
 }
 
-async function refreshJob(id: string) {
-  await ensureSettingsLoaded();
-
-  if (shouldUseLocalDataSource(state.settings)) {
-    const refreshed = await createLocalMeetingService().getJob(id);
-    hydratedJobIds.add(id);
-    return replaceJob(refreshed);
+function resolveJobRef(reference: string | MeetingJobRef): {
+  jobId: string;
+  source: ProcessingMode;
+  windowScopeToken?: string;
+} {
+  if (isMainWindow()) {
+    if (typeof reference !== "string") {
+      if (!reference.jobId || (reference.source !== "local" && reference.source !== "remote")) {
+        throw new Error("任务引用无效。");
+      }
+      return reference;
+    }
+    const existing = getJobById(reference, state.settings.processingMode)
+      ?? state.jobs.find((job) => job.id === reference);
+    return {
+      jobId: reference,
+      source: existing?.source ?? state.settings.processingMode,
+    };
   }
 
-  const api = getApi();
-  if (!api) {
-    return getJobById(id);
+  const params = new URLSearchParams(window.location.search);
+  const jobId = params.get("jobId") ?? "";
+  const source = params.get("source");
+  const windowScopeToken = params.get("scopeToken") ?? "";
+  const requestedJobId = typeof reference === "string" ? reference : reference.jobId;
+  const requestedSource = typeof reference === "string" ? source : reference.source;
+  const requestedScopeToken = typeof reference === "string"
+    ? windowScopeToken
+    : reference.windowScopeToken;
+  if (
+    jobId !== requestedJobId
+    || source !== requestedSource
+    || !windowScopeToken
+    || windowScopeToken !== requestedScopeToken
+    || (source !== "local" && source !== "remote")
+  ) {
+    throw capabilityUnavailable("独立窗口需要有效的任务作用域。");
   }
-
-  try {
-    const refreshed = await api.getJob(id);
-    hydratedJobIds.add(id);
-    return replaceJob(refreshed);
-  } catch {
-    return getJobById(id);
-  }
+  return { jobId, source, windowScopeToken };
 }
 
-async function refreshJobRuns(id: string) {
+async function refreshJobFromSource(reference: string | MeetingJobRef, resultOnly: boolean) {
   await ensureSettingsLoaded();
+  const {
+    jobId: id,
+    source: explicitSource,
+    windowScopeToken,
+  } = resolveJobRef(reference);
+  if (!isMainWindow() && explicitSource === "remote") {
+    throw capabilityUnavailable("远端任务尚无安全的独立窗口后端代理。");
+  }
+  const source = explicitSource;
+  const fence = beginJobRequest({ jobId: id, source });
+  const applyRefreshedJob = (refreshed: MeetingJob) => {
+    if (!isJobRequestCurrent(fence)) {
+      return getJobById(id, source);
+    }
+    hydratedJobIds[source].add(id);
+    return replaceJob(mergeJobSnapshot(
+      getJobById(id, source),
+      withJobSource(refreshed, source),
+      hydratedJobIds[source],
+    ));
+  };
 
-  if (!shouldUseLocalDataSource(state.settings)) {
-    return;
+  if (source === "local") {
+    const refreshed = resultOnly
+      ? await localMeetingService.getJobResult(id, windowScopeToken)
+      : await localMeetingService.getJob(id);
+    return applyRefreshedJob(refreshed);
   }
 
-  const refreshed = await createLocalMeetingService().getJob(id);
-  hydratedJobIds.add(id);
-  replaceJob(refreshed);
+  if (resultOnly) {
+    await requireRemoteOperation("jobs.read");
+  }
+  const refreshed = resultOnly
+    ? await runRemoteOperation(
+        "jobs.result.read",
+        (capabilities) => remoteMeetingApi.getResult(capabilities, id),
+        () => isJobRequestCurrent(fence),
+      )
+    : await runRemoteOperation(
+        "jobs.read",
+        (capabilities) => remoteMeetingApi.getJob(capabilities, id),
+        () => isJobRequestCurrent(fence),
+      );
+  if (!refreshed) {
+    return getJobById(id, source);
+  }
+  return applyRefreshedJob(refreshed);
 }
 
-async function createJob(input: NewMeetingJobInput) {
+async function refreshJob(reference: string | MeetingJobRef) {
+  return refreshJobFromSource(reference, false);
+}
+
+async function refreshJobResult(reference: string | MeetingJobRef) {
+  return refreshJobFromSource(reference, true);
+}
+
+async function refreshJobRuns(reference: string | MeetingJobRef) {
   await ensureSettingsLoaded();
 
-  if (!getLocalMode() && !getApi()) {
+  await refreshJobResult(reference);
+}
+
+async function createJobOperation(input: NewMeetingJobInput) {
+  await ensureSettingsLoaded();
+  const sourceGeneration = sourceRequestGenerations.local;
+
+  if (getLocalMode() && !isManagedRuntimeReady(state.runtimeStatus)) {
     await ensureManagedRuntimeReadyForLocalWork();
   }
 
@@ -328,7 +840,7 @@ async function createJob(input: NewMeetingJobInput) {
       throw new Error("本地模式只支持带本地路径的单个文件。");
     }
 
-    const created = await createLocalMeetingService().createJob({
+    const created = await localMeetingService.createJob({
       ...input,
       files: [firstFile],
     });
@@ -338,71 +850,110 @@ async function createJob(input: NewMeetingJobInput) {
       metadata: created.id,
     }).catch(() => undefined);
 
-    syncLocalPolling();
-    hydratedJobIds.add(created.id);
-    return replaceJob(created);
+    syncJobPolling();
+    const sourcedJob = withJobSource(created, "local");
+    if (
+      sourceGeneration === sourceRequestGenerations.local
+      && state.settings.processingMode === "local"
+    ) {
+      hydratedJobIds.local.add(created.id);
+      replaceJob(sourcedJob);
+    }
+    return sourcedJob;
   }
 
-  const api = getApi();
-  if (api) {
-    const created = await api.createJob(input);
-    void applyLocalPetWorkflowEvent({
-      eventType: "job_created",
-      metadata: created.id,
-    }).catch(() => undefined);
-    hydratedJobIds.add(created.id);
-    return replaceJob(created);
-  }
-
-  throw new Error("当前未安装本地运行环境，也未配置在线后端，无法创建任务。");
+  await requireRemoteOperation("jobs.create");
+  throw capabilityUnavailable("安全的远端分块上传协议尚未实现，已阻止创建任务。");
 }
 
-async function retryJob(id: string) {
-  await ensureSettingsLoaded();
-  const job = state.jobs.find((item) => item.id === id);
-
-  if (!job) {
-    return;
-  }
-
-  if (!getLocalMode() && !getApi()) {
-    await ensureManagedRuntimeReadyForLocalWork();
-  }
-
-  if (getLocalMode()) {
-    const updated = await createLocalMeetingService().retryJob(id);
-    syncLocalPolling();
-    hydratedJobIds.add(updated.id);
-    return replaceJob(updated);
-  }
-
-  const api = getApi();
-  if (api) {
-    const updated = await api.retryJob(id);
-    return replaceJob(updated);
-  }
-
-  throw new Error("当前未安装本地运行环境，也未配置在线后端，无法重试任务。");
-}
-
-async function deleteJob(id: string) {
-  await ensureSettingsLoaded();
-
-  if (getLocalMode()) {
-    await createLocalMeetingService().deleteJob(id);
-  }
-
-  hydratedJobIds.delete(id);
-  setState({ jobs: state.jobs.filter((job) => job.id !== id) });
-}
-
-async function renameSpeaker(id: string, fromSpeaker: string, toSpeaker: string) {
-  await ensureSettingsLoaded();
-  const job = state.jobs.find((item) => item.id === id);
-
+function resolveExistingJob(reference: MeetingJobRef) {
+  const resolved = resolveJobRef(reference);
+  const job = getJobById(resolved.jobId, resolved.source);
   if (!job) {
     throw new Error("没有找到这个任务。");
   }
+  return { reference: resolved, job };
+}
+
+async function retryJobOperation(reference: MeetingJobRef) {
+  await ensureSettingsLoaded();
+  const { reference: jobRef, job } = resolveExistingJob(reference);
+  const { jobId: id, source } = jobRef;
+  requireJobSource(job);
+  const fence = beginJobMutation(jobRef);
+
+  if (source === "local" && !isManagedRuntimeReady(state.runtimeStatus)) {
+    await ensureManagedRuntimeReadyForLocalWork();
+  }
+  if (!isJobMutationCurrent(fence)) {
+    return;
+  }
+
+  if (source === "local") {
+    const updated = await localMeetingService.retryJob(id);
+    if (!commitJobMutation(fence)) {
+      return;
+    }
+    syncJobPolling();
+    hydratedJobIds[source].add(updated.id);
+    return replaceJob(withJobSource(updated, source));
+  }
+
+  const updated = await runRemoteOperation(
+    "jobs.retry",
+    (capabilities) => remoteMeetingApi.retryJob(capabilities, id),
+    () => isJobMutationCurrent(fence),
+  );
+  if (!updated || !commitJobMutation(fence)) {
+    return;
+  }
+  hydratedJobIds[source].add(updated.id);
+  return replaceJob(withJobSource(updated, source));
+}
+
+async function deleteJobOperation(reference: MeetingJobRef) {
+  await ensureSettingsLoaded();
+  const { reference: jobRef, job } = resolveExistingJob(reference);
+  const { jobId: id, source } = jobRef;
+  requireJobSource(job);
+  const fence = beginJobMutation(jobRef);
+
+  if (source === "local") {
+    await localMeetingService.deleteJob(id);
+  } else {
+    const completed = await runRemoteOperation(
+      "jobs.delete",
+      async (capabilities) => {
+        await remoteMeetingApi.deleteJob(capabilities, id);
+        return true;
+      },
+      () => isJobMutationCurrent(fence),
+    );
+    if (!completed) {
+      return false;
+    }
+  }
+
+  if (!commitJobMutation(fence)) {
+    return false;
+  }
+  hydratedJobIds[source].delete(id);
+  setState({
+    jobs: state.jobs.filter((item) => item.id !== id || item.source !== source),
+  });
+  return true;
+}
+
+async function renameSpeakerOperation(
+  reference: MeetingJobRef,
+  fromSpeaker: string,
+  toSpeaker: string,
+) {
+  await ensureSettingsLoaded();
+  const { reference: jobRef, job } = resolveExistingJob(reference);
+  const { jobId: id, source } = jobRef;
+  requireJobSource(job);
+  const fence = beginJobMutation(jobRef);
 
   const normalizedTarget = toSpeaker.trim();
 
@@ -410,77 +961,140 @@ async function renameSpeaker(id: string, fromSpeaker: string, toSpeaker: string)
     throw new Error("讲话人名称不能为空。");
   }
 
-  if (getLocalMode()) {
-    const updated = await createLocalMeetingService().renameSpeaker(id, fromSpeaker, normalizedTarget);
-    hydratedJobIds.add(updated.id);
-    return replaceJob(updated);
+  if (source === "local") {
+    const updated = await localMeetingService.renameSpeaker(id, fromSpeaker, normalizedTarget);
+    if (!commitJobMutation(fence)) {
+      return;
+    }
+    hydratedJobIds[source].add(updated.id);
+    return replaceJob(withJobSource(updated, source));
   }
 
-  const normalizedSource = fromSpeaker.trim();
-  const updateSegments = (segments: typeof job.speakerSegments) =>
-    segments.map((segment) => {
-      const currentSpeaker = (segment.speaker ?? "").trim();
-      const matches = normalizedSource ? currentSpeaker === normalizedSource : !currentSpeaker;
+  const updated = await runRemoteOperation(
+    "transcript.speakers.rename",
+    (capabilities) => remoteMeetingApi.renameSpeaker(
+      capabilities,
+      id,
+      fromSpeaker,
+      normalizedTarget,
+    ),
+    () => isJobMutationCurrent(fence),
+  );
+  if (!updated || !commitJobMutation(fence)) {
+    return;
+  }
+  hydratedJobIds[source].add(updated.id);
+  return replaceJob(withJobSource(updated, source));
+}
 
-      return matches ? { ...segment, speaker: normalizedTarget } : segment;
-    });
+function rebaseSettingsIntent(intent: SettingsSaveIntent, current: SettingsState) {
+  const choose = <Key extends keyof SettingsState>(key: Key): SettingsState[Key] =>
+    Object.is(intent.base[key], intent.next[key]) ? current[key] : intent.next[key];
 
-  return replaceJob({
-    ...job,
-    speakerSegments: updateSegments(job.speakerSegments),
-    transcriptSegments: updateSegments(job.transcriptSegments),
+  return normalizeSettings({
+    ...current,
+    themeMode: choose("themeMode"),
+    liquidGlassStyle: choose("liquidGlassStyle"),
+    accentColor: choose("accentColor"),
+    locale: choose("locale"),
+    backendUrl: choose("backendUrl"),
+    processingMode: choose("processingMode"),
+    defaultHotwords: choose("defaultHotwords"),
+    summaryTemplate: choose("summaryTemplate"),
+    concurrency: choose("concurrency"),
+    localAsrDevice: choose("localAsrDevice"),
+    localAsrThreads: choose("localAsrThreads"),
+    localAsrBatchSizeSeconds: choose("localAsrBatchSizeSeconds"),
+    runtimeDownloadSource: choose("runtimeDownloadSource"),
+    pythonPath: current.pythonPath,
+    ffmpegPath: current.ffmpegPath,
+    pythonRuntimeSource: current.pythonRuntimeSource,
+    ffmpegRuntimeSource: current.ffmpegRuntimeSource,
+    runnerScriptPath: current.runnerScriptPath,
+    apiTokenConfigured: current.apiTokenConfigured,
+    settingsRevision: current.settingsRevision,
   });
 }
 
-async function saveSettings(next: SettingsState) {
-  const normalized = normalizeSettings({
-    ...next,
-    pythonPath: state.settings.pythonPath,
-    ffmpegPath: state.settings.ffmpegPath,
-    pythonRuntimeSource: state.settings.pythonRuntimeSource,
-    ffmpegRuntimeSource: state.settings.ffmpegRuntimeSource,
-  });
-  setState({ settings: normalized });
-  applyAppearance(normalized);
-  await localSettingsService.saveSettings(normalized);
+async function saveSettingsOperation(intent: SettingsSaveIntent) {
+  await ensureSettingsLoaded();
+  let current = state.settings;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const normalized = rebaseSettingsIntent(intent, current);
+    try {
+      const saved = await localSettingsService.saveSettings(normalized, intent.credential);
+      await applySettingsSnapshot(saved, intent.credential.action !== "keep");
+      return state.settings;
+    } catch (error) {
+      if (!(error instanceof SettingsConflictError)) {
+        throw error;
+      }
+      current = normalizeSettings(error.current);
+      await applySettingsSnapshot(error.current);
+      if (attempt === 3) {
+        throw error;
+      }
+    }
+  }
+
+  return state.settings;
+}
+
+async function applySettingsSnapshot(
+  snapshot: SettingsState,
+  remoteCredentialChanged = false,
+) {
+  const persisted = normalizeSettings(snapshot);
+  const dataSourceChanged = persisted.processingMode !== state.settings.processingMode
+    || persisted.backendUrl !== state.settings.backendUrl
+    || persisted.apiTokenConfigured !== state.settings.apiTokenConfigured
+    || remoteCredentialChanged;
+  if (dataSourceChanged) {
+    invalidateJobSource("local", true);
+    invalidateJobSource("remote", true);
+    resetRemoteConnection();
+  }
+  setState({ settings: persisted, ...(dataSourceChanged ? { jobs: [] } : {}) });
+  applyAppearance(persisted);
   await refreshRuntimeStatus();
-  syncLocalPolling();
+  syncJobPolling();
   syncRuntimePolling();
 
-  if (shouldUseLocalDataSource(normalized)) {
-    await refreshLocalJobs();
+  if (persisted.processingMode === "remote") {
+    void ensureRemoteCapabilities()
+      .then(() => refreshJobs())
+      .catch(() => undefined);
+  } else {
+    void refreshJobs().catch(() => undefined);
   }
 }
 
-async function installManagedRuntime() {
+async function installManagedRuntimeOperation() {
   await ensureSettingsLoaded();
   return beginManagedRuntimeInstall();
 }
 
-async function setRuntimeComponentSource(component: "python" | "ffmpeg", source: RuntimeSource) {
+async function setRuntimeComponentSourceOperation(component: "python" | "ffmpeg", source: RuntimeSource) {
   await ensureSettingsLoaded();
   const runtimeStatus = await localRuntimeService.setComponentSource(component, source);
+  const settings = await loadMainSettingsSnapshot();
   setState({
     runtimeStatus,
-    settings: {
-      ...state.settings,
-      ...(component === "python"
-        ? { pythonRuntimeSource: source }
-        : { ffmpegRuntimeSource: source }),
-    },
+    settings,
   });
   syncRuntimePolling();
   return runtimeStatus;
 }
 
-async function detectRuntimeComponent(component: "python" | "ffmpeg") {
+async function detectRuntimeComponentOperation(component: "python" | "ffmpeg") {
   await ensureSettingsLoaded();
   setState({ runtimeStatus: await localRuntimeService.detectComponent(component) });
   syncRuntimePolling();
   return state.runtimeStatus;
 }
 
-async function installRuntimeComponent(component: RuntimeComponentId) {
+async function installRuntimeComponentOperation(component: RuntimeComponentId) {
   await ensureSettingsLoaded();
   setState({ runtimeStatus: await localRuntimeService.installComponent(component) });
   await refreshRuntimeInstallLog();
@@ -488,12 +1102,101 @@ async function installRuntimeComponent(component: RuntimeComponentId) {
   return state.runtimeStatus;
 }
 
-async function ensureManagedRuntimeReadyForLocalWork() {
-  const api = getApi();
-  if (api) {
-    return;
-  }
+function createJob(input: NewMeetingJobInput) {
+  return runAppStatusAction("createJob", async () => {
+    const job = await createJobOperation(input);
+    if (getJobById(job.id, job.source)) {
+      await publishEntityChanged({ entity: "job", id: job.id, action: "saved" }).catch(() => undefined);
+    }
+    return job;
+  });
+}
 
+function retryJob(reference: MeetingJobRef) {
+  return runAppStatusAction("retryJob", async () => {
+    const job = await retryJobOperation(reference);
+    if (job) {
+      await publishEntityChanged({ entity: "job", id: job.id, action: "saved" }).catch(() => undefined);
+    }
+    return job;
+  });
+}
+
+function deleteJob(reference: MeetingJobRef) {
+  return runAppStatusAction("deleteJob", async () => {
+    const deleted = await deleteJobOperation(reference);
+    if (deleted) {
+      await publishEntityChanged({ entity: "job", id: reference.jobId, action: "deleted" }).catch(() => undefined);
+    }
+  });
+}
+
+function renameSpeaker(
+  reference: MeetingJobRef,
+  fromSpeaker: string,
+  toSpeaker: string,
+) {
+  return runAppStatusAction("renameSpeaker", async () => {
+    const job = await renameSpeakerOperation(reference, fromSpeaker, toSpeaker);
+    if (job) {
+      await publishEntityChanged({ entity: "job", id: job.id, action: "saved" }).catch(() => undefined);
+    }
+    return job;
+  });
+}
+
+function saveSettings(
+  next: SettingsState,
+  credential: SettingsCredentialUpdate = { action: "keep" },
+) {
+  if (pendingSettingsSaves === 0) {
+    settingsSaveProjection = state.settings;
+  }
+  const intent: SettingsSaveIntent = {
+    base: settingsSaveProjection,
+    next: normalizeSettings(next),
+    credential,
+  };
+  settingsSaveProjection = rebaseSettingsIntent(intent, settingsSaveProjection);
+  pendingSettingsSaves += 1;
+  const queuedRequest = settingsSaveQueue.then(() => runAppStatusAction(
+    "saveSettings",
+    () => saveSettingsOperation(intent),
+  ));
+  const request = queuedRequest.finally(() => {
+    pendingSettingsSaves -= 1;
+    if (pendingSettingsSaves === 0) {
+      settingsSaveProjection = state.settings;
+    }
+  });
+  settingsSaveQueue = request.catch(() => undefined);
+  return request;
+}
+
+function installManagedRuntime() {
+  return runAppStatusAction("downloadRuntime", installManagedRuntimeOperation, { completedAsStarted: true });
+}
+
+function setRuntimeComponentSource(component: "python" | "ffmpeg", source: RuntimeSource) {
+  return runAppStatusAction(
+    "updateRuntimeSource",
+    () => setRuntimeComponentSourceOperation(component, source),
+  );
+}
+
+function detectRuntimeComponent(component: "python" | "ffmpeg") {
+  return runAppStatusAction("detectRuntime", () => detectRuntimeComponentOperation(component));
+}
+
+function installRuntimeComponent(component: RuntimeComponentId) {
+  return runAppStatusAction(
+    "downloadRuntime",
+    () => installRuntimeComponentOperation(component),
+    { completedAsStarted: true },
+  );
+}
+
+async function ensureManagedRuntimeReadyForLocalWork() {
   const timeoutAt = Date.now() + 10 * 60 * 1000;
 
   if (state.runtimeStatus.status === "missing" || state.runtimeStatus.status === "repair_required") {
@@ -518,80 +1221,77 @@ async function ensureManagedRuntimeReadyForLocalWork() {
   }
 }
 
-function getJobById(id: string) {
-  return state.jobs.find((job) => job.id === id);
-}
-
-async function saveSummaryRun(run: AiSummaryRun) {
-  await localAiService.saveSummaryRun(run);
-  if (run.status === "completed") {
-    void applyLocalPetWorkflowEvent({
-      eventType: "ai_summary_completed",
-      metadata: run.jobId,
-    }).catch(() => undefined);
+function getJobById(id: string, source?: ProcessingMode) {
+  if (source) {
+    return state.jobs.find((job) => job.id === id && job.source === source);
   }
-  await refreshJobRuns(run.jobId);
+  return state.jobs.find((job) =>
+    job.id === id && job.source === state.settings.processingMode)
+    ?? state.jobs.find((job) => job.id === id);
 }
 
-async function setActiveSummaryRun(jobId: string, runId: string) {
+async function setActiveSummaryRun(reference: MeetingJobRef, runId: string) {
   await ensureSettingsLoaded();
+  const { reference: jobRef, job } = resolveExistingJob(reference);
+  const fence = beginJobMutation(jobRef);
 
-  if (getLocalMode()) {
-    await localAiService.setActiveSummaryRun(jobId, runId);
-    await refreshJobRuns(jobId);
+  if (job && requireJobSource(job) === "local") {
+    await localAiService.setActiveSummaryRun(
+      "local",
+      jobRef.jobId,
+      runId,
+      jobRef.windowScopeToken,
+    );
+    if (!commitJobMutation(fence)) {
+      return;
+    }
+    await refreshJobRuns(jobRef);
+    if (!isJobMutationCurrent(fence)) {
+      return;
+    }
+    await publishEntityChanged({ entity: "summary", id: jobRef.jobId, action: "saved" }).catch(() => undefined);
     return;
   }
 
-  const job = state.jobs.find((item) => item.id === jobId);
-  const run = job?.summaryRuns.find((item) => item.id === runId);
-
-  if (!job || !run) {
-    return;
-  }
-
-  replaceJob({
-    ...job,
-    activeSummaryRunId: run.id,
-    summary: run.result ? summaryResultToMeetingSummary(run.result) : createEmptyMeetingSummary(job.title),
-  });
+  throw new Error("远端总结版本选择接口尚不可用。");
 }
 
-async function deleteSummaryRun(jobId: string, runId: string) {
+async function deleteSummaryRun(reference: MeetingJobRef, runId: string) {
   await ensureSettingsLoaded();
+  const { reference: jobRef, job } = resolveExistingJob(reference);
+  const fence = beginJobMutation(jobRef);
 
-  if (getLocalMode()) {
-    await localAiService.deleteSummaryRun(jobId, runId);
-    await refreshJobRuns(jobId);
+  if (job && requireJobSource(job) === "local") {
+    await localAiService.deleteSummaryRun(
+      "local",
+      jobRef.jobId,
+      runId,
+      jobRef.windowScopeToken,
+    );
+    if (!commitJobMutation(fence)) {
+      return;
+    }
+    await refreshJobRuns(jobRef);
+    if (!isJobMutationCurrent(fence)) {
+      return;
+    }
+    await publishEntityChanged({ entity: "summary", id: jobRef.jobId, action: "deleted" }).catch(() => undefined);
     return;
   }
 
-  const job = state.jobs.find((item) => item.id === jobId);
-
-  if (!job) {
-    return;
-  }
-
-  const summaryRuns = job.summaryRuns.filter((run) => run.id !== runId);
-  const nextActiveRun = summaryRuns.find((run) => run.id === job.activeSummaryRunId)
-    ?? summaryRuns.find((run) => run.status === "completed" && run.result)
-    ?? summaryRuns[0];
-  replaceJob({
-    ...job,
-    summaryRuns,
-    activeSummaryRunId: nextActiveRun?.id,
-    summary: nextActiveRun?.result
-      ? summaryResultToMeetingSummary(nextActiveRun.result)
-      : createEmptyMeetingSummary(job.title),
-  });
+  throw new Error("远端总结版本删除接口尚不可用。");
 }
 
 const actions = {
   ensureSettingsLoaded,
+  ensureRemoteCapabilities,
+  canRemoteOperation,
   refreshRuntimeStatus,
   refreshRuntimeInstallLog,
   refreshRuntimeDownloadSources,
   refreshJobs,
   refreshJob,
+  refreshJobResult,
   refreshJobRuns,
   createJob,
   deleteJob,
@@ -602,23 +1302,21 @@ const actions = {
   renameSpeaker,
   retryJob,
   saveSettings,
-  saveSummaryRun,
   setActiveSummaryRun,
   deleteSummaryRun,
   getJobById,
+  setGlobalEffectsEnabled,
 };
 
-void ensureSettingsLoaded();
-
 export function useMeetingStore() {
-  syncLocalPolling();
-  void ensureSettingsLoaded();
+  if (!state.settingsLoaded && !state.settingsLoadError) {
+    void ensureSettingsLoaded().catch(() => undefined);
+  }
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   return {
     ...snapshot,
-    api: getApi(),
-    localMode: isManagedRuntimeReady(snapshot.runtimeStatus),
+    localMode: snapshot.settings.processingMode === "local",
     ...actions,
   };
 }

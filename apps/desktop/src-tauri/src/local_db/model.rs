@@ -159,20 +159,51 @@ fn default_minutes_schema_version() -> u32 {
     1
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Default)]
 pub struct AiModelConfig {
     pub id: String,
     pub name: String,
     pub base_url: String,
     pub api_key: String,
-    #[serde(default)]
-    pub api_key_ref: String,
+    pub model: String,
+    pub enabled: bool,
+    pub is_default: bool,
+}
+
+#[derive(Debug, Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelMetadata {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    pub enabled: bool,
+    pub is_default: bool,
+    pub credential_present: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "action", rename_all = "camelCase")]
+pub enum AiModelCredentialUpdate {
+    Keep,
+    Set { value: String },
+    Clear,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelSaveInput {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
     pub model: String,
     pub enabled: bool,
     pub is_default: bool,
     pub created_at: String,
     pub updated_at: String,
+    pub credential: AiModelCredentialUpdate,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -390,6 +421,194 @@ pub struct PetStoreState {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct FarmCropConfig {
+    pub crop_key: String,
+    pub seed_item_key: String,
+    pub name_zh: String,
+    pub name_en: String,
+    pub description_zh: String,
+    pub description_en: String,
+    pub duration_seconds: i64,
+    pub water_required: i64,
+    pub primary_reward_item_key: String,
+    pub primary_reward_quantity: i64,
+    pub bonus_reward_item_key: Option<String>,
+    pub bonus_chance_percent: i64,
+    pub lp_min: i64,
+    pub lp_max: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FarmPlot {
+    pub id: String,
+    pub plot_index: i64,
+    pub crop_key: String,
+    pub status: String,
+    pub stage_index: i64,
+    pub planted_at: Option<String>,
+    pub last_watered_at: Option<String>,
+    pub next_care_at: Option<String>,
+    pub mature_at: Option<String>,
+    pub updated_at: String,
+    pub crop: Option<FarmCropConfig>,
+    pub progress_ratio: f64,
+    pub remaining_seconds: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FarmRewardItem {
+    pub item_key: String,
+    pub quantity: i64,
+    pub reward_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FarmHarvestLedgerEntry {
+    pub id: String,
+    pub plot_id: String,
+    pub crop_key: String,
+    pub rewards: Vec<FarmRewardItem>,
+    pub lp_reward: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FarmHarvestResult {
+    pub state: FarmState,
+    pub harvest: FarmHarvestLedgerEntry,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FarmState {
+    pub plots: Vec<FarmPlot>,
+    pub crops: Vec<FarmCropConfig>,
+    pub harvests: Vec<FarmHarvestLedgerEntry>,
+    pub map_status: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkMapSummary {
+    pub status: String,
+    pub active_plots: i64,
+    pub needs_care_plots: i64,
+    pub mature_plots: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkMap {
+    pub id: String,
+    pub name_zh: String,
+    pub name_en: String,
+    pub description_zh: String,
+    pub description_en: String,
+    pub category: String,
+    pub status: String,
+    pub route: String,
+    pub outputs: Vec<String>,
+    pub enabled: bool,
+    pub summary: WorkMapSummary,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkMarketState {
+    pub maps: Vec<WorkMap>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkGameJobConfig {
+    pub game_key: String,
+    pub job_key: String,
+    pub slot_index: i64,
+    pub name_zh: String,
+    pub name_en: String,
+    pub description_zh: String,
+    pub description_en: String,
+    pub duration_seconds: i64,
+    pub care_required: i64,
+    pub primary_reward_item_key: String,
+    pub primary_reward_quantity: i64,
+    pub bonus_reward_item_key: Option<String>,
+    pub bonus_chance_percent: i64,
+    pub lp_min: i64,
+    pub lp_max: i64,
+    pub care_actions_zh: Vec<String>,
+    pub care_actions_en: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkGameTask {
+    pub id: String,
+    pub game_key: String,
+    pub slot_index: i64,
+    pub job_key: String,
+    pub status: String,
+    pub stage_index: i64,
+    pub started_at: Option<String>,
+    pub last_cared_at: Option<String>,
+    pub next_care_at: Option<String>,
+    pub claimable_at: Option<String>,
+    pub updated_at: String,
+    pub job: Option<WorkGameJobConfig>,
+    pub progress_ratio: f64,
+    pub remaining_seconds: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkGameRewardItem {
+    pub item_key: String,
+    pub quantity: i64,
+    pub reward_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkGameRewardLedgerEntry {
+    pub id: String,
+    pub game_key: String,
+    pub task_id: String,
+    pub job_key: String,
+    pub rewards: Vec<WorkGameRewardItem>,
+    pub lp_reward: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkGameState {
+    pub game_key: String,
+    pub name_zh: String,
+    pub name_en: String,
+    pub description_zh: String,
+    pub description_en: String,
+    pub map_status: String,
+    pub tasks: Vec<WorkGameTask>,
+    pub jobs: Vec<WorkGameJobConfig>,
+    pub rewards: Vec<WorkGameRewardLedgerEntry>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkGameClaimResult {
+    pub state: WorkGameState,
+    pub reward: WorkGameRewardLedgerEntry,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct PetBlindBoxDrawEntry {
     pub id: String,
     pub pet_id: String,
@@ -596,6 +815,8 @@ pub struct AiSummaryRun {
 #[serde(rename_all = "camelCase")]
 pub struct MeetingJob {
     pub id: String,
+    #[serde(default = "default_local_processing_mode")]
+    pub source: String,
     pub title: String,
     #[serde(default)]
     pub source_files: Vec<MeetingSourceFile>,
@@ -633,6 +854,10 @@ pub struct MeetingJob {
     pub runner_script_path: Option<String>,
 }
 
+fn default_local_processing_mode() -> String {
+    "local".into()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
@@ -642,6 +867,7 @@ pub struct AppSettings {
     pub locale: String,
     pub backend_url: String,
     pub api_token: String,
+    pub processing_mode: String,
     pub default_hotwords: String,
     pub summary_template: String,
     pub concurrency: u32,
@@ -654,6 +880,24 @@ pub struct AppSettings {
     pub local_asr_threads: u32,
     pub local_asr_batch_size_seconds: u32,
     pub runtime_download_source: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettingsSnapshot {
+    #[serde(flatten)]
+    pub settings: AppSettings,
+    #[serde(default)]
+    pub settings_revision: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UiPreferences {
+    pub theme_mode: String,
+    pub liquid_glass_style: String,
+    pub accent_color: String,
+    pub locale: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -764,6 +1008,7 @@ impl Default for AppSettings {
             locale: "zh-CN".into(),
             backend_url: String::new(),
             api_token: String::new(),
+            processing_mode: "local".into(),
             default_hotwords: "SeACo-Paraformer, FunASR, 会议纪要".into(),
             summary_template: "表格版会议纪要".into(),
             concurrency: 2,

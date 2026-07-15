@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-water-farm-plot"
+description = "Enables the water_farm_plot command without any pre-configured scope."
+commands.allow = ["water_farm_plot"]
+
+[[permission]]
+identifier = "deny-water-farm-plot"
+description = "Denies the water_farm_plot command without any pre-configured scope."
+commands.deny = ["water_farm_plot"]

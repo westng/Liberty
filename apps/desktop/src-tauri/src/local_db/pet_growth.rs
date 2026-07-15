@@ -22,6 +22,7 @@ pub(crate) fn apply_pet_growth_event(
     pet::ensure_default_exists_tx(&tx)?;
     pet_store::ensure_store_defaults_tx(&tx, &chrono::Utc::now().to_rfc3339())?;
     let mut profile = pet::load_profile_tx(&tx)?;
+    let local_date = pet_store::current_local_date();
 
     if event_type == "interaction" {
         let todays_count = pet::count_events_for_today_tx(&tx, event_type, event_source)?;
@@ -38,15 +39,17 @@ pub(crate) fn apply_pet_growth_event(
     pet_store::ensure_store_defaults_tx(&tx, &now)?;
     profile = migrate_profile_level_floor(profile);
     let previous_stage = profile.stage.clone();
-    let reward_source_key = reward_source_key(event_type, event_source, metadata, &now);
+    let reward_source_key = reward_source_key(event_type, event_source, metadata, &local_date);
     let reward_already_granted =
         pet_store::reward_exists_tx(&tx, "workflow_reward", &reward_source_key)?;
+    let event_claimed =
+        pet_store::claim_event_key_tx(&tx, "pet_growth", &reward_source_key, metadata, &now)?;
+    if !event_claimed || (reward_already_granted && event_type != "interaction") {
+        tx.commit().map_err(|err| err.to_string())?;
+        return Ok(profile);
+    }
     let reward = reward_rule(event_type, event_source);
-    let base_growth = if reward_already_granted && event_type != "interaction" {
-        0
-    } else {
-        event_value
-    };
+    let base_growth = event_value;
     let growth_multiplier = if event_type == "interaction" {
         1.0
     } else {
@@ -131,11 +134,10 @@ fn reward_source_key(
     event_type: &str,
     event_source: &str,
     metadata: Option<&str>,
-    now: &str,
+    local_date: &str,
 ) -> String {
     if event_source == "daily_open" {
-        let date = now.split('T').next().unwrap_or(now);
-        return format!("{event_type}:{event_source}:{date}");
+        return format!("{event_type}:{event_source}:{local_date}");
     }
     if event_type == "interaction" {
         return format!(
@@ -239,6 +241,19 @@ mod tests {
     }
 
     #[test]
+    fn daily_open_key_uses_backend_local_date() {
+        assert_eq!(
+            reward_source_key(
+                "workflow",
+                "daily_open",
+                Some("ignored metadata"),
+                "2026-07-16"
+            ),
+            "workflow:daily_open:2026-07-16"
+        );
+    }
+
+    #[test]
     fn first_created_job_unlocks_first_task_badge() {
         let mut conn = Connection::open_in_memory().expect("in-memory sqlite");
         crate::local_db::schema::apply_test_schema(&conn).expect("schema");
@@ -301,5 +316,43 @@ mod tests {
             Some(1)
         );
         assert_eq!(state.wallet.lifetime_earned, 0);
+    }
+
+    #[test]
+    fn summary_run_rewards_remain_unique_across_a_b_a_ordering() {
+        let mut conn = Connection::open_in_memory().expect("in-memory sqlite");
+        crate::local_db::schema::apply_test_schema(&conn).expect("schema");
+
+        for run_id in ["run-a", "run-b", "run-a"] {
+            apply_pet_growth_event(
+                &mut conn,
+                "workflow",
+                "ai_summary_completed",
+                10,
+                "proud",
+                Some(run_id),
+            )
+            .expect("summary growth event");
+        }
+
+        let profile = pet::load_profile(&conn).expect("profile");
+        let state = pet_store::store_state(&conn, profile.clone()).expect("store state");
+        let summary_events = pet::list_event_ledger(&conn, 10)
+            .expect("event ledger")
+            .into_iter()
+            .filter(|entry| entry.event_source == "ai_summary_completed")
+            .count();
+
+        assert_eq!(profile.experience, 20);
+        assert_eq!(summary_events, 2);
+        assert_eq!(state.wallet.lifetime_earned, 60);
+        assert_eq!(
+            state
+                .counters
+                .iter()
+                .find(|counter| counter.counter_key == "summaries_completed")
+                .map(|counter| counter.counter_value),
+            Some(2)
+        );
     }
 }

@@ -32,9 +32,7 @@ export function useRuntimePanel(
 ) {
   const runtimeModeLabel = store.localMode
     ? shellMessages.localMode
-    : store.settings.backendUrl
-      ? shellMessages.remoteMode
-      : shellMessages.mockModeShort;
+    : shellMessages.remoteMode;
   const runtimeStatus = store.runtimeStatus;
   const runtimeInstallLog = store.runtimeInstallLog;
   const runtimeInstallLogReversed = useMemo(() => {

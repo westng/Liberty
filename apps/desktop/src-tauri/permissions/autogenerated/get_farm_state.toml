@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-farm-state"
+description = "Enables the get_farm_state command without any pre-configured scope."
+commands.allow = ["get_farm_state"]
+
+[[permission]]
+identifier = "deny-get-farm-state"
+description = "Denies the get_farm_state command without any pre-configured scope."
+commands.deny = ["get_farm_state"]

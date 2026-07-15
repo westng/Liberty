@@ -1,17 +1,21 @@
 mod model;
 mod parser;
 mod renderer;
-mod source;
+pub(crate) mod source;
 mod xml;
 
-use crate::local_db::{
-    self, AiSummaryResult, LocalResult, MeetingJob, MeetingMember, MeetingMinutesInfo,
-    MeetingMinutesParticipant, MeetingMinutesPayload, MeetingMinutesSpeakerReport,
-    TranscriptSegment,
+use crate::{
+    infrastructure::repositories::ai_summary_runs,
+    local_db::{
+        self, AiSummaryResult, LocalResult, MeetingJob, MeetingMember, MeetingMinutesInfo,
+        MeetingMinutesParticipant, MeetingMinutesPayload, MeetingMinutesSpeakerReport,
+        TranscriptSegment,
+    },
 };
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use tauri::AppHandle;
+use tauri::{AppHandle, Webview};
+use tauri_plugin_fs::FsExt;
 
 use model::{ExportDocData, SpeechBlock};
 use parser::{
@@ -28,6 +32,7 @@ const FIXED_MEETING_HOST: &str = "冯吉琼";
 #[tauri::command]
 pub fn export_job_summary_docx(
     app: AppHandle,
+    webview: Webview,
     job_id: String,
     summary_run_id: Option<String>,
     file_path: String,
@@ -36,11 +41,43 @@ pub fn export_job_summary_docx(
         return Err("导出路径不能为空。".into());
     }
 
-    let job = local_db::get_job(&app, &job_id)?;
-    let summary_source = resolve_summary_source(&job, summary_run_id.as_deref())?;
+    let output_path = Path::new(file_path.trim());
+    if !webview.fs_scope().is_allowed(output_path) {
+        return Err("导出失败：目标路径未经保存对话框授权。".into());
+    }
+
     let members = local_db::list_meeting_members(&app)?;
+    let mut job = local_db::get_job(&app, &job_id)?;
+    let mut summary_source = resolve_summary_source(&job, &members, summary_run_id.as_deref())?;
+    if summary_source.reconstructed_payload {
+        let run_id = summary_source
+            .run_id
+            .as_deref()
+            .ok_or_else(|| "导出失败：重建的会议纪要缺少来源版本。".to_string())?;
+        let mut connection = local_db::open_connection(&app)?;
+        let backfilled = match ai_summary_runs::backfill_minutes_payload(
+            &mut connection,
+            &job.id,
+            run_id,
+            &summary_source.minutes_payload,
+        ) {
+            Ok(backfilled) => Some(backfilled),
+            Err(error) => {
+                eprintln!(
+                    "[local-export] failed to persist reconstructed payload for run {run_id}: {error}"
+                );
+                None
+            }
+        };
+        drop(connection);
+
+        if backfilled == Some(false) {
+            job = local_db::get_job(&app, &job_id)?;
+            summary_source = resolve_summary_source(&job, &members, summary_run_id.as_deref())?;
+        }
+    }
     let export_data = build_export_doc_data_from_source(&job, &summary_source, &members);
-    export_summary_docx(&export_data, Path::new(file_path.trim()))
+    export_summary_docx(&export_data, output_path)
 }
 
 fn build_export_doc_data_from_source(
@@ -48,34 +85,12 @@ fn build_export_doc_data_from_source(
     source: &SummaryExportSource,
     members: &[MeetingMember],
 ) -> ExportDocData {
-    let projection = derive_meeting_minutes_projection(
+    build_export_doc_data_from_minutes_payload(
         job,
         &source.result,
+        &source.minutes_payload,
         members,
-        &source.template_id,
-        source.run_id.clone(),
-    );
-    let mut payload = if projection.has_summary_speakers {
-        projection.payload
-    } else {
-        source
-            .cached_projection
-            .as_ref()
-            .filter(|cached| cached_projection_matches_source(cached, source.run_id.as_deref()))
-            .filter(|cached| !cached.speaker_reports.is_empty())
-            .cloned()
-            .unwrap_or(projection.payload)
-    };
-
-    if let Some(cached) = source
-        .cached_projection
-        .as_ref()
-        .filter(|cached| cached_projection_matches_source(cached, source.run_id.as_deref()))
-    {
-        apply_cached_identity_metadata(&mut payload, cached);
-    }
-
-    build_export_doc_data_from_minutes_payload(job, &source.result, &payload, members)
+    )
 }
 
 #[cfg(test)]
@@ -96,12 +111,6 @@ pub(crate) fn derive_meeting_minutes_payload(
     source_summary_run_id: Option<String>,
 ) -> MeetingMinutesPayload {
     derive_meeting_minutes_projection(job, summary, members, template_id, source_summary_run_id)
-        .payload
-}
-
-struct DerivedMinutesProjection {
-    payload: MeetingMinutesPayload,
-    has_summary_speakers: bool,
 }
 
 fn derive_meeting_minutes_projection(
@@ -110,9 +119,8 @@ fn derive_meeting_minutes_projection(
     members: &[MeetingMember],
     template_id: &str,
     source_summary_run_id: Option<String>,
-) -> DerivedMinutesProjection {
+) -> MeetingMinutesPayload {
     let mut data = parse_overview_to_export_data(&summary.overview);
-    let has_summary_speakers = !data.speech_blocks.is_empty();
     let mut summary_blocks = std::mem::take(&mut data.speech_blocks);
     let speech_blocks = resolve_speech_blocks(job, &mut summary_blocks, members);
 
@@ -154,33 +162,30 @@ fn derive_meeting_minutes_projection(
         Vec::new()
     };
 
-    DerivedMinutesProjection {
-        has_summary_speakers,
-        payload: MeetingMinutesPayload {
-            schema_version: 1,
-            template_id: template_id.trim().to_string(),
-            source_summary_run_id,
-            meeting_info: MeetingMinutesInfo {
-                meeting_name: resolved_title.to_string(),
-                meeting_time: FIXED_MEETING_TIME.to_string(),
-                meeting_location: FIXED_MEETING_LOCATION.to_string(),
-                recorder,
-                attendees,
-                absentees: data.absentees.trim().to_string(),
-                host: FIXED_MEETING_HOST.to_string(),
-                reviewer: data.reviewer.trim().to_string(),
-            },
-            participants: speech_blocks
-                .iter()
-                .map(|block| block_to_minutes_participant(block, members))
-                .collect(),
-            speaker_reports: speech_blocks
-                .into_iter()
-                .map(|block| block_to_minutes_report(block, members))
-                .collect(),
-            topics,
-            global_summary: data.closing_summary,
+    MeetingMinutesPayload {
+        schema_version: 1,
+        template_id: template_id.trim().to_string(),
+        source_summary_run_id,
+        meeting_info: MeetingMinutesInfo {
+            meeting_name: resolved_title.to_string(),
+            meeting_time: FIXED_MEETING_TIME.to_string(),
+            meeting_location: FIXED_MEETING_LOCATION.to_string(),
+            recorder,
+            attendees,
+            absentees: data.absentees.trim().to_string(),
+            host: FIXED_MEETING_HOST.to_string(),
+            reviewer: data.reviewer.trim().to_string(),
         },
+        participants: speech_blocks
+            .iter()
+            .map(|block| block_to_minutes_participant(block, members))
+            .collect(),
+        speaker_reports: speech_blocks
+            .into_iter()
+            .map(|block| block_to_minutes_report(block, members))
+            .collect(),
+        topics,
+        global_summary: data.closing_summary,
     }
 }
 
@@ -332,168 +337,58 @@ fn append_unique_items(target: &mut Vec<String>, items: Vec<String>) {
     }
 }
 
-fn cached_projection_matches_source(
-    cached: &MeetingMinutesPayload,
-    source_run_id: Option<&str>,
-) -> bool {
-    match (
-        cached.source_summary_run_id.as_deref(),
-        source_run_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty()),
-    ) {
-        (Some(cached_run_id), Some(source_run_id)) => cached_run_id == source_run_id,
-        (None, Some(_)) => true,
-        (None, None) => true,
-        (Some(_), None) => false,
-    }
-}
-
-#[derive(Clone)]
-struct CachedSpeakerIdentity {
-    keys: Vec<String>,
-    member_id: String,
-    department: String,
-    sort_order: i64,
-    match_status: String,
-}
-
-fn apply_cached_identity_metadata(
+pub(crate) fn add_missing_transcript_speakers(
+    job: &MeetingJob,
     payload: &mut MeetingMinutesPayload,
-    cached: &MeetingMinutesPayload,
+    members: &[MeetingMember],
 ) {
-    let identities = cached_speaker_identities(cached);
-
-    for participant in &mut payload.participants {
-        if let Some(identity) = find_cached_identity(
-            &identities,
-            [&participant.speaker_label, &participant.resolved_name],
-        ) {
-            apply_identity_to_participant(participant, identity);
-        }
-    }
-
-    for report in &mut payload.speaker_reports {
-        if let Some(identity) =
-            find_cached_identity(&identities, [&report.speaker_label, &report.resolved_name])
-        {
-            apply_identity_to_report(report, identity);
-        }
-    }
-}
-
-fn cached_speaker_identities(cached: &MeetingMinutesPayload) -> Vec<CachedSpeakerIdentity> {
-    let mut identities = Vec::new();
-
-    for participant in &cached.participants {
-        push_cached_identity(
-            &mut identities,
-            &participant.speaker_label,
-            &participant.resolved_name,
-            &participant.member_id,
-            &participant.department,
-            participant.sort_order,
-            &participant.match_status,
-        );
-    }
-
-    for report in &cached.speaker_reports {
-        push_cached_identity(
-            &mut identities,
-            &report.speaker_label,
-            &report.resolved_name,
-            &report.member_id,
-            &report.department,
-            report.sort_order,
-            &report.match_status,
-        );
-    }
-
-    identities
-}
-
-#[allow(clippy::too_many_arguments)]
-fn push_cached_identity(
-    identities: &mut Vec<CachedSpeakerIdentity>,
-    speaker_label: &str,
-    resolved_name: &str,
-    member_id: &str,
-    department: &str,
-    sort_order: i64,
-    match_status: &str,
-) {
-    let keys = [speaker_label, resolved_name]
-        .into_iter()
-        .map(normalize_member_name)
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>();
-    if keys.is_empty() {
-        return;
-    }
-
-    if identities
+    let first_recovered_index = payload
+        .participants
         .iter()
-        .any(|identity| identity.keys.iter().any(|key| keys.contains(key)))
-    {
-        return;
-    }
+        .map(|participant| participant.original_index)
+        .chain(
+            payload
+                .speaker_reports
+                .iter()
+                .map(|report| report.original_index),
+        )
+        .max()
+        .map_or(0, |index| index.saturating_add(1));
 
-    identities.push(CachedSpeakerIdentity {
-        keys,
-        member_id: member_id.trim().to_string(),
-        department: department.trim().to_string(),
-        sort_order,
-        match_status: match_status.trim().to_string(),
-    });
-}
+    for (offset, speaker) in collect_speaker_names(job).into_iter().enumerate() {
+        let normalized = normalize_member_name(&speaker);
+        let has_participant = payload.participants.iter().any(|participant| {
+            [
+                participant.speaker_label.as_str(),
+                participant.resolved_name.as_str(),
+            ]
+            .into_iter()
+            .any(|value| normalize_member_name(value) == normalized)
+        });
+        let has_report = payload.speaker_reports.iter().any(|report| {
+            [report.speaker_label.as_str(), report.resolved_name.as_str()]
+                .into_iter()
+                .any(|value| normalize_member_name(value) == normalized)
+        });
+        if has_participant && has_report {
+            continue;
+        }
 
-fn find_cached_identity<'a, const N: usize>(
-    identities: &'a [CachedSpeakerIdentity],
-    values: [&str; N],
-) -> Option<&'a CachedSpeakerIdentity> {
-    let keys = values
-        .into_iter()
-        .map(normalize_member_name)
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>();
-    identities
-        .iter()
-        .find(|identity| identity.keys.iter().any(|key| keys.contains(key)))
-}
-
-fn apply_identity_to_participant(
-    participant: &mut MeetingMinutesParticipant,
-    identity: &CachedSpeakerIdentity,
-) {
-    if participant.member_id.trim().is_empty() {
-        participant.member_id = identity.member_id.clone();
-    }
-    if participant.department.trim().is_empty() {
-        participant.department = identity.department.clone();
-    }
-    if participant.sort_order == 0 {
-        participant.sort_order = identity.sort_order;
-    }
-    if participant.match_status.trim().is_empty() || participant.match_status == "unmatched" {
-        participant.match_status = identity.match_status.clone();
-    }
-}
-
-fn apply_identity_to_report(
-    report: &mut MeetingMinutesSpeakerReport,
-    identity: &CachedSpeakerIdentity,
-) {
-    if report.member_id.trim().is_empty() {
-        report.member_id = identity.member_id.clone();
-    }
-    if report.department.trim().is_empty() {
-        report.department = identity.department.clone();
-    }
-    if report.sort_order == 0 {
-        report.sort_order = identity.sort_order;
-    }
-    if report.match_status.trim().is_empty() || report.match_status == "unmatched" {
-        report.match_status = identity.match_status.clone();
+        let block = SpeechBlock {
+            name: speaker,
+            original_index: first_recovered_index.saturating_add(offset),
+            ..SpeechBlock::default()
+        };
+        if !has_participant {
+            let mut participant = block_to_minutes_participant(&block, members);
+            participant.match_status = "missing_from_ai".into();
+            payload.participants.push(participant);
+        }
+        if !has_report {
+            let mut report = block_to_minutes_report(block, members);
+            report.match_status = "missing_from_ai".into();
+            payload.speaker_reports.push(report);
+        }
     }
 }
 
@@ -722,6 +617,7 @@ fn is_section_heading(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::local_db::AiSummaryRun;
     use crate::local_export::renderer::{render_document_xml, TEMPLATE_DOCX_BYTES};
     use std::{
         fs,
@@ -783,24 +679,26 @@ mod tests {
     }
 
     #[test]
-    fn render_document_xml_omits_person_summary_section() {
+    fn render_document_xml_keeps_person_summary_section() {
         let mut archive = zip::ZipArchive::new(Cursor::new(TEMPLATE_DOCX_BYTES)).unwrap();
         let mut document = archive.by_name("word/document.xml").unwrap();
         let mut xml = String::new();
         document.read_to_string(&mut xml).unwrap();
 
         let mut data = sample_export_data();
-        data.speech_blocks[0].summary = vec!["不应输出的人员总结".into()];
+        data.speech_blocks[0].summary = vec!["需要输出的人员总结".into()];
 
         let rendered = render_document_xml(&xml, &data).unwrap();
         assert!(rendered.contains("上周总结："));
         assert!(rendered.contains("本周计划："));
-        assert!(!rendered.contains("不应输出的人员总结"));
+        assert!(rendered.contains("个人总结："));
+        assert!(rendered.contains("需要输出的人员总结"));
     }
 
     #[test]
     fn export_summary_docx_writes_content() {
-        let path = std::env::temp_dir().join(format!(
+        let temp_dir = fs::canonicalize(std::env::temp_dir()).unwrap();
+        let path = temp_dir.join(format!(
             "liberty-export-test-{}.docx",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -825,9 +723,103 @@ mod tests {
     }
 
     #[test]
+    fn completed_run_payload_people_survive_overview_projection_in_document_xml() {
+        let run_id = "run-payload-authority";
+        let people = ["人员A", "人员B"];
+        let payload = MeetingMinutesPayload {
+            source_summary_run_id: Some(run_id.into()),
+            meeting_info: MeetingMinutesInfo {
+                meeting_name: "周会".into(),
+                ..MeetingMinutesInfo::default()
+            },
+            participants: people
+                .iter()
+                .enumerate()
+                .map(|(index, name)| MeetingMinutesParticipant {
+                    speaker_label: (*name).into(),
+                    resolved_name: (*name).into(),
+                    original_index: index,
+                    ..MeetingMinutesParticipant::default()
+                })
+                .collect(),
+            speaker_reports: people
+                .iter()
+                .enumerate()
+                .map(|(index, name)| MeetingMinutesSpeakerReport {
+                    speaker_label: (*name).into(),
+                    resolved_name: (*name).into(),
+                    original_index: index,
+                    weekly_summary: vec![format!("payload-{name}-事项")],
+                    ..MeetingMinutesSpeakerReport::default()
+                })
+                .collect(),
+            ..MeetingMinutesPayload::default()
+        };
+        let run = AiSummaryRun {
+            id: run_id.into(),
+            job_id: "job-payload-authority".into(),
+            status: "completed".into(),
+            result: Some(AiSummaryResult {
+                title: "周会".into(),
+                overview: "发言内容\n【部门】：人员A\n上周总结：\n1、overview-仅有-A".into(),
+                ..AiSummaryResult::default()
+            }),
+            minutes_payload: Some(payload),
+            ..AiSummaryRun::default()
+        };
+        let job = MeetingJob {
+            id: "job-payload-authority".into(),
+            title: "周会".into(),
+            enable_speaker: true,
+            transcript_segments: people
+                .iter()
+                .enumerate()
+                .map(|(index, name)| TranscriptSegment {
+                    id: format!("segment-{index}"),
+                    speaker: Some((*name).into()),
+                    text: format!("{name}发言"),
+                    ..TranscriptSegment::default()
+                })
+                .collect(),
+            active_summary_run_id: Some(run_id.into()),
+            summary_runs: vec![run],
+            ..MeetingJob::default()
+        };
+
+        let source = resolve_summary_source(&job, &[], Some(run_id)).unwrap();
+        let export_data = build_export_doc_data_from_source(&job, &source, &[]);
+        let temp_dir = fs::canonicalize(std::env::temp_dir()).unwrap();
+        let path = temp_dir.join(format!(
+            "liberty-payload-authority-{}.docx",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        export_summary_docx(&export_data, &path).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let document_xml = {
+            let mut document = archive.by_name("word/document.xml").unwrap();
+            let mut xml = String::new();
+            document.read_to_string(&mut xml).unwrap();
+            xml
+        };
+
+        assert!(document_xml.contains("人员A"));
+        assert!(document_xml.contains("payload-人员A-事项"));
+        assert!(document_xml.contains("人员B"));
+        assert!(document_xml.contains("payload-人员B-事项"));
+        assert!(!document_xml.contains("overview-仅有-A"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn build_export_doc_data_falls_back_to_overview_when_structure_is_missing() {
         let job = MeetingJob {
             id: "job-1".into(),
+            source: "local".into(),
             title: "例会".into(),
             source_files: Vec::new(),
             duration_minutes: 0,
@@ -893,6 +885,7 @@ mod tests {
     fn build_export_doc_data_keeps_ai_blocks_with_content_even_when_speaker_label_differs() {
         let job = MeetingJob {
             id: "job-2".into(),
+            source: "local".into(),
             title: "例会".into(),
             source_files: Vec::new(),
             duration_minutes: 0,
@@ -959,6 +952,7 @@ mod tests {
     fn build_export_doc_data_replaces_placeholder_attendees_and_recorder() {
         let job = MeetingJob {
             id: "job-3".into(),
+            source: "local".into(),
             title: "例会".into(),
             source_files: Vec::new(),
             duration_minutes: 0,
@@ -1042,6 +1036,7 @@ mod tests {
             .replace("会议主持人：待补充", "会议主持人：张三");
         let job = MeetingJob {
             id: "job-4".into(),
+            source: "local".into(),
             title: "例会".into(),
             source_files: Vec::new(),
             duration_minutes: 0,
@@ -1161,7 +1156,7 @@ mod tests {
     }
 
     #[test]
-    fn export_prefers_rederived_payload_when_saved_payload_lost_ai_content() {
+    fn export_keeps_saved_payload_authoritative_over_overview_projection() {
         let job = MeetingJob {
             id: "job-7".into(),
             title: "周会".into(),
@@ -1191,27 +1186,30 @@ mod tests {
                 speaker_label: "李兰".into(),
                 resolved_name: "李兰".into(),
                 original_index: 0,
+                weekly_summary: vec!["payload 中的李兰事项".into()],
                 ..MeetingMinutesSpeakerReport::default()
             }],
             ..MeetingMinutesPayload::default()
         };
         let source = SummaryExportSource {
             result: summary,
-            cached_projection: Some(stale_payload),
-            template_id: "builtin-formal-meeting-minutes".into(),
+            minutes_payload: stale_payload,
             run_id: Some("run-1".into()),
+            reconstructed_payload: false,
         };
 
         let data = build_export_doc_data_from_source(&job, &source, &[]);
 
-        assert!(data
-            .speech_blocks
-            .iter()
-            .any(|block| block.name == "肖明容" && !block.weekly_summary.is_empty()));
+        assert_eq!(data.speech_blocks.len(), 1);
+        assert_eq!(data.speech_blocks[0].name, "李兰");
+        assert_eq!(
+            data.speech_blocks[0].weekly_summary,
+            vec!["payload 中的李兰事项".to_string()]
+        );
     }
 
     #[test]
-    fn cached_projection_with_more_items_cannot_replace_summary_people() {
+    fn overview_projection_cannot_expand_or_replace_payload_people() {
         let speakers = [
             ("营销部", "段世琼"),
             ("营销部", "李兰"),
@@ -1245,7 +1243,7 @@ mod tests {
             overview,
             ..AiSummaryResult::default()
         };
-        let cached_projection = MeetingMinutesPayload {
+        let minutes_payload = MeetingMinutesPayload {
             source_summary_run_id: Some("run-authority".into()),
             speaker_reports: speakers[..8]
                 .iter()
@@ -1262,20 +1260,20 @@ mod tests {
         };
         let source = SummaryExportSource {
             result: summary,
-            cached_projection: Some(cached_projection),
-            template_id: "builtin-formal-meeting-minutes".into(),
+            minutes_payload,
             run_id: Some("run-authority".into()),
+            reconstructed_payload: false,
         };
 
         let data = build_export_doc_data_from_source(&job, &source, &[]);
 
-        assert_eq!(data.speech_blocks.len(), speakers.len());
+        assert_eq!(data.speech_blocks.len(), 8);
         assert_eq!(data.speech_blocks[0].name, "段世琼");
-        assert_eq!(data.speech_blocks[10].name, "贾世强");
+        assert_eq!(data.speech_blocks[7].name, "王英海");
         assert!(data.speech_blocks.iter().all(|block| block
             .weekly_summary
             .iter()
-            .all(|item| !item.contains("缓存条目"))));
+            .any(|item| item.contains("缓存条目"))));
     }
 
     #[test]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-pet-gift-box"
+description = "Enables the open_pet_gift_box command without any pre-configured scope."
+commands.allow = ["open_pet_gift_box"]
+
+[[permission]]
+identifier = "deny-open-pet-gift-box"
+description = "Denies the open_pet_gift_box command without any pre-configured scope."
+commands.deny = ["open_pet_gift_box"]
