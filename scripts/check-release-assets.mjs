@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import process from "node:process";
+import { runPowerShellWithAsset } from "./lib/powershell.mjs";
 
 const platformMatrix = new Map([
   ["darwin-aarch64", { kinds: ["dmg"], architecture: "arm64" }],
@@ -263,24 +264,24 @@ function readMsiVersion(file) {
   const script = [
     "$ErrorActionPreference = 'Stop'",
     "$installer = New-Object -ComObject WindowsInstaller.Installer",
-    "$database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($args[0], 0))",
+    "$database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($env:LIBERTY_RELEASE_ASSET_PATH, 0))",
     "$view = $database.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $database, @(\"SELECT `Value` FROM `Property` WHERE `Property` = 'ProductVersion'\"))",
     "$view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null) | Out-Null",
     "$record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)",
     "$record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, 1)",
   ].join("\n");
-  return runPowerShell(script, file);
+  return runPowerShellWithAsset(script, file);
 }
 
 function readMsiTemplate(file) {
   const script = [
     "$ErrorActionPreference = 'Stop'",
     "$installer = New-Object -ComObject WindowsInstaller.Installer",
-    "$database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($args[0], 0))",
+    "$database = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($env:LIBERTY_RELEASE_ASSET_PATH, 0))",
     "$summary = $database.GetType().InvokeMember('SummaryInformation', 'GetProperty', $null, $database, @(0))",
     "$summary.GetType().InvokeMember('Property', 'GetProperty', $null, $summary, 7)",
   ].join("\n");
-  return runPowerShell(script, file);
+  return runPowerShellWithAsset(script, file);
 }
 
 function validatePeArchitecture(file, expectedArchitecture) {
@@ -311,15 +312,10 @@ function validatePeArchitecture(file, expectedArchitecture) {
 }
 
 function readExeVersion(file) {
-  return runPowerShell("(Get-Item -LiteralPath $args[0]).VersionInfo.ProductVersion", file);
-}
-
-function runPowerShell(script, file) {
-  return execFileSync(
-    "powershell.exe",
-    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, resolve(file)],
-    { encoding: "utf8" },
-  ).trim();
+  return runPowerShellWithAsset(
+    "(Get-Item -LiteralPath $env:LIBERTY_RELEASE_ASSET_PATH).VersionInfo.ProductVersion",
+    file,
+  );
 }
 
 function validateManifest(manifest, expectedVersion) {
