@@ -31,6 +31,31 @@ static PROCESS_METRICS_SAMPLER: OnceLock<Mutex<ProcessMetricsSampler>> = OnceLoc
 pub fn open_external_url(url: String) -> LocalResult<()> {
     let normalized = validate_external_url(&url)?;
 
+    #[cfg(target_os = "windows")]
+    {
+        let wide_url = OsStr::new(&normalized)
+            .encode_wide()
+            .chain(once(0))
+            .collect::<Vec<_>>();
+        let result = unsafe {
+            ShellExecuteW(
+                ptr::null_mut(),
+                ptr::null(),
+                wide_url.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if result as isize <= 32 {
+            return Err(format!(
+                "Windows 无法打开外部链接，错误码：{}",
+                result as isize
+            ));
+        }
+        Ok(())
+    }
+
     #[cfg(not(target_os = "windows"))]
     {
         #[cfg(target_os = "macos")]
@@ -39,31 +64,6 @@ pub fn open_external_url(url: String) -> LocalResult<()> {
             cmd.arg(&normalized);
             cmd
         };
-
-        #[cfg(target_os = "windows")]
-        {
-            let wide_url = OsStr::new(&normalized)
-                .encode_wide()
-                .chain(once(0))
-                .collect::<Vec<_>>();
-            let result = unsafe {
-                ShellExecuteW(
-                    ptr::null_mut(),
-                    ptr::null(),
-                    wide_url.as_ptr(),
-                    ptr::null(),
-                    ptr::null(),
-                    SW_SHOWNORMAL,
-                )
-            };
-            if result as isize <= 32 {
-                return Err(format!(
-                    "Windows 无法打开外部链接，错误码：{}",
-                    result as isize
-                ));
-            }
-            return Ok(());
-        }
 
         #[cfg(all(unix, not(target_os = "macos")))]
         let mut command = {
