@@ -1,0 +1,7 @@
+Edit the provided game lobby image.
+
+Keep the same composition, camera angle, plaza, lighting, foliage, colors, and hand-painted game style.
+
+Change only the three locked side portals: remove all lock icons, grey disabled overlays, dark unavailable panels, and muted coloring. Make the mining cave portal, factory portal, and service-counter portal look unlocked, bright, colorful, and playable. Keep their themes visible.
+
+Do not add text, labels, logos, watermarks, UI panels, or new characters.

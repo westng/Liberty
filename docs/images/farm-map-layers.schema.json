@@ -1,0 +1,132 @@
+{
+  "map": {
+    "width": 1536,
+    "height": 1024,
+    "source": "farm-full-map.png",
+    "generatedBy": "gpt-image-2"
+  },
+  "layers": [
+    {
+      "id": "background",
+      "file": "farm-background.png",
+      "type": "background",
+      "x": 0,
+      "y": 0,
+      "width": 1536,
+      "height": 1024,
+      "zIndex": 0
+    },
+    {
+      "id": "plot-1-soil",
+      "file": "plot-1-soil.png",
+      "type": "plot-soil",
+      "plotIndex": 1,
+      "x": 175,
+      "y": 286,
+      "width": 370,
+      "height": 449,
+      "zIndex": 10
+    },
+    {
+      "id": "plot-1-wheat",
+      "file": "plot-1-wheat.png",
+      "type": "plot-crop",
+      "plotIndex": 1,
+      "cropKey": "wheat",
+      "x": 175,
+      "y": 286,
+      "width": 370,
+      "height": 449,
+      "zIndex": 20
+    },
+    {
+      "id": "plot-2-soil",
+      "file": "plot-2-soil.png",
+      "type": "plot-soil",
+      "plotIndex": 2,
+      "x": 560,
+      "y": 286,
+      "width": 360,
+      "height": 449,
+      "zIndex": 10
+    },
+    {
+      "id": "plot-2-carrot",
+      "file": "plot-2-carrot.png",
+      "type": "plot-crop",
+      "plotIndex": 2,
+      "cropKey": "carrot",
+      "x": 560,
+      "y": 286,
+      "width": 360,
+      "height": 449,
+      "zIndex": 20
+    },
+    {
+      "id": "plot-3-soil",
+      "file": "plot-3-soil.png",
+      "type": "plot-soil",
+      "plotIndex": 3,
+      "x": 930,
+      "y": 286,
+      "width": 395,
+      "height": 449,
+      "zIndex": 10
+    },
+    {
+      "id": "plot-3-tomato",
+      "file": "plot-3-tomato.png",
+      "type": "plot-crop",
+      "plotIndex": 3,
+      "cropKey": "tomato",
+      "x": 930,
+      "y": 286,
+      "width": 395,
+      "height": 449,
+      "zIndex": 20
+    },
+    {
+      "id": "foreground",
+      "file": "farm-foreground.png",
+      "type": "foreground",
+      "x": 0,
+      "y": 0,
+      "width": 1536,
+      "height": 1024,
+      "zIndex": 50
+    }
+  ],
+  "interactionZones": [
+    {
+      "id": "plot-1",
+      "type": "plot",
+      "plotIndex": 1,
+      "x": 175,
+      "y": 286,
+      "width": 370,
+      "height": 449
+    },
+    {
+      "id": "plot-2",
+      "type": "plot",
+      "plotIndex": 2,
+      "x": 560,
+      "y": 286,
+      "width": 360,
+      "height": 449
+    },
+    {
+      "id": "plot-3",
+      "type": "plot",
+      "plotIndex": 3,
+      "x": 930,
+      "y": 286,
+      "width": 395,
+      "height": 449
+    }
+  ],
+  "petEntry": {
+    "x": 760,
+    "y": 860
+  }
+}

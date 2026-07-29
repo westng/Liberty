@@ -1,0 +1,13 @@
+Create a complete polished 2D hand-painted floating-island cover map for Liberty desktop pet work mini-games.
+
+If an input farm map image is provided, use it as the visual style reference only: match its bright sky, thick floating island silhouette, soft painterly shadows, lush edge vegetation, cozy hand-painted 3D/isometric texture, rounded object shapes, and dense readable detail level. Do not keep the farm house, crops, plots, fence layout, or farm tools.
+
+Scene: a clean cute factory island for a "tightening screws at the factory" mini-game. The island has grassy outer edges, exposed cliff sides, a small friendly workshop building, an open assembly line, screw trays, conveyor belt, three visually separated workstations, a quality inspection desk, packed boxes, and tidy tool drawers. The clickable work areas should read as basic assembly, rush order, and precision inspection.
+
+Style: same art family as the farm-isometric cover image, not a flat vector illustration. High-quality cozy mobile-game map art, hand-painted, dimensional, bright, organized, slightly playful, not grim or realistic.
+
+Composition: 1536x1024 landscape. Full floating island visible with generous sky/cloud margin. Slightly top-down/isometric perspective matching the farm cover. Keep the assembly line and workstations inside the safe center area so app cards can crop to 4:3 without losing the island.
+
+Lighting/mood: bright sunny workshop lighting, calm productivity, tidy and approachable.
+
+Constraints: no text, no UI panels, no watermark, no logos, no real-world brands, no characters, no speech bubbles. No flat SVG/vector look, no poster-like flat shapes, no photorealism, no harsh industrial mood. The image must be a complete game asset source map, not a mockup screenshot.

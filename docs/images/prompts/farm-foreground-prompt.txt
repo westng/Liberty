@@ -1,0 +1,5 @@
+Create a foreground occlusion layer from the provided farm-full-map image.
+
+Keep only foreground objects that should visually appear in front of a small pet walking through the farm map, such as front-edge shrubs, tree leaves, grass clumps, large rocks, and decorative flowers near the lower and side edges. Remove the flat background, plots, crops, sky-free ground areas, and distant objects.
+
+Output a PNG layer aligned to the original 1536x1024 canvas. The layer should be suitable for alpha compositing over characters and effects. Preserve the exact hand-painted cartoon game style of the input image. No text, no UI, no watermark.

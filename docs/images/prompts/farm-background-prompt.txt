@@ -1,0 +1,7 @@
+Edit the provided farm-full-map image to create the base background layer for a 2D farming game map.
+
+Remove only the three interactive farm plots and all crops from the lower-middle area. Fill the removed areas with coherent grass, small plants, dirt patches, and environmental details that match the original hand-painted cartoon game style.
+
+Keep the stone well, wooden fences, path stones, watering-can platform, harvest basket, shrubs, trees, rocks, flowers, lighting, camera angle, and canvas size exactly consistent with the input image.
+
+Output a complete 1536x1024 opaque PNG background layer. No UI, no text, no labels, no characters, no watermark. Do not introduce photorealistic textures.

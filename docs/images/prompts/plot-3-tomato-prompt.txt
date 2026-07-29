@@ -1,0 +1,5 @@
+From the provided farm-full-map image, create a full-canvas aligned crop layer containing only the tomato crop elements from the right farm plot.
+
+Keep the exact crop positions, scale, painted shadows, color, and style from the source image. Remove the base soil rectangle, grass background, fences, decorations, and all non-tomato elements. Preserve only tomato plants and the minimum necessary contact shadows or soil disturbances directly under the plants.
+
+Output a 1536x1024 PNG. Keep the tomatoes in their original map position and remove every other map element. Fill all removed pixels with a perfectly flat solid #ff00ff chroma-key background, with no shadows, gradients, texture, lighting variation, or antialiasing haze in the background. Do not use #ff00ff inside the tomato art. No text, no UI, no watermark, no photo texture.

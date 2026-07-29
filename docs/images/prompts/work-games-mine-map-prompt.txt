@@ -1,0 +1,13 @@
+Create a complete polished 2D hand-painted floating-island cover map for Liberty desktop pet work mini-games.
+
+If an input farm map image is provided, use it as the visual style reference only: match its bright sky, thick floating island silhouette, soft painterly shadows, lush edge vegetation, cozy hand-painted 3D/isometric texture, rounded object shapes, and dense readable detail level. Do not keep the farm house, crops, plots, fence layout, or farm tools.
+
+Scene: a cozy non-scary mining island for a "mining at the mine" mini-game. The island has grassy outer edges, exposed rocky cliff sides, a dark cave entrance, curved mine rails, a small mine cart, wooden support beams, lanterns, a tool bench, scattered stones, and colorful crystals. Include three visually distinct clickable ore vein areas: shallow vein, deep vein, and glowing rich vein.
+
+Style: same art family as the farm-isometric cover image, not a flat vector illustration. High-quality cozy mobile-game map art, hand-painted, dimensional, bright, cute, friendly, with rich texture and clear silhouettes.
+
+Composition: 1536x1024 landscape. Full floating island visible with generous sky/cloud margin. Slightly top-down/isometric perspective matching the farm cover. Keep important objects inside the safe center area so app cards can crop to 4:3 without losing the island.
+
+Lighting/mood: sunny sky plus warm amber lantern accents inside the cave, friendly desktop companion feeling, calm and rewarding.
+
+Constraints: no text, no UI panels, no watermark, no logos, no real-world brands, no characters, no speech bubbles. No flat SVG/vector look, no poster-like flat shapes, no photorealism, no horror darkness. The image must be a complete game asset source map, not a mockup screenshot.

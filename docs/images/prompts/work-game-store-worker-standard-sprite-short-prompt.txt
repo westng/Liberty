@@ -1,0 +1,11 @@
+Production-ready 3x3 sprite sheet for a cozy hand-painted 2D isometric game convenience-store clerk.
+
+Make 9 frames in a 3 by 3 layout, read left-to-right, top-to-bottom. Same cute clerk in every frame: same face, warm apron uniform, small handheld scanner or cloth, same 3/4 isometric camera, same scale, same feet position, no zoom, no drift, no changing viewpoint.
+
+Animation: idle, reach to shelf/counter, scan or wipe item, small check sparkle, place item down, turn slightly with cloth, tidy motion, recover, return idle.
+
+Character only. No counter, no shelf, no environment, no labels, no text, no visible grid lines, no cell borders.
+
+Style must match a cozy floating-island farm/work game: rounded shapes, warm clean colors, painterly texture, soft shading.
+
+Flat solid #00ff00 chroma-key background over the whole image. Background must be perfectly uniform, no shadows, no floor plane, no gradients. Do not use #00ff00 on the character or props.

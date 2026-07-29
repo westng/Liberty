@@ -1,0 +1,5 @@
+From the provided farm-full-map image, create a full-canvas aligned layer for the middle farm plot as an empty soil layer.
+
+Use the exact same plot shape, pebble border, grass edge, perspective, lighting, and cartoon soil texture from the source image. Remove all carrot crops while keeping a natural empty tilled soil surface underneath.
+
+Output a 1536x1024 PNG. Keep the middle plot in its original map position and remove every other map element. Fill all removed pixels with a perfectly flat solid #ff00ff chroma-key background, with no shadows, gradients, texture, lighting variation, or antialiasing haze in the background. Do not use #ff00ff inside the plot art. No text, no UI, no watermark, no photo texture.

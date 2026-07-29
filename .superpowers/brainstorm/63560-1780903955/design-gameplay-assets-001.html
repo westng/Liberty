@@ -1,0 +1,115 @@
+<h2>设计第一部分：玩法与资产方向</h2>
+<p class="subtitle">已定路线：通用打工任务引擎 + 三款独立地图。核心体验是低打扰、可返回领取、短照看动作，不做高频手速小游戏。</p>
+
+<div class="section">
+  <div class="label">统一规则</div>
+  <div class="mockup">
+    <div class="mockup-header">三款游戏共享的生命周期</div>
+    <div class="mockup-body" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+      <div class="placeholder" style="min-height:92px;">空闲<br>选择岗位</div>
+      <div class="placeholder" style="min-height:92px;">进行中<br>真实时间推进</div>
+      <div class="placeholder" style="min-height:92px;">需要照看<br>短动作事件</div>
+      <div class="placeholder" style="min-height:92px;">可领取<br>结算收益</div>
+      <div class="placeholder" style="min-height:92px;">记录<br>进入流水</div>
+    </div>
+  </div>
+  <p class="subtitle">不失败、不惩罚、不扣已有奖励；错过照看只损失少量额外奖励或延长一点时间，保持桌面陪伴的低压力气质。</p>
+</div>
+
+<div class="section">
+  <div class="label">矿场挖矿</div>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">地图与热区</div>
+      <div class="mockup-body">
+        <p><strong>主画面：</strong>地下矿洞，暖色矿灯、轨道矿车、三处矿脉、木支架、工具台。</p>
+        <p><strong>岗位槽位：</strong>浅层矿脉、深层矿脉、闪光富矿。</p>
+        <p><strong>照看热区：</strong>矿脉敲击、碎石清理、支架加固、矿车装载。</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">玩法性格</div>
+      <div class="mockup-body">
+        <p><strong>定位：</strong>风险收益最高，但仍然不失败。</p>
+        <p><strong>事件：</strong>发现富矿、碎石堵路、支架松动、矿灯变暗。</p>
+        <p><strong>奖励：</strong>工具类商品、稀有道具、少量 LP；富矿低概率出礼盒。</p>
+        <p><strong>资产层：</strong>背景、前景岩壁、矿脉三状态、碎石、支架、矿车、闪光特效。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">工厂打螺丝</div>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">地图与热区</div>
+      <div class="mockup-body">
+        <p><strong>主画面：</strong>干净卡通小工厂，流水线、三张工位、螺丝盘、质检台、传送带。</p>
+        <p><strong>岗位槽位：</strong>基础装配、加急订单、精密质检。</p>
+        <p><strong>照看热区：</strong>按序拧螺丝、清卡料、质检盖章、打包出货。</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">玩法性格</div>
+      <div class="mockup-body">
+        <p><strong>定位：</strong>最稳定，短周期，适合经常打开看一眼。</p>
+        <p><strong>事件：</strong>螺丝松动、传送带卡顿、质检返工、加急订单。</p>
+        <p><strong>奖励：</strong>稳定 LP、能量胶囊/能量饮料、秒表；低概率徽章或装扮。</p>
+        <p><strong>资产层：</strong>背景、前景机器、工位三状态、螺丝高亮、传送带动效、质检印章特效。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">便利店值班</div>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">地图与热区</div>
+      <div class="mockup-body">
+        <p><strong>主画面：</strong>夜间暖光便利店，收银台、货架、饮料柜、微波炉、门口清洁区。</p>
+        <p><strong>岗位槽位：</strong>白班、晚班、夜班。</p>
+        <p><strong>照看热区：</strong>收银、补货、加热便当、清洁、处理顾客需求。</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">玩法性格</div>
+      <div class="mockup-body">
+        <p><strong>定位：</strong>最生活化，收益偏食物和礼盒，低压力日常。</p>
+        <p><strong>事件：</strong>顾客排队、货架缺货、便当加热完成、地面需要清洁。</p>
+        <p><strong>奖励：</strong>食物类商品、礼盒、日常 LP；夜班低概率额外道具。</p>
+        <p><strong>资产层：</strong>背景、前景货架、收银台状态、货架空满状态、顾客提示、暖光营业特效。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">资产生成标准</div>
+  <div class="mockup">
+    <div class="mockup-header">每张地图必须交付的图层</div>
+    <div class="mockup-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div class="placeholder">1536x1024 主地图</div>
+      <div class="placeholder">无热区背景层</div>
+      <div class="placeholder">前景遮挡层</div>
+      <div class="placeholder">岗位/热区状态层</div>
+      <div class="placeholder">照看事件特效层</div>
+      <div class="placeholder">牛马市场卡片封面</div>
+    </div>
+  </div>
+  <p class="subtitle">这些资产会先作为设计图验收，再进入代码；这样才能满足“严格按照游戏资产图来做”。</p>
+</div>
+
+<div class="section">
+  <div class="label">请确认</div>
+  <div class="options">
+    <div class="option" data-choice="gameplay-assets-approved" onclick="toggleSelect(this)">
+      <div class="letter">✓</div>
+      <div class="content">
+        <h3>玩法与资产方向可以</h3>
+        <p>下一步进入数据模型、Tauri 命令、前端页面结构设计。</p>
+      </div>
+    </div>
+  </div>
+</div>

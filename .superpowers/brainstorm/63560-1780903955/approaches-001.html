@@ -1,0 +1,69 @@
+<h2>实现路线选择</h2>
+<p class="subtitle">已确认方向：轻量经营为主。参考 idle loop 的三段式：主动参与、离线/等待推进、返回领取奖励；这也正好贴合 Liberty 的桌宠陪伴和本地宠物经济。</p>
+
+<div class="section">
+  <div class="label">推荐方案</div>
+  <div class="options">
+    <div class="option" data-choice="engine" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>通用打工任务引擎</h3>
+        <p>新建 work-game 领域：地图、岗位槽位、任务配置、照看事件、领奖流水统一建模。矿场、工厂、便利店都用同一套后端状态和前端基础组件，但各自有独立地图、热区、事件文案和奖励表。</p>
+        <p><strong>优点：</strong>长期最稳，后续新增“钓鱼/咖啡店/外卖”等地图不用再复制一套。<br><strong>风险：</strong>要认真处理现有农场，建议先让农场保持原入口，三款新游戏先接通用引擎，第二步再评估农场是否迁入。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="per-game" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>三款游戏各自独立实现</h3>
+        <p>矿场、工厂、便利店各自建状态、命令、页面和奖励流水，只共享宠物商品发奖能力。</p>
+        <p><strong>优点：</strong>每款玩法自由度最高。<br><strong>缺点：</strong>后端和前端会重复大量“开始、等待、照看、领取、状态汇总”逻辑，后面维护成本高。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="farm-clone" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>基于农场模型扩展</h3>
+        <p>把 farm plot/crop/harvest 改造成泛化模型，直接把矿场、工厂、便利店视作“不同作物/地块”。</p>
+        <p><strong>优点：</strong>复用最多。<br><strong>缺点：</strong>概念会变脏，矿脉、螺丝、值班都被迫套进作物语言，不适合“策划出来”的独立玩法。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">A 方案的数据和界面骨架</div>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">后端核心模型</div>
+      <div class="mockup-body">
+        <p><strong>work_game_slots</strong>：每张地图的可用岗位/热区槽位。</p>
+        <p><strong>work_game_tasks</strong>：当前进行中的打工任务，含 status、startedAt、nextCareAt、claimableAt。</p>
+        <p><strong>work_game_care_events</strong>：需要照看的事件，例如清碎石、拧螺丝、补货。</p>
+        <p><strong>work_game_reward_ledger</strong>：领奖记录，复用 pet_inventory、pet_wallets、pet_economy_ledger 发放奖励。</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">前端共用结构</div>
+      <div class="mockup-body" style="display:grid;grid-template-columns:1.2fr .8fr;gap:12px;">
+        <div class="placeholder" style="min-height:220px;">1536x1024 地图场景 + 热区按钮 + 状态特效</div>
+        <div style="display:grid;gap:10px;">
+          <div class="placeholder">当前岗位</div>
+          <div class="placeholder">照看动作</div>
+          <div class="placeholder">奖励记录</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">建议结论</div>
+  <div class="mockup">
+    <div class="mockup-header">我建议选 A</div>
+    <div class="mockup-body">
+      <p>A 不是为了抽象而抽象，而是因为三款游戏已经共享同一个生命周期：开始任务、等待推进、出现照看事件、完成后领奖。差异应该留给配置、地图资产、热区和事件表现，而不是复制三套后端。</p>
+      <p>落地顺序：先定三款详细玩法和资产需求，再写设计文档；实现时先完成通用引擎和矿场，再复制配置落工厂和便利店，最后统一接入牛马市场状态。</p>
+    </div>
+  </div>
+</div>

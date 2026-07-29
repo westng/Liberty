@@ -1,0 +1,77 @@
+<h2>打工小游戏资产图盘点</h2>
+<p class="subtitle">目标是开发「矿场挖矿」「工厂打螺丝」「便利店值班」，并严格按资产图实现。这里先确认当前仓库里可用的视觉源。</p>
+
+<div class="section">
+  <div class="label">已确认可用资产</div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-image" style="height: 190px; overflow: hidden; background: #101820;">
+        <img src="/files/niuma-market.webp" alt="牛马市场" style="width:100%;height:100%;object-fit:cover;">
+      </div>
+      <div class="card-body">
+        <h3>牛马市场大厅</h3>
+        <p>1536x1024，已接入 /work-market 作为地图大厅。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-image" style="height: 190px; overflow: hidden; background: #101820;">
+        <img src="/files/farm-isometric.webp" alt="农场封面" style="width:100%;height:100%;object-fit:cover;">
+      </div>
+      <div class="card-body">
+        <h3>农场地图封面</h3>
+        <p>1536x1024，已作为农场卡片图。</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-image" style="height: 190px; overflow: hidden; background: #101820;">
+        <img src="/files/farm-background.png" alt="农场玩法背景" style="width:100%;height:100%;object-fit:cover;">
+      </div>
+      <div class="card-body">
+        <h3>农场玩法层</h3>
+        <p>1536x1024，已有地块、作物、巡逻小狗等分层资产。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">三款目标游戏资产状态</div>
+  <div class="options">
+    <div class="option" data-choice="provide-assets" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>你提供三张资产图</h3>
+        <p>矿场、工厂、便利店各一张 1536x1024 场景图；我严格按图做热区、交互层和 UI。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="generate-assets" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>我先生成三张资产图</h3>
+        <p>按现有牛马市场/农场的 2D 手绘游戏风格补齐矿场、工厂、便利店，再基于通过验收的图开发。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">仓库内仅找到的相关替代素材</div>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">桌宠 work 动作帧</div>
+      <div class="mockup-body" style="display:flex;gap:24px;align-items:center;justify-content:center;min-height:220px;background:#f7f4ed;">
+        <img src="/files/work_01.png" alt="work frame 1" style="max-height:160px;object-fit:contain;">
+        <img src="/files/work_05.png" alt="work frame 5" style="max-height:160px;object-fit:contain;">
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">宠物商品图标可作为奖励，不是场景图</div>
+      <div class="mockup-body" style="display:flex;gap:24px;align-items:center;justify-content:center;min-height:220px;background:#f7f4ed;">
+        <img src="/files/energy_capsule.png" alt="能量胶囊" style="width:86px;height:86px;object-fit:contain;">
+        <img src="/files/stopwatch.png" alt="秒表" style="width:86px;height:86px;object-fit:contain;">
+        <img src="/files/gift_box.png" alt="礼盒" style="width:86px;height:86px;object-fit:contain;">
+      </div>
+    </div>
+  </div>
+  <p class="subtitle">结论：当前正式资产目录没有 mine/factory/convenience-store 场景图；如果要求“严格按资产图”，需要先确认资产来源。</p>
+</div>

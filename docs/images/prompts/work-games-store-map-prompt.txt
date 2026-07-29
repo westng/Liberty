@@ -1,0 +1,9 @@
+Create a cozy 2D hand-painted floating-island game map for a daily-service counter mini-game.
+
+Scene: a cute small service-counter building on a grassy floating island in a bright blue sky. The island has rocky cliff sides, lush grass edges, flowers, shrubs, a warm open front, cashier counter, colorful snack shelves, chilled drink cabinet, microwave table, tidy aisles, delivery boxes, and a small cleaning corner.
+
+Style: same visual family as a cozy farm-isometric game cover: bright sky, thick floating island, painterly 3D/isometric texture, rounded cute shapes, soft shadows, dense readable details, warm and clean. Not flat vector art.
+
+Composition: 1536x1024 landscape, full island visible, slightly top-down/isometric, safe centered layout for 4:3 card cropping.
+
+Constraints: no text, no signs, no logos, no brands, no UI panels, no watermark, no characters, no speech bubbles, no photorealism.

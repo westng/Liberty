@@ -1,0 +1,93 @@
+<h2>三款打工小游戏策划 v1</h2>
+<p class="subtitle">基准：它们接入牛马市场和宠物经济，但不是农场换皮。每款都有独立地图、独立操作节奏、独立奖励倾向。</p>
+
+<div class="section">
+  <div class="label">推荐总方向</div>
+  <div class="mockup">
+    <div class="mockup-header">轻量经营 + 短操作事件 + 本地真实时间推进</div>
+    <div class="mockup-body" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+      <div class="placeholder" style="min-height:92px;">选择岗位</div>
+      <div class="placeholder" style="min-height:92px;">等待进度</div>
+      <div class="placeholder" style="min-height:92px;">触发照看事件</div>
+      <div class="placeholder" style="min-height:92px;">领取 LP / 商品</div>
+    </div>
+  </div>
+  <p class="subtitle">这样能和现有农场状态体系一致：空闲、进行中、需要照看、可领取；但每款游戏的“照看动作”和地图热区完全不同。</p>
+</div>
+
+<div class="section">
+  <div class="label">三款游戏核心循环</div>
+  <div class="cards">
+    <div class="card" data-choice="mine" onclick="toggleSelect(this)">
+      <div class="card-image" style="height:180px;background:linear-gradient(135deg,#2f3136,#776a4e);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:26px;">
+        矿场挖矿
+      </div>
+      <div class="card-body">
+        <h3>矿场挖矿</h3>
+        <p>偏“风险收益”：选择矿脉，开采进度推进，中途会出现碎石、塌方预警、富矿闪光等事件。照看动作是敲击矿点、清理碎石、加固支架。</p>
+        <p><strong>奖励倾向：</strong>工具、稀有道具、少量 LP；偶尔礼盒。</p>
+      </div>
+    </div>
+    <div class="card" data-choice="factory" onclick="toggleSelect(this)">
+      <div class="card-image" style="height:180px;background:linear-gradient(135deg,#384d5f,#c9a24a);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:26px;">
+        工厂打螺丝
+      </div>
+      <div class="card-body">
+        <h3>工厂打螺丝</h3>
+        <p>偏“稳定效率”：接装配订单，生产线推进，照看事件是按顺序拧紧螺丝、处理卡料、质检返工。操作更短、更有节奏感。</p>
+        <p><strong>奖励倾向：</strong>稳定 LP、能量类工具、低概率徽章/装扮。</p>
+      </div>
+    </div>
+    <div class="card" data-choice="store" onclick="toggleSelect(this)">
+      <div class="card-image" style="height:180px;background:linear-gradient(135deg,#285b58,#e08e55);display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:26px;">
+        便利店值班
+      </div>
+      <div class="card-body">
+        <h3>便利店值班</h3>
+        <p>偏“多任务照看”：排班后店铺开始营业，中途出现收银、补货、清洁、顾客需求事件。错过不失败，只降低一点额外奖励。</p>
+        <p><strong>奖励倾向：</strong>食物、礼盒、日常 LP；适合低压力日常循环。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">每款游戏需要的资产图</div>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">统一画布标准</div>
+      <div class="mockup-body">
+        <p>每张主地图：1536x1024，2D 手绘游戏风格，和牛马市场/农场同一世界观。</p>
+        <p>每款至少拆出：背景层、前景遮挡层、3-5 个交互热区层、状态特效层、卡片封面图。</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">热区示例</div>
+      <div class="mockup-body" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+        <div class="placeholder">矿点 / 支架 / 矿车</div>
+        <div class="placeholder">工位 / 螺丝盘 / 质检台</div>
+        <div class="placeholder">收银台 / 货架 / 清洁区</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">请确认第一条策划原则</div>
+  <div class="options">
+    <div class="option" data-choice="light-loop" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>轻量经营为主</h3>
+        <p>适合桌面陪伴：真实时间推进，中途点几下照看，收益进宠物体系。推荐。</p>
+      </div>
+    </div>
+    <div class="option" data-choice="arcade-loop" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>即时小游戏为主</h3>
+        <p>每次进入都要完成手速/反应/排序操作，玩起来更强，但打断感也更强。</p>
+      </div>
+    </div>
+  </div>
+</div>

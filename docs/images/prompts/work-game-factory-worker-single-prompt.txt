@@ -1,0 +1,7 @@
+Create one cute factory worker character for a cozy hand-painted 2D isometric game.
+
+The character is full body, 3/4 isometric view, same visual style as a floating-island farm/work game: rounded shapes, warm clean colors, painterly texture, soft shading. The worker wears a blue factory outfit and small cap, holding a small screwdriver near a tiny metal part. Pose is a clear working stance suitable for a screw-tightening animation.
+
+Character only. No workbench, no machine, no environment, no labels, no text, no UI.
+
+Flat solid #00ff00 chroma-key background over the whole image. Background must be perfectly uniform, no shadows, no floor plane, no gradients. Do not use #00ff00 on the character or props. Leave generous padding around the character.

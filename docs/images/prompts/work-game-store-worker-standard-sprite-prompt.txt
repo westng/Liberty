@@ -1,0 +1,30 @@
+Create a production-ready 3x3 sprite sheet for a cozy 2D hand-painted game convenience-store clerk animation.
+
+Reference/standard:
+- The output is a game asset sprite sheet, not an illustration collage.
+- 9 frames in a 3 by 3 layout, read left-to-right and top-to-bottom.
+- Each frame shows the exact same cute store clerk character, same face, same apron, same small handheld scanner or cleaning cloth, same camera angle, same scale, same body proportions.
+- The character must keep the same feet/ground registration point in every frame. No zooming, no resizing, no drifting, no changing viewpoint.
+- The frame canvas must leave consistent padding. The clerk should fit within about 70 percent of each cell height.
+- No visible grid lines, no cell borders, no numbers, no text, no labels, no UI.
+
+Animation sequence:
+1 idle ready stance
+2 reaches toward shelf/counter
+3 scans or wipes item
+4 small sparkle/check motion
+5 places item down
+6 turns slightly with receipt or cloth
+7 tidies with small hand motion
+8 recovery stance
+9 return to idle ready stance
+
+Style:
+- Cute cozy floating-island farm game style, painterly texture, rounded shapes, warm clean colors, soft shading.
+- 3/4 isometric game character angle suitable for placing on a convenience-store map.
+- Character only with handheld scanner or cleaning cloth and tiny sparkle accents; no counter, no shelf, no environment, no UI frame.
+
+Background/removal:
+- Use a perfectly flat solid #00ff00 chroma-key background across the whole image.
+- The background must be one uniform color, with no shadows, gradients, texture, lighting variation, floor plane, or reflections.
+- Do not use #00ff00 anywhere on the character, tool, or sparkle accents.

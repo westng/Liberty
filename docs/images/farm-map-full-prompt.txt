@@ -1,0 +1,15 @@
+Create a complete polished cartoon farm field map that will become the single visual source of truth for later layered game assets.
+
+The image is a 2D game farm map full acceptance image for a desktop pet mini-game. The scene is a cozy top-down/isometric farm garden with a bright grass field, a wooden fence along the upper edge, a stone well on the upper-left, small dirt path stones, a watering can and harvest basket platform on the upper-right, decorative rocks, flowers, shrubs, and trees around the edges.
+
+Place three large rectangular farm plots left to right in the lower-middle area. Plot 1 has mature golden wheat, plot 2 has carrots, and plot 3 has tomatoes. Each plot must use the same cartoon soil and pebble border visual language.
+
+Use a high-quality hand-painted 2D mobile game UI style: cute cozy farming game, consistent cartoon texture, vivid greens, warm brown soil, golden wheat, orange carrots, red tomatoes, and blue watering-can accents. Lighting is sunny and friendly with soft painted shadows.
+
+Composition: 1536x1024 landscape, full map visible, no UI chrome, no text, no labels, no characters, enough margin around plots for clicking and pet walking.
+
+Materials and textures: painterly grass, stylized soil, rounded stones, wooden fence and platform, leafy shrubs.
+
+Constraints: all elements must share one coherent game-art style; the three plots must be cleanly separable into layers later; no realistic photo textures; no watermark; no text; no logo.
+
+Avoid photorealistic soil, photographic grass, mixed art styles, UI panels, characters, animals, and excessive perspective distortion.

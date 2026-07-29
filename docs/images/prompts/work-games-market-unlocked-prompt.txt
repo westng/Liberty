@@ -1,0 +1,9 @@
+Create a polished 2D hand-painted isometric game lobby image.
+
+Scene: a bright outdoor map plaza with four large decorative portals. All four portals are unlocked, colorful, bright, and inviting. Portal themes: mining cave, factory workshop, farm garden, and cozy service counter. Show warm sunlight, blue sky, flowers, stone plaza, rich foliage, cute rounded shapes, and soft painterly shadows.
+
+Important: no lock icons, no grey disabled panels, no chains, no dark unavailable state. Every portal must look open and playable.
+
+Composition: 1536x1024 landscape, full plaza visible, four portals clearly readable, no UI chrome.
+
+Constraints: no text, no labels, no logos, no watermarks, no photorealism.

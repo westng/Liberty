@@ -1,0 +1,30 @@
+Create a production-ready 3x3 sprite sheet for a cozy 2D hand-painted game factory worker animation.
+
+Reference/standard:
+- The output is a game asset sprite sheet, not an illustration collage.
+- 9 frames in a 3 by 3 layout, read left-to-right and top-to-bottom.
+- Each frame shows the exact same cute factory worker character, same face, same outfit, same cap/goggles, same small screwdriver, same camera angle, same scale, same body proportions.
+- The character must keep the same feet/ground registration point in every frame. No zooming, no resizing, no drifting, no changing viewpoint.
+- The frame canvas must leave consistent padding. The worker should fit within about 70 percent of each cell height.
+- No visible grid lines, no cell borders, no numbers, no text, no labels, no UI.
+
+Animation sequence:
+1 idle ready stance holding screwdriver low
+2 lean toward small part
+3 screwdriver positioned on screw
+4 twisting clockwise
+5 stronger twist with tiny metallic spark
+6 checking assembled part
+7 small hand movement placing part down
+8 recovery stance
+9 return to idle ready stance
+
+Style:
+- Cute cozy floating-island farm game style, painterly texture, rounded shapes, warm clean colors, soft shading.
+- 3/4 isometric game character angle suitable for placing on a factory map.
+- Character only with screwdriver and tiny screw/metal spark accents; no workbench, no machine, no environment, no UI frame.
+
+Background/removal:
+- Use a perfectly flat solid #00ff00 chroma-key background across the whole image.
+- The background must be one uniform color, with no shadows, gradients, texture, lighting variation, floor plane, or reflections.
+- Do not use #00ff00 anywhere on the character, tool, sparks, or small part.
