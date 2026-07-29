@@ -7,6 +7,7 @@ use objc2_app_kit::{
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::NSString;
 use objc2_quartz_core::CALayer;
+use std::path::Path;
 
 const BUBBLE_LAYER_NAME: &str = "LibertyDesktopPetBubbleLayer";
 const GROWTH_LABEL_TAG: isize = 8102;

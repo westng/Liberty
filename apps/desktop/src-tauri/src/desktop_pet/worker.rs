@@ -63,6 +63,9 @@ pub(crate) fn create_pet_window(
         ),
     }
 
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let _ = interaction_signal;
+
     #[cfg(windows)]
     {
         let window_clone = window.clone();
@@ -230,6 +233,7 @@ fn run_pet_worker(context: PetWorkerContext) {
     let mut last_action = PetAction::Slack;
     let mut last_refresh = SystemTime::now();
     let mut last_proactive_bubble = SystemTime::now();
+    #[cfg(any(windows, target_os = "macos"))]
     let mut first_frame_logged = false;
     let mut handled_interactions = interaction_signal.load(Ordering::Relaxed);
     let mut last_speech_event_id = String::new();
@@ -395,7 +399,15 @@ fn run_pet_worker(context: PetWorkerContext) {
 
         #[cfg(not(any(windows, target_os = "macos")))]
         {
-            let _ = (&window, &frame_path);
+            let _ = (
+                &window,
+                &frame_path,
+                bubble_text.as_deref(),
+                bubble_theme.is_dark(),
+                growth_float
+                    .as_ref()
+                    .map(|value| (value.value, value.started_at)),
+            );
         }
 
         if growth_float.is_none() {

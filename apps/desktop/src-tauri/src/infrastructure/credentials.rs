@@ -8,6 +8,7 @@ use crate::domain::error::AppError;
 
 pub type CredentialResult<T> = Result<T, AppError>;
 
+#[cfg(any(target_os = "macos", windows))]
 const SERVICE_NAME: &str = "LibertyDesktop";
 #[cfg(target_os = "macos")]
 const MACOS_SECURITY_PATH: &str = "/usr/bin/security";

@@ -1,8 +1,11 @@
 use super::drag::{DragPoint, PetDragMachine, PetDragMove};
 use super::*;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc, Mutex,
+use std::{
+    path::Path,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
 };
 use tauri::PhysicalPosition;
 use windows_sys::{

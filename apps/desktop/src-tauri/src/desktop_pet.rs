@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
