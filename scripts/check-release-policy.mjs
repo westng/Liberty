@@ -67,6 +67,8 @@ assertMatch(
 );
 
 const buildJob = readJob(buildWorkflow, "build");
+const prepareJob = readJob(buildWorkflow, "prepare");
+const reserveJob = readJob(buildWorkflow, "reserve");
 const releaseJob = readJob(buildWorkflow, "release");
 for (const [jobName, job] of [["build", buildJob], ["release", releaseJob]]) {
   if (!/needs:\s*(?:\n\s+-[^\n]*)*\n\s+- quality\b/.test(job)
@@ -91,13 +93,13 @@ assertMatch(
   "release job must verify the immutable tag and absent Release",
 );
 assertMatch(
-  releaseJob,
+  reserveJob,
   /release_id="\$\(\s*\n\s*gh api(?:.|\n)*?--method POST(?:.|\n)*?repos\/\$\{GITHUB_REPOSITORY\}\/releases(?:.|\n)*?--jq "\.id"/,
-  "release job must capture the created draft ID from the create response",
+  "reserve job must capture the created draft ID from the create response",
 );
-assertMatch(releaseJob, /-F draft=true\b/, "Release must remain a draft until every asset is verified");
+assertMatch(reserveJob, /-F draft=true\b/, "Release must remain a draft until every asset is verified");
 assertMatch(
-  releaseJob,
+  reserveJob,
   /-f target_commitish="\$\{TARGET_COMMIT\}"/,
   "manual publication must create its version tag at the validated commit",
 );
@@ -106,10 +108,36 @@ assertMatch(
   /--require-draft-release-id\b/,
   "release job must recheck the immutable tag and exact draft before publication",
 );
+assertMatch(
+  releaseJob,
+  /--require-published-release-id\b/,
+  "release job must verify the exact public Release after publication",
+);
+assertMatch(
+  reserveJob,
+  /name: Upload Reserved Release State(?:.|\n)*?name: release-state/,
+  "reserve job must pass the draft ID through an immutable run artifact",
+);
+if (/outputs:\n(?:.|\n)*?(?:resumable_draft_id|release_state_fingerprint):/.test(prepareJob)) {
+  errors.push("prepare must not expose a GitHub Release ID as a cross-job output");
+}
+if (!/permissions:\s*\n\s+contents:\s*read\b/.test(prepareJob)) {
+  errors.push("prepare job must remain read-only");
+}
+if (!/permissions:\s*\n\s+contents:\s*write\b/.test(reserveJob)) {
+  errors.push("only the reserve job may create or resume the draft Release");
+}
+if (!/needs:\s*(?:\n\s+-[^\n]*)*\n\s+- reserve\b/.test(buildJob)) {
+  errors.push("build job must wait until the Release slot is reserved");
+}
+assertMatch(
+  releaseJob,
+  /https:\/\/uploads\.github\.com\/repos\/\$\{GITHUB_REPOSITORY\}\/releases\/\$\{release_id\}\/assets/,
+  "release assets must upload directly to the validated draft ID",
+);
 
 const releaseSteps = [
   "Assemble and Validate Release Assets",
-  "Resolve Draft Release",
   "Plan Draft Asset Upload",
   "Upload Missing Draft Assets",
   "Verify Uploaded Assets",
@@ -149,14 +177,14 @@ for (const command of [
   }
 }
 
-for (const recoveryGuard of [
-  "--allow-resumable-draft",
-  "plan-draft-upload",
-  "draft-upload-list.txt",
-  "liberty-release-commit:",
+for (const [jobName, job, recoveryGuards] of [
+  ["reserve", reserveJob, ["--allow-resumable-draft", "liberty-release-commit:"]],
+  ["release", releaseJob, ["plan-draft-upload", "draft-upload-list.txt"]],
 ]) {
-  if (!releaseJob.includes(recoveryGuard)) {
-    errors.push(`release workflow is missing draft recovery guard: ${recoveryGuard}`);
+  for (const recoveryGuard of recoveryGuards) {
+    if (!job.includes(recoveryGuard)) {
+      errors.push(`${jobName} job is missing draft recovery guard: ${recoveryGuard}`);
+    }
   }
 }
 

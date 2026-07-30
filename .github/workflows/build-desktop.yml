@@ -38,9 +38,10 @@ jobs:
       release_tag: ${{ steps.context.outputs.release_tag }}
       release_version: ${{ steps.context.outputs.release_version }}
       target_commit: ${{ steps.context.outputs.target_commit }}
-      resumable_draft_id: ${{ steps.context.outputs.resumable_draft_id }}
       build_matrix: ${{ steps.context.outputs.build_matrix }}
       should_publish: ${{ steps.context.outputs.should_publish }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -57,16 +58,13 @@ jobs:
         id: context
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
           MANUAL_PUBLISH: ${{ inputs.publish_release }}
         run: |
           release_version="$(node scripts/check-version-consistency.mjs --print-version)"
           target_commit="$(git rev-parse HEAD)"
           build_matrix="$(node scripts/check-platform-matrix.mjs --print-matrix)"
           release_tag=""
-          resumable_draft_id=""
           should_publish="false"
-          release_state_args=()
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
             release_tag="${GITHUB_REF_NAME}"
@@ -78,20 +76,12 @@ jobs:
             fi
             release_tag="v${release_version}"
             should_publish="true"
-            release_state_args+=(--allow-absent-tag)
           fi
 
           if [[ "${should_publish}" == "true" ]]; then
             node scripts/check-version-consistency.mjs \
               --tag "${release_tag}" \
               --changelog-output release-changelog.md
-            resumable_draft_id="$(node scripts/check-release-state.mjs \
-              --repository "${GITHUB_REPOSITORY}" \
-              --tag "${release_tag}" \
-              --expected-commit "${target_commit}" \
-              --allow-resumable-draft \
-              --print-release-id \
-              "${release_state_args[@]}")"
 
             if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
               printf "Manual run: v%s will be published after every build and asset check succeeds.\n" \
@@ -105,15 +95,117 @@ jobs:
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "release_version=${release_version}" >> "${GITHUB_OUTPUT}"
           echo "target_commit=${target_commit}" >> "${GITHUB_OUTPUT}"
-          echo "resumable_draft_id=${resumable_draft_id}" >> "${GITHUB_OUTPUT}"
           echo "build_matrix=${build_matrix}" >> "${GITHUB_OUTPUT}"
           echo "should_publish=${should_publish}" >> "${GITHUB_OUTPUT}"
+
+  reserve:
+    name: Reserve Release Publication
+    needs:
+      - prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Validated Commit
+        if: needs.prepare.outputs.should_publish == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.target_commit }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        if: needs.prepare.outputs.should_publish == 'true'
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Reserve Draft Release
+        if: needs.prepare.outputs.should_publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
+        run: |
+          node scripts/check-version-consistency.mjs \
+            --tag "${RELEASE_TAG}" \
+            --changelog-output release-changelog.md
+
+          release_state_args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            release_state_args+=(--allow-absent-tag)
+          fi
+
+          release_id="$(node scripts/check-release-state.mjs \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${RELEASE_TAG}" \
+            --expected-commit "${TARGET_COMMIT}" \
+            --allow-resumable-draft \
+            --print-release-id \
+            "${release_state_args[@]}")"
+
+          if [[ -z "${release_id}" ]]; then
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="${RELEASE_TAG}" \
+              -f target_commitish="${TARGET_COMMIT}" \
+              --jq ".body" > github-release-notes.md
+
+            {
+              printf '<!-- liberty-release-commit:%s -->\n\n' "${TARGET_COMMIT,,}"
+              cat release-changelog.md
+              printf "\n\n---\n\n"
+              printf "## GitHub 自动生成记录\n\n"
+              cat github-release-notes.md
+            } > release-notes.md
+
+            node scripts/check-release-state.mjs \
+              --repository "${GITHUB_REPOSITORY}" \
+              --tag "${RELEASE_TAG}" \
+              --expected-commit "${TARGET_COMMIT}" \
+              --require-absent-release \
+              "${release_state_args[@]}"
+
+            release_id="$(
+              gh api \
+                --method POST \
+                "repos/${GITHUB_REPOSITORY}/releases" \
+                -f tag_name="${RELEASE_TAG}" \
+                -f target_commitish="${TARGET_COMMIT}" \
+                -f name="Liberty ${RELEASE_TAG}" \
+                -F body=@release-notes.md \
+                -F draft=true \
+                --jq ".id"
+            )"
+          fi
+
+          node scripts/check-release-state.mjs \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${RELEASE_TAG}" \
+            --expected-commit "${TARGET_COMMIT}" \
+            --require-draft-release-id "${release_id}" \
+            "${release_state_args[@]}"
+
+          mkdir release-state
+          printf '%s' "${release_id}" > release-state/release-id.txt
+
+      - name: Upload Reserved Release State
+        if: needs.prepare.outputs.should_publish == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-state
+          path: release-state/
+          if-no-files-found: error
+          retention-days: 1
 
   build:
     name: Build (${{ matrix.name }})
     needs:
       - quality
       - prepare
+      - reserve
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -180,6 +272,7 @@ jobs:
     needs:
       - quality
       - prepare
+      - reserve
       - build
     if: needs.prepare.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
@@ -199,34 +292,36 @@ jobs:
         with:
           node-version: 24
 
+      - name: Download Reserved Release State
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-state
+          path: release-state
+
       - name: Download Validated Build Artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
+          pattern: liberty-*
           path: release-assets
 
-      - name: Verify Immutable Tag and Release State
+      - name: Verify Reserved Release State
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RESUMABLE_DRAFT_ID: ${{ needs.prepare.outputs.resumable_draft_id }}
           TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
         run: |
+          release_id="$(cat release-state/release-id.txt)"
           release_state_args=()
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             release_state_args+=(--allow-absent-tag)
           fi
-          current_draft_id="$(node scripts/check-release-state.mjs \
+          node scripts/check-release-state.mjs \
             --repository "${GITHUB_REPOSITORY}" \
             --tag "${RELEASE_TAG}" \
             --expected-commit "${TARGET_COMMIT}" \
-            --allow-resumable-draft \
-            --print-release-id \
-            "${release_state_args[@]}")"
-          if [[ "${current_draft_id}" != "${RESUMABLE_DRAFT_ID}" ]]; then
-            echo "::error::Release state changed while builds were running."
-            exit 1
-          fi
+            --require-draft-release-id "${release_id}" \
+            "${release_state_args[@]}"
 
       - name: Assemble and Validate Release Assets
         shell: bash
@@ -249,89 +344,15 @@ jobs:
             --manifest "release-manifest.json" \
             --allow-checksums
 
-      - name: Generate Release Notes
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
-        run: |
-          node scripts/check-version-consistency.mjs \
-            --tag "${RELEASE_TAG}" \
-            --changelog-output release-changelog.md
-
-          gh api \
-            --method POST \
-            "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
-            -f tag_name="${RELEASE_TAG}" \
-            -f target_commitish="${TARGET_COMMIT}" \
-            --jq ".body" > github-release-notes.md
-
-          {
-            printf '<!-- liberty-release-commit:%s -->\n\n' "${TARGET_COMMIT,,}"
-            cat release-changelog.md
-            printf "\n\n---\n\n"
-            printf "## GitHub 自动生成记录\n\n"
-            cat github-release-notes.md
-          } > release-notes.md
-
-      - name: Resolve Draft Release
-        id: draft
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RESUMABLE_DRAFT_ID: ${{ needs.prepare.outputs.resumable_draft_id }}
-          TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
-        run: |
-          release_state_args=()
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            release_state_args+=(--allow-absent-tag)
-          fi
-          release_id="${RESUMABLE_DRAFT_ID}"
-          if [[ -z "${release_id}" ]]; then
-            node scripts/check-release-state.mjs \
-              --repository "${GITHUB_REPOSITORY}" \
-              --tag "${RELEASE_TAG}" \
-              --expected-commit "${TARGET_COMMIT}" \
-              --require-absent-release \
-              "${release_state_args[@]}"
-
-            release_id="$(
-              gh api \
-                --method POST \
-                "repos/${GITHUB_REPOSITORY}/releases" \
-                -f tag_name="${RELEASE_TAG}" \
-                -f target_commitish="${TARGET_COMMIT}" \
-                -f name="Liberty ${RELEASE_TAG}" \
-                -F body=@release-notes.md \
-                -F draft=true \
-                --jq ".id"
-            )"
-          fi
-
-          if [[ -z "${release_id}" ]]; then
-            echo "::error::Draft Release ${RELEASE_TAG} was not found."
-            exit 1
-          fi
-
-          node scripts/check-release-state.mjs \
-            --repository "${GITHUB_REPOSITORY}" \
-            --tag "${RELEASE_TAG}" \
-            --expected-commit "${TARGET_COMMIT}" \
-            --require-draft-release-id "${release_id}" \
-            "${release_state_args[@]}"
-          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
-
       - name: Plan Draft Asset Upload
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
         run: |
+          release_id="$(cat release-state/release-id.txt)"
           mkdir draft-existing
           gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?per_page=100" \
+            "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" \
             --jq '.[] | [.id, .name] | @tsv' \
           | while IFS=$'\t' read -r asset_id asset_name; do
               if [[ ! "${asset_name}" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -354,22 +375,41 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
+          release_id="$(cat release-state/release-id.txt)"
+          upload_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq '.upload_url')"
+          upload_url="${upload_url%%\{*}"
+          expected_upload_url="https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets"
+          if [[ "${upload_url}" != "${expected_upload_url}" ]]; then
+            echo "::error::GitHub returned an unexpected Release upload URL."
+            exit 1
+          fi
           while IFS= read -r asset_name; do
             [[ -z "${asset_name}" ]] && continue
-            gh release upload "${RELEASE_TAG}" "release-upload/${asset_name}"
+            if [[ ! "${asset_name}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "::error::Unsafe Release asset name: ${asset_name}"
+              exit 1
+            fi
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@release-upload/${asset_name}" \
+              "${upload_url}?name=${asset_name}" \
+              >/dev/null
           done < draft-upload-list.txt
 
       - name: Verify Uploaded Assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
         run: |
+          release_id="$(cat release-state/release-id.txt)"
           mkdir release-verify
           gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?per_page=100" \
+            "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" \
             --jq '.[] | [.id, .name] | @tsv' \
           | while IFS=$'\t' read -r asset_id asset_name; do
               if [[ ! "${asset_name}" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -391,9 +431,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
-          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
           TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
         run: |
+          release_id="$(cat release-state/release-id.txt)"
           release_state_args=()
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             release_state_args+=(--allow-absent-tag)
@@ -402,15 +442,27 @@ jobs:
             --repository "${GITHUB_REPOSITORY}" \
             --tag "${RELEASE_TAG}" \
             --expected-commit "${TARGET_COMMIT}" \
-            --require-draft-release-id "${RELEASE_ID}" \
+            --require-draft-release-id "${release_id}" \
             "${release_state_args[@]}"
 
           gh api \
             --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
             -F draft=false >/dev/null
 
-          node scripts/check-release-state.mjs \
-            --repository "${GITHUB_REPOSITORY}" \
-            --tag "${RELEASE_TAG}" \
-            --expected-commit "${TARGET_COMMIT}"
+          published="false"
+          for attempt in 1 2 3 4 5; do
+            if node scripts/check-release-state.mjs \
+              --repository "${GITHUB_REPOSITORY}" \
+              --tag "${RELEASE_TAG}" \
+              --expected-commit "${TARGET_COMMIT}" \
+              --require-published-release-id "${release_id}"; then
+              published="true"
+              break
+            fi
+            sleep "$((attempt * 2))"
+          done
+          if [[ "${published}" != "true" ]]; then
+            echo "::error::Published Release ${RELEASE_TAG} did not reach a stable public state."
+            exit 1
+          fi

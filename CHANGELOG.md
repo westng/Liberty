@@ -20,6 +20,7 @@
 
 - 修复 Word 会议纪要导出偶发遗漏参会人员或内容的问题，导出时以用户选定的完整 AI 总结结果为唯一数据源并保持纪要格式。
 - 修复 Windows x64/x86 编译、安装包生成及 MSI/NSIS 发布资产校验问题。
+- 修复桌面发布流程复用草稿时因权限隔离和跨作业输出过滤导致构建完成后无法发布的问题，改为先预留草稿并按唯一 Release ID 上传、校验及发布资产。
 - 修复桌宠渲染和平台相关代码在严格格式、Clippy 与 Windows 编译检查中的兼容性问题。
 
 ### English
@@ -40,6 +41,7 @@
 
 - Fixed intermittent missing attendees or content in exported Word meeting notes by using the complete user-selected AI summary run as the authoritative export source while preserving note formatting.
 - Fixed Windows x64/x86 compilation, installer generation, and MSI/NSIS release asset validation.
+- Fixed draft-resume publishing failures caused by permission isolation and filtered cross-job outputs by reserving the draft first and binding asset upload, verification, and publication to its exact Release ID.
 - Fixed desktop pet rendering and platform-specific compatibility issues caught by strict formatting, Clippy, and Windows compile checks.
 
 ## 1.1.23 - 2026-06-06

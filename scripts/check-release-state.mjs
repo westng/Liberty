@@ -51,7 +51,31 @@ if (tagRef && target.sha.toLowerCase() !== args.expectedCommit.toLowerCase()) {
 }
 
 let release;
-if (args.requireAbsentRelease || args.allowResumableDraft || args.requiredDraftReleaseId) {
+if (args.requiredDraftReleaseId || args.requiredPublishedReleaseId) {
+  const requiredReleaseId = args.requiredDraftReleaseId ?? args.requiredPublishedReleaseId;
+  release = await request(`/repos/${args.repository}/releases/${requiredReleaseId}`);
+  if (!release || release.tag_name !== args.tag) {
+    fail([
+      `Release id ${requiredReleaseId} must belong to ${args.tag}.`,
+      release ? `Found tag ${release.tag_name}.` : "The Release no longer exists.",
+    ]);
+  }
+
+  if (args.requiredDraftReleaseId) {
+    if (release.draft !== true) {
+      fail([`Release ${args.tag} must remain draft id ${args.requiredDraftReleaseId}.`]);
+    }
+    assertReleaseIdentity(release);
+  } else {
+    if (!tagRef) {
+      fail([`Published Release ${args.tag} exists without its immutable tag.`]);
+    }
+    if (release.draft === true || !release.published_at) {
+      fail([`Release ${args.tag} id ${args.requiredPublishedReleaseId} is not public.`]);
+    }
+    assertReleaseIdentity(release);
+  }
+} else if (args.requireAbsentRelease || args.allowResumableDraft) {
   const releases = await listReleases(args.repository);
   const matchingReleases = releases.filter((release) => release.tag_name === args.tag);
   const directRelease = args.requireAbsentRelease
@@ -76,19 +100,6 @@ if (args.requireAbsentRelease || args.allowResumableDraft || args.requiredDraftR
     ]);
   }
 
-  if (args.requiredDraftReleaseId) {
-    if (matchingReleases.length !== 1) {
-      fail([`Expected exactly one draft Release for ${args.tag}; found ${matchingReleases.length}.`]);
-    }
-    if (String(release.id) !== args.requiredDraftReleaseId || release.draft !== true) {
-      fail([
-        `Release ${args.tag} must remain draft id ${args.requiredDraftReleaseId}.`,
-        `Found id=${release.id}, draft=${Boolean(release.draft)}.`,
-      ]);
-    }
-    assertResumableDraft(release);
-  }
-
   if (args.allowResumableDraft && release) {
     assertResumableDraft(release);
   }
@@ -104,6 +115,8 @@ if (!args.printReleaseId) {
       ? `Draft Release ${release.id} for ${args.tag} targets ${args.expectedCommit} and can be resumed safely.`
       : !tagRef
       ? `Release tag ${args.tag} is available and the Release slot is unused.`
+      : args.requiredPublishedReleaseId
+      ? `Immutable tag ${args.tag} resolves to ${target.sha}; Release ${args.requiredPublishedReleaseId} is public.`
       : args.requiredDraftReleaseId
       ? `Immutable tag ${args.tag} still resolves to ${target.sha}; draft Release ${args.requiredDraftReleaseId} is intact.`
       : args.allowResumableDraft && release
@@ -113,10 +126,14 @@ if (!args.printReleaseId) {
 }
 
 function assertResumableDraft(release) {
-  const marker = `<!-- liberty-release-commit:${args.expectedCommit.toLowerCase()} -->`;
   if (release.draft !== true) {
     fail([`Release ${args.tag} already exists and is public; refusing to replace it.`]);
   }
+  assertReleaseIdentity(release);
+}
+
+function assertReleaseIdentity(release) {
+  const marker = `<!-- liberty-release-commit:${args.expectedCommit.toLowerCase()} -->`;
   if (
     release.name !== `Liberty ${args.tag}`
     || !(release.body ?? "").includes(marker)
@@ -180,6 +197,7 @@ function parseArgs(values) {
     allowResumableDraft: false,
     printReleaseId: false,
     requiredDraftReleaseId: undefined,
+    requiredPublishedReleaseId: undefined,
     allowAbsentTag: false,
   };
 
@@ -207,6 +225,7 @@ function parseArgs(values) {
       "--tag": "tag",
       "--expected-commit": "expectedCommit",
       "--require-draft-release-id": "requiredDraftReleaseId",
+      "--require-published-release-id": "requiredPublishedReleaseId",
     }[value];
     if (!key || !values[index + 1]) {
       fail([key ? `${value} requires a value.` : `Unknown argument: ${value}`]);
@@ -224,10 +243,11 @@ function parseArgs(values) {
     parsed.requireAbsentRelease,
     parsed.allowResumableDraft,
     Boolean(parsed.requiredDraftReleaseId),
+    Boolean(parsed.requiredPublishedReleaseId),
   ].filter(Boolean);
   if (releaseModes.length > 1) {
     fail([
-      "--require-absent-release, --allow-resumable-draft, and --require-draft-release-id are mutually exclusive.",
+      "Release-state requirements are mutually exclusive.",
     ]);
   }
   if (parsed.printReleaseId && !parsed.allowResumableDraft) {
