@@ -90,11 +90,15 @@ assertMatch(
   /node scripts\/check-release-state\.mjs/,
   "release job must verify the immutable tag and absent Release",
 );
-assertMatch(releaseJob, /gh release create[^\n]*|gh release create/, "release job must create a Release");
-assertMatch(releaseJob, /--draft\b/, "Release must remain a draft until every asset is verified");
 assertMatch(
   releaseJob,
-  /--target\s+["']?\$\{TARGET_COMMIT\}/,
+  /release_id="\$\(\s*\n\s*gh api(?:.|\n)*?--method POST(?:.|\n)*?repos\/\$\{GITHUB_REPOSITORY\}\/releases(?:.|\n)*?--jq "\.id"/,
+  "release job must capture the created draft ID from the create response",
+);
+assertMatch(releaseJob, /-F draft=true\b/, "Release must remain a draft until every asset is verified");
+assertMatch(
+  releaseJob,
+  /-f target_commitish="\$\{TARGET_COMMIT\}"/,
   "manual publication must create its version tag at the validated commit",
 );
 assertMatch(
@@ -154,6 +158,10 @@ for (const recoveryGuard of [
   if (!releaseJob.includes(recoveryGuard)) {
     errors.push(`release workflow is missing draft recovery guard: ${recoveryGuard}`);
   }
+}
+
+if (/gh api --paginate "repos\/\$\{GITHUB_REPOSITORY\}\/releases\?per_page/.test(releaseJob)) {
+  errors.push("release job must not rediscover a newly created draft through an eventually consistent list");
 }
 
 if (errors.length > 0) {

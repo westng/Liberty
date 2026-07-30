@@ -284,21 +284,12 @@ jobs:
           RESUMABLE_DRAFT_ID: ${{ needs.prepare.outputs.resumable_draft_id }}
           TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
         run: |
+          release_state_args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            release_state_args+=(--allow-absent-tag)
+          fi
           release_id="${RESUMABLE_DRAFT_ID}"
           if [[ -z "${release_id}" ]]; then
-            release_state_args=()
-            release_create_args=(
-              --title "Liberty ${RELEASE_TAG}"
-              --notes-file release-notes.md
-              --draft
-            )
-            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-              release_state_args+=(--allow-absent-tag)
-              release_create_args+=(--target "${TARGET_COMMIT}")
-            else
-              release_create_args+=(--verify-tag)
-            fi
-
             node scripts/check-release-state.mjs \
               --repository "${GITHUB_REPOSITORY}" \
               --tag "${RELEASE_TAG}" \
@@ -306,12 +297,17 @@ jobs:
               --require-absent-release \
               "${release_state_args[@]}"
 
-            gh release create "${RELEASE_TAG}" "${release_create_args[@]}"
-
-            release_id="$({
-              gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-                --jq ".[] | select(.tag_name == \"${RELEASE_TAG}\") | .id"
-            } | head -n 1)"
+            release_id="$(
+              gh api \
+                --method POST \
+                "repos/${GITHUB_REPOSITORY}/releases" \
+                -f tag_name="${RELEASE_TAG}" \
+                -f target_commitish="${TARGET_COMMIT}" \
+                -f name="Liberty ${RELEASE_TAG}" \
+                -F body=@release-notes.md \
+                -F draft=true \
+                --jq ".id"
+            )"
           fi
 
           if [[ -z "${release_id}" ]]; then
@@ -323,7 +319,8 @@ jobs:
             --repository "${GITHUB_REPOSITORY}" \
             --tag "${RELEASE_TAG}" \
             --expected-commit "${TARGET_COMMIT}" \
-            --require-draft-release-id "${release_id}"
+            --require-draft-release-id "${release_id}" \
+            "${release_state_args[@]}"
           echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
 
       - name: Plan Draft Asset Upload
@@ -397,13 +394,23 @@ jobs:
           RELEASE_ID: ${{ steps.draft.outputs.release_id }}
           TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
         run: |
+          release_state_args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            release_state_args+=(--allow-absent-tag)
+          fi
           node scripts/check-release-state.mjs \
             --repository "${GITHUB_REPOSITORY}" \
             --tag "${RELEASE_TAG}" \
             --expected-commit "${TARGET_COMMIT}" \
-            --require-draft-release-id "${RELEASE_ID}"
+            --require-draft-release-id "${RELEASE_ID}" \
+            "${release_state_args[@]}"
 
           gh api \
             --method PATCH \
             "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
             -F draft=false >/dev/null
+
+          node scripts/check-release-state.mjs \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${RELEASE_TAG}" \
+            --expected-commit "${TARGET_COMMIT}"

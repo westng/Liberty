@@ -62,7 +62,7 @@ if (args.requireAbsentRelease || args.allowResumableDraft || args.requiredDraftR
   if (matchingReleases.length > 1) {
     fail([`Expected at most one Release for ${args.tag}; found ${matchingReleases.length}.`]);
   }
-  if (!tagRef && release) {
+  if (!tagRef && release && !(args.allowAbsentTag && release.draft === true)) {
     fail([`Release ${args.tag} exists without its immutable tag; refusing to adopt it.`]);
   }
 
@@ -100,7 +100,9 @@ if (args.requireAbsentRelease || args.allowResumableDraft || args.requiredDraftR
 
 if (!args.printReleaseId) {
   console.log(
-    !tagRef
+    !tagRef && release
+      ? `Draft Release ${release.id} for ${args.tag} targets ${args.expectedCommit} and can be resumed safely.`
+      : !tagRef
       ? `Release tag ${args.tag} is available and the Release slot is unused.`
       : args.requiredDraftReleaseId
       ? `Immutable tag ${args.tag} still resolves to ${target.sha}; draft Release ${args.requiredDraftReleaseId} is intact.`
@@ -115,7 +117,11 @@ function assertResumableDraft(release) {
   if (release.draft !== true) {
     fail([`Release ${args.tag} already exists and is public; refusing to replace it.`]);
   }
-  if (release.name !== `Liberty ${args.tag}` || !(release.body ?? "").includes(marker)) {
+  if (
+    release.name !== `Liberty ${args.tag}`
+    || !(release.body ?? "").includes(marker)
+    || release.target_commitish?.toLowerCase() !== args.expectedCommit.toLowerCase()
+  ) {
     fail([
       `Draft Release ${args.tag} was not created for commit ${args.expectedCommit}.`,
       "Refusing to adopt, edit, or delete the existing draft.",
@@ -226,9 +232,6 @@ function parseArgs(values) {
   }
   if (parsed.printReleaseId && !parsed.allowResumableDraft) {
     fail(["--print-release-id requires --allow-resumable-draft."]);
-  }
-  if (parsed.allowAbsentTag && parsed.requiredDraftReleaseId) {
-    fail(["--allow-absent-tag cannot be used with --require-draft-release-id."]);
   }
   return parsed;
 }
