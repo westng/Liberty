@@ -5,6 +5,12 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "构建成功后发布 GitHub Release"
+        required: true
+        default: false
+        type: boolean
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -34,6 +40,7 @@ jobs:
       target_commit: ${{ steps.context.outputs.target_commit }}
       resumable_draft_id: ${{ steps.context.outputs.resumable_draft_id }}
       build_matrix: ${{ steps.context.outputs.build_matrix }}
+      should_publish: ${{ steps.context.outputs.should_publish }}
 
     steps:
       - name: Checkout
@@ -51,25 +58,46 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          MANUAL_PUBLISH: ${{ inputs.publish_release }}
         run: |
           release_version="$(node scripts/check-version-consistency.mjs --print-version)"
           target_commit="$(git rev-parse HEAD)"
           build_matrix="$(node scripts/check-platform-matrix.mjs --print-matrix)"
+          release_tag=""
+          resumable_draft_id=""
+          should_publish="false"
+          release_state_args=()
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_tag="${GITHUB_REF_NAME}"
+            should_publish="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${MANUAL_PUBLISH}" == "true" ]]; then
+            if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+              echo "::error::Manual releases must run from the main branch."
+              exit 1
+            fi
+            release_tag="v${release_version}"
+            should_publish="true"
+            release_state_args+=(--allow-absent-tag)
+          fi
+
+          if [[ "${should_publish}" == "true" ]]; then
             node scripts/check-version-consistency.mjs \
-              --tag "${GITHUB_REF_NAME}" \
+              --tag "${release_tag}" \
               --changelog-output release-changelog.md
             resumable_draft_id="$(node scripts/check-release-state.mjs \
               --repository "${GITHUB_REPOSITORY}" \
-              --tag "${GITHUB_REF_NAME}" \
+              --tag "${release_tag}" \
               --expected-commit "${target_commit}" \
               --allow-resumable-draft \
-              --print-release-id)"
-            release_tag="${GITHUB_REF_NAME}"
+              --print-release-id \
+              "${release_state_args[@]}")"
+
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              printf "Manual run: v%s will be published after every build and asset check succeeds.\n" \
+                "${release_version}" >> "${GITHUB_STEP_SUMMARY}"
+            fi
           else
-            release_tag=""
-            resumable_draft_id=""
             printf "Manual run: build validation only; no tag or Release will be created.\n" \
               >> "${GITHUB_STEP_SUMMARY}"
           fi
@@ -79,6 +107,7 @@ jobs:
           echo "target_commit=${target_commit}" >> "${GITHUB_OUTPUT}"
           echo "resumable_draft_id=${resumable_draft_id}" >> "${GITHUB_OUTPUT}"
           echo "build_matrix=${build_matrix}" >> "${GITHUB_OUTPUT}"
+          echo "should_publish=${should_publish}" >> "${GITHUB_OUTPUT}"
 
   build:
     name: Build (${{ matrix.name }})
@@ -152,7 +181,7 @@ jobs:
       - quality
       - prepare
       - build
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: needs.prepare.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -183,12 +212,17 @@ jobs:
           RESUMABLE_DRAFT_ID: ${{ needs.prepare.outputs.resumable_draft_id }}
           TARGET_COMMIT: ${{ needs.prepare.outputs.target_commit }}
         run: |
+          release_state_args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            release_state_args+=(--allow-absent-tag)
+          fi
           current_draft_id="$(node scripts/check-release-state.mjs \
             --repository "${GITHUB_REPOSITORY}" \
             --tag "${RELEASE_TAG}" \
             --expected-commit "${TARGET_COMMIT}" \
             --allow-resumable-draft \
-            --print-release-id)"
+            --print-release-id \
+            "${release_state_args[@]}")"
           if [[ "${current_draft_id}" != "${RESUMABLE_DRAFT_ID}" ]]; then
             echo "::error::Release state changed while builds were running."
             exit 1
@@ -252,17 +286,27 @@ jobs:
         run: |
           release_id="${RESUMABLE_DRAFT_ID}"
           if [[ -z "${release_id}" ]]; then
+            release_state_args=()
+            release_create_args=(
+              --title "Liberty ${RELEASE_TAG}"
+              --notes-file release-notes.md
+              --draft
+            )
+            if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+              release_state_args+=(--allow-absent-tag)
+              release_create_args+=(--target "${TARGET_COMMIT}")
+            else
+              release_create_args+=(--verify-tag)
+            fi
+
             node scripts/check-release-state.mjs \
               --repository "${GITHUB_REPOSITORY}" \
               --tag "${RELEASE_TAG}" \
               --expected-commit "${TARGET_COMMIT}" \
-              --require-absent-release
+              --require-absent-release \
+              "${release_state_args[@]}"
 
-            gh release create "${RELEASE_TAG}" \
-              --title "Liberty ${RELEASE_TAG}" \
-              --notes-file release-notes.md \
-              --verify-tag \
-              --draft
+            gh release create "${RELEASE_TAG}" "${release_create_args[@]}"
 
             release_id="$({
               gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \

@@ -45,12 +45,6 @@ for (const [pattern, message] of [
   }
 }
 
-for (const forbiddenInput of ["publish_release", "version_mode", "INPUT_VERSION"]) {
-  if (buildWorkflow.includes(forbiddenInput)) {
-    errors.push(`manual builds must not expose ${forbiddenInput}`);
-  }
-}
-
 assertMatch(
   buildWorkflow,
   /push:\s*\n\s+tags:\s*\n\s+- ["']v\*["']/,
@@ -58,8 +52,13 @@ assertMatch(
 );
 assertMatch(
   buildWorkflow,
-  /workflow_dispatch:\s*(?:\n|$)/,
-  "desktop workflow must retain a manual build-only trigger",
+  /workflow_dispatch:\s*\n\s+inputs:\s*\n\s+publish_release:\s*\n(?:.|\n)*?required:\s*true\s*\n\s+default:\s*false\s*\n\s+type:\s*boolean/,
+  "desktop workflow must let manual runs choose whether to publish",
+);
+assertMatch(
+  buildWorkflow,
+  /GITHUB_REF[^\n]*refs\/heads\/main/,
+  "manual publication must be restricted to the main branch",
 );
 assertMatch(
   buildWorkflow,
@@ -78,8 +77,13 @@ for (const [jobName, job] of [["build", buildJob], ["release", releaseJob]]) {
 
 assertMatch(
   releaseJob,
-  /github\.event_name\s*==\s*'push'\s*&&\s*github\.ref_type\s*==\s*'tag'/,
-  "release job must reject workflow_dispatch publication",
+  /needs\.prepare\.outputs\.should_publish\s*==\s*'true'/,
+  "release job must follow the validated publication decision",
+);
+assertMatch(
+  buildWorkflow,
+  /--allow-absent-tag/,
+  "manual publication must safely reserve a previously unused version tag",
 );
 assertMatch(
   releaseJob,
@@ -88,6 +92,11 @@ assertMatch(
 );
 assertMatch(releaseJob, /gh release create[^\n]*|gh release create/, "release job must create a Release");
 assertMatch(releaseJob, /--draft\b/, "Release must remain a draft until every asset is verified");
+assertMatch(
+  releaseJob,
+  /--target\s+["']?\$\{TARGET_COMMIT\}/,
+  "manual publication must create its version tag at the validated commit",
+);
 assertMatch(
   releaseJob,
   /--require-draft-release-id\b/,
@@ -152,7 +161,7 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log("Release workflow enforces immutable tags, non-overwrite publication, and quality gates.");
+console.log("Release workflow supports explicit manual publication with immutable, non-overwriting releases.");
 
 function assertMatch(contents, pattern, message) {
   if (!pattern.test(contents)) {

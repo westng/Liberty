@@ -21,10 +21,12 @@ if (errors.length > 0) {
 
 const tagRef = await request(`/repos/${args.repository}/git/ref/tags/${encodeURIComponent(args.tag)}`);
 if (!tagRef) {
-  fail([`Immutable tag ${args.tag} does not exist in ${args.repository}.`]);
+  if (!args.allowAbsentTag) {
+    fail([`Immutable tag ${args.tag} does not exist in ${args.repository}.`]);
+  }
 }
 
-let target = tagRef.object;
+let target = tagRef?.object;
 const visitedTags = new Set();
 while (target?.type === "tag") {
   if (visitedTags.has(target.sha) || visitedTags.size >= 10) {
@@ -38,10 +40,10 @@ while (target?.type === "tag") {
   target = annotatedTag.object;
 }
 
-if (target?.type !== "commit") {
+if (tagRef && target?.type !== "commit") {
   fail([`Tag ${args.tag} resolves to ${target?.type ?? "nothing"}, not a commit.`]);
 }
-if (target.sha.toLowerCase() !== args.expectedCommit.toLowerCase()) {
+if (tagRef && target.sha.toLowerCase() !== args.expectedCommit.toLowerCase()) {
   fail([
     `Immutable tag ${args.tag} resolves to ${target.sha}, expected ${args.expectedCommit}.`,
     "Refusing to move or replace the tag.",
@@ -59,6 +61,9 @@ if (args.requireAbsentRelease || args.allowResumableDraft || args.requiredDraftR
 
   if (matchingReleases.length > 1) {
     fail([`Expected at most one Release for ${args.tag}; found ${matchingReleases.length}.`]);
+  }
+  if (!tagRef && release) {
+    fail([`Release ${args.tag} exists without its immutable tag; refusing to adopt it.`]);
   }
 
   if (args.requireAbsentRelease && release) {
@@ -95,7 +100,9 @@ if (args.requireAbsentRelease || args.allowResumableDraft || args.requiredDraftR
 
 if (!args.printReleaseId) {
   console.log(
-    args.requiredDraftReleaseId
+    !tagRef
+      ? `Release tag ${args.tag} is available and the Release slot is unused.`
+      : args.requiredDraftReleaseId
       ? `Immutable tag ${args.tag} still resolves to ${target.sha}; draft Release ${args.requiredDraftReleaseId} is intact.`
       : args.allowResumableDraft && release
         ? `Immutable tag ${args.tag} resolves to ${target.sha}; draft Release ${release.id} can be resumed without overwrites.`
@@ -167,6 +174,7 @@ function parseArgs(values) {
     allowResumableDraft: false,
     printReleaseId: false,
     requiredDraftReleaseId: undefined,
+    allowAbsentTag: false,
   };
 
   for (let index = 0; index < values.length; index += 1) {
@@ -181,6 +189,10 @@ function parseArgs(values) {
     }
     if (value === "--print-release-id") {
       parsed.printReleaseId = true;
+      continue;
+    }
+    if (value === "--allow-absent-tag") {
+      parsed.allowAbsentTag = true;
       continue;
     }
 
@@ -214,6 +226,9 @@ function parseArgs(values) {
   }
   if (parsed.printReleaseId && !parsed.allowResumableDraft) {
     fail(["--print-release-id requires --allow-resumable-draft."]);
+  }
+  if (parsed.allowAbsentTag && parsed.requiredDraftReleaseId) {
+    fail(["--allow-absent-tag cannot be used with --require-draft-release-id."]);
   }
   return parsed;
 }
