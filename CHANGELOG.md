@@ -1,5 +1,47 @@
 # 更新日志 / Changelog
 
+## 1.1.24 - 2026-07-30
+
+### 中文
+
+#### 新增
+
+- 新增工作中心、结果中心、职业任务与职业市场，集中呈现会议任务、处理结果和宠物工作玩法。
+- 新增农场、便利店、工厂和矿场等工作场景及配套地图、角色动画和任务资源。
+- 新增桌面构建的手动发布选项，可按需仅验证安装包或在全部校验通过后发布 GitHub Release。
+
+#### 调整
+
+- 重构 Python、FFmpeg 与 FunASR 模型的运行环境管理，各组件可独立选择本机环境或托管下载，模型下载不再等待其他组件完成。
+- 优化侧边栏、任务创建、任务列表、结果中心和游戏页面布局，减少重复状态信息并强化主要操作层级。
+- 强化桌面权限、单实例运行、后台任务调度、远程任务同步、凭据存储和跨平台质量门禁。
+
+#### 修复
+
+- 修复 Word 会议纪要导出偶发遗漏参会人员或内容的问题，导出时以用户选定的完整 AI 总结结果为唯一数据源并保持纪要格式。
+- 修复 Windows x64/x86 编译、安装包生成及 MSI/NSIS 发布资产校验问题。
+- 修复桌宠渲染和平台相关代码在严格格式、Clippy 与 Windows 编译检查中的兼容性问题。
+
+### English
+
+#### Added
+
+- Added the Work Hub, Results Center, career tasks, and Work Market to bring meeting jobs, processing results, and pet work activities into a clearer workflow.
+- Added farm, convenience store, factory, and mine work scenes with dedicated maps, character animations, and task assets.
+- Added a manual publishing option to desktop builds so a run can validate installers only or publish a GitHub Release after every check succeeds.
+
+#### Changed
+
+- Decoupled Python, FFmpeg, and FunASR model runtime management so each component can independently use a detected local environment or a managed download, while model downloads can start immediately.
+- Refined the sidebar, task creation, task list, Results Center, and game layouts to remove duplicate status panels and emphasize primary actions.
+- Hardened desktop permissions, single-instance behavior, background scheduling, remote job synchronization, credential storage, and cross-platform quality gates.
+
+#### Fixed
+
+- Fixed intermittent missing attendees or content in exported Word meeting notes by using the complete user-selected AI summary run as the authoritative export source while preserving note formatting.
+- Fixed Windows x64/x86 compilation, installer generation, and MSI/NSIS release asset validation.
+- Fixed desktop pet rendering and platform-specific compatibility issues caught by strict formatting, Clippy, and Windows compile checks.
+
 ## 1.1.23 - 2026-06-06
 
 ### 中文
