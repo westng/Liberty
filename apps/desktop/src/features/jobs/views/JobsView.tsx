@@ -12,6 +12,25 @@ import {
   jobWorkbenchPath,
 } from "./jobRoutes";
 
+function diarizationLabel(job: MeetingJob, messages: ReturnType<typeof getMessages>["jobs"]) {
+  if (!job.enableSpeaker || job.diarizationStatus === "disabled") {
+    return messages.transcriptOnly;
+  }
+  switch (job.diarizationStatus) {
+    case "completed":
+      return messages.diarizationCompleted;
+    case "unavailable":
+      return messages.diarizationUnavailable;
+    case "failed":
+      return messages.diarizationFailed;
+    case "legacy_unverified":
+      return messages.diarizationUnverified;
+    case "pending":
+    case "processing":
+      return messages.diarizationEnabled;
+  }
+}
+
 export default function JobsView() {
   const store = useMeetingStore();
   const router = useRouter();
@@ -197,7 +216,7 @@ export default function JobsView() {
                       {formatMessage(messages.fileDuration, { duration: formatFileDuration(job.durationMinutes) })}
                     </div>
                     <div className="job-meta-line">
-                      {job.enableSpeaker ? messages.diarizationEnabled : messages.transcriptOnly}
+                      {diarizationLabel(job, messages)}
                     </div>
                   </div>
 

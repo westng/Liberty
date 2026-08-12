@@ -16,11 +16,12 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "useDefineForClassFields": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@liberty-contracts/*": ["../../packages/shared-types/src/generated/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../packages/shared-types/src/generated/*.ts"]
 }

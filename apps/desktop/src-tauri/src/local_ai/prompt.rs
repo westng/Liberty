@@ -138,7 +138,7 @@ fn append_member_mapping(lines: &mut Vec<String>, input: &GenerateAiSummaryInput
 }
 
 fn primary_transcript_segments(job: &MeetingJob) -> &[TranscriptSegment] {
-    if job.enable_speaker && !job.speaker_segments.is_empty() {
+    if job.diarization_status.is_verified() && !job.speaker_segments.is_empty() {
         &job.speaker_segments
     } else {
         &job.transcript_segments

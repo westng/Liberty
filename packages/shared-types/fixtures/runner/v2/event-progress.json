@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 2,
+  "type": "progress",
+  "level": "info",
+  "code": "asr_transcribing",
+  "message": "正在进行本地转写。",
+  "revision": 1,
+  "timestamp": "1786536000000000000"
+}

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 
 def main():

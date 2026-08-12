@@ -1,4 +1,5 @@
 use crate::{
+    domain::transcript::TranscriptSegment,
     infrastructure::{repositories::ai_summary_runs, runner_files},
     local_db::{jobs_root, LocalResult},
 };
@@ -12,17 +13,22 @@ pub(crate) fn save_job_snapshot_tx(tx: &Transaction<'_>, job: &MeetingJob) -> Lo
     tx.execute(
         "INSERT INTO jobs (
             id, title, created_at, duration_minutes, lang, enable_speaker,
+            runner_protocol_version, asr_backend, diarization_status, warnings_json,
             summary_template, upload_status, asr_status, summary_status, overall_status,
             processing_started_at_ms, processing_finished_at_ms, processing_duration_seconds,
             failure_reason, process_log, python_path, runner_script_path, active_summary_run_id,
             last_exported_at, hotwords_json, export_formats_json
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
          ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             created_at = excluded.created_at,
             duration_minutes = excluded.duration_minutes,
             lang = excluded.lang,
             enable_speaker = excluded.enable_speaker,
+            runner_protocol_version = excluded.runner_protocol_version,
+            asr_backend = excluded.asr_backend,
+            diarization_status = excluded.diarization_status,
+            warnings_json = excluded.warnings_json,
             summary_template = excluded.summary_template,
             upload_status = excluded.upload_status,
             asr_status = excluded.asr_status,
@@ -46,6 +52,10 @@ pub(crate) fn save_job_snapshot_tx(tx: &Transaction<'_>, job: &MeetingJob) -> Lo
             i64::from(job.duration_minutes),
             job.lang,
             if job.enable_speaker { 1 } else { 0 },
+            job.runner_protocol_version.map(i64::from),
+            job.asr_backend.as_str(),
+            job.diarization_status.as_str(),
+            serde_json::to_string(&job.warnings).map_err(|err| err.to_string())?,
             job.summary_template,
             job.upload_status,
             job.asr_status,
@@ -136,6 +146,7 @@ pub(crate) fn load_job(
     let base = conn
         .query_row(
             "SELECT id, title, created_at, duration_minutes, lang, enable_speaker,
+                    runner_protocol_version, asr_backend, diarization_status, warnings_json,
                     summary_template, upload_status, asr_status, summary_status,
                     overall_status, processing_started_at_ms, processing_finished_at_ms,
                     processing_duration_seconds, failure_reason, process_log, python_path,
@@ -148,27 +159,33 @@ pub(crate) fn load_job(
                     title: row.get(1)?,
                     duration_minutes: row.get::<_, i64>(3)? as u32,
                     created_at: row.get(2)?,
-                    processing_started_at_ms: row.get::<_, Option<i64>>(11)?.map(|value| value as u64),
-                    processing_finished_at_ms: row.get::<_, Option<i64>>(12)?.map(|value| value as u64),
-                    processing_duration_seconds: row.get::<_, Option<i64>>(13)?.map(|value| value as u32),
+                    processing_started_at_ms: row.get::<_, Option<i64>>(15)?.map(|value| value as u64),
+                    processing_finished_at_ms: row.get::<_, Option<i64>>(16)?.map(|value| value as u64),
+                    processing_duration_seconds: row.get::<_, Option<i64>>(17)?.map(|value| value as u32),
                     progress_percent: None,
                     progress_message: None,
-                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(20)?)
+                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(24)?)
                         .unwrap_or_default(),
                     lang: row.get(4)?,
                     enable_speaker: row.get::<_, i64>(5)? != 0,
-                    summary_template: row.get(6)?,
-                    upload_status: row.get(7)?,
-                    asr_status: row.get(8)?,
-                    summary_status: row.get(9)?,
-                    overall_status: row.get(10)?,
-                    failure_reason: row.get(14)?,
-                    process_log: row.get(15)?,
-                    python_path: row.get(16)?,
-                    runner_script_path: row.get(17)?,
-                    active_summary_run_id: row.get(18)?,
-                    last_exported_at: row.get(19)?,
-                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(21)?)
+                    runner_protocol_version: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
+                    asr_backend: serde_json::from_value(serde_json::Value::String(row.get(7)?))
+                        .unwrap_or_default(),
+                    diarization_status: serde_json::from_value(serde_json::Value::String(row.get(8)?))
+                        .unwrap_or_default(),
+                    warnings: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
+                    summary_template: row.get(10)?,
+                    upload_status: row.get(11)?,
+                    asr_status: row.get(12)?,
+                    summary_status: row.get(13)?,
+                    overall_status: row.get(14)?,
+                    failure_reason: row.get(18)?,
+                    process_log: row.get(19)?,
+                    python_path: row.get(20)?,
+                    runner_script_path: row.get(21)?,
+                    active_summary_run_id: row.get(22)?,
+                    last_exported_at: row.get(23)?,
+                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(25)?)
                         .unwrap_or_else(|_| vec!["txt".into(), "md".into(), "srt".into(), "docx".into()]),
                     ..MeetingJob::default()
                 })
@@ -220,9 +237,7 @@ pub(crate) fn load_job(
 
     if should_apply_progress_snapshot(&job) {
         if let Some(dir) = active_attempt_dir(app, conn, &job.id)? {
-            if let Ok(progress) =
-                progress::read_json::<ProgressSnapshot>(&dir.join("progress.json"))
-            {
+            if let Ok(progress) = progress::read_runner_progress(&dir.join("progress.json")) {
                 progress::apply_progress_snapshot(&mut job, &progress);
             }
         }
@@ -243,6 +258,7 @@ pub(crate) fn load_job_summary(
     let mut job = conn
         .query_row(
             "SELECT id, title, created_at, duration_minutes, lang, enable_speaker,
+                    runner_protocol_version, asr_backend, diarization_status, warnings_json,
                     summary_template, upload_status, asr_status, summary_status,
                     overall_status, processing_started_at_ms, processing_finished_at_ms,
                     processing_duration_seconds, failure_reason, active_summary_run_id,
@@ -256,29 +272,39 @@ pub(crate) fn load_job_summary(
                     duration_minutes: row.get::<_, i64>(3)? as u32,
                     created_at: row.get(2)?,
                     processing_started_at_ms: row
-                        .get::<_, Option<i64>>(11)?
+                        .get::<_, Option<i64>>(15)?
                         .map(|value| value as u64),
                     processing_finished_at_ms: row
-                        .get::<_, Option<i64>>(12)?
+                        .get::<_, Option<i64>>(16)?
                         .map(|value| value as u64),
                     processing_duration_seconds: row
-                        .get::<_, Option<i64>>(13)?
+                        .get::<_, Option<i64>>(17)?
                         .map(|value| value as u32),
                     progress_percent: None,
                     progress_message: None,
-                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(17)?)
+                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(21)?)
                         .unwrap_or_default(),
                     lang: row.get(4)?,
                     enable_speaker: row.get::<_, i64>(5)? != 0,
-                    summary_template: row.get(6)?,
-                    upload_status: row.get(7)?,
-                    asr_status: row.get(8)?,
-                    summary_status: row.get(9)?,
-                    overall_status: row.get(10)?,
-                    failure_reason: row.get(14)?,
-                    active_summary_run_id: row.get(15)?,
-                    last_exported_at: row.get(16)?,
-                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(18)?)
+                    runner_protocol_version: row
+                        .get::<_, Option<i64>>(6)?
+                        .map(|value| value as u32),
+                    asr_backend: serde_json::from_value(serde_json::Value::String(row.get(7)?))
+                        .unwrap_or_default(),
+                    diarization_status: serde_json::from_value(serde_json::Value::String(
+                        row.get(8)?,
+                    ))
+                    .unwrap_or_default(),
+                    warnings: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
+                    summary_template: row.get(10)?,
+                    upload_status: row.get(11)?,
+                    asr_status: row.get(12)?,
+                    summary_status: row.get(13)?,
+                    overall_status: row.get(14)?,
+                    failure_reason: row.get(18)?,
+                    active_summary_run_id: row.get(19)?,
+                    last_exported_at: row.get(20)?,
+                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(22)?)
                         .unwrap_or_else(|_| {
                             vec!["txt".into(), "md".into(), "srt".into(), "docx".into()]
                         }),
@@ -293,9 +319,7 @@ pub(crate) fn load_job_summary(
     job.source_files = load_source_files(conn, &job.id)?;
     if should_apply_progress_snapshot(&job) {
         if let Some(dir) = active_attempt_dir(app, conn, &job.id)? {
-            if let Ok(progress) =
-                progress::read_json::<ProgressSnapshot>(&dir.join("progress.json"))
-            {
+            if let Ok(progress) = progress::read_runner_progress(&dir.join("progress.json")) {
                 progress::apply_progress_snapshot(&mut job, &progress);
             }
         }

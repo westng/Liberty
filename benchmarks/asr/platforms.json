@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "platforms": [
+    {
+      "platformId": "darwin-aarch64",
+      "name": "macOS Apple Silicon 8 GiB",
+      "operatingSystem": "darwin",
+      "architecture": "arm64",
+      "minimumMemoryGiB": 8,
+      "performanceEvidenceMemoryTierGiB": 8,
+      "localAsrRequired": true
+    },
+    {
+      "platformId": "darwin-x64",
+      "name": "macOS Intel 8 GiB",
+      "operatingSystem": "darwin",
+      "architecture": "x64",
+      "minimumMemoryGiB": 8,
+      "performanceEvidenceMemoryTierGiB": 8,
+      "localAsrRequired": true
+    },
+    {
+      "platformId": "windows-x64",
+      "name": "Windows x64 8 GiB",
+      "operatingSystem": "win32",
+      "architecture": "x64",
+      "minimumMemoryGiB": 8,
+      "performanceEvidenceMemoryTierGiB": 8,
+      "localAsrRequired": true
+    },
+    {
+      "platformId": "windows-x86",
+      "name": "Windows x86 compile-only",
+      "operatingSystem": "win32",
+      "architecture": "ia32",
+      "minimumMemoryGiB": 4,
+      "performanceEvidenceMemoryTierGiB": null,
+      "localAsrRequired": false
+    }
+  ]
+}

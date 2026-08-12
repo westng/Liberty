@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/ai/v1/ai.schema.json",
+  "title": "AiIpcContractV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model", "saveInput", "run"],
+  "properties": {
+    "model": { "$ref": "#/$defs/model" },
+    "saveInput": { "$ref": "#/$defs/saveInput" },
+    "run": { "$ref": "#/$defs/run" }
+  },
+  "$defs": {
+    "model": {
+      "title": "AiModelMetadataV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "baseUrl", "model", "enabled", "isDefault", "credentialPresent", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "model": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "isDefault": { "type": "boolean" },
+        "credentialPresent": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "run": {
+      "title": "AiSummaryRunV1",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "jobId", "modelConfigId", "templateId", "includeSpeaker", "includeTimestamp", "status", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "jobId": { "type": "string", "minLength": 1 },
+        "modelConfigId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "includeSpeaker": { "type": "boolean" },
+        "includeTimestamp": { "type": "boolean" },
+        "status": { "enum": ["running", "completed", "failed"] },
+        "errorMessage": { "type": ["string", "null"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "credential": {
+      "title": "AiModelCredentialUpdateV1",
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["action"], "properties": { "action": { "const": "keep" } } },
+        { "type": "object", "additionalProperties": false, "required": ["action", "value"], "properties": { "action": { "const": "set" }, "value": { "type": "string", "minLength": 1 } } },
+        { "type": "object", "additionalProperties": false, "required": ["action"], "properties": { "action": { "const": "clear" } } }
+      ]
+    },
+    "saveInput": {
+      "title": "AiModelSaveInputV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "baseUrl", "model", "enabled", "isDefault", "createdAt", "updatedAt", "credential"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "model": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "credential": { "$ref": "#/$defs/credential" }
+      }
+    }
+  }
+}

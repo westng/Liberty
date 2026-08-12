@@ -1,4 +1,4 @@
-use crate::local_db::LocalResult;
+use crate::{infrastructure::runner_protocol, local_db::LocalResult};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
@@ -60,7 +60,17 @@ pub(crate) fn apply_progress_snapshot(job: &mut MeetingJob, progress: &ProgressS
     }
 }
 
-pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> LocalResult<T> {
-    let bytes = fs::read(path).map_err(|err| err.to_string())?;
-    serde_json::from_slice(&bytes).map_err(|err| err.to_string())
+pub(crate) fn read_runner_progress(path: &Path) -> LocalResult<ProgressSnapshot> {
+    let progress = runner_protocol::read_progress(path)?;
+    Ok(ProgressSnapshot {
+        stage: progress.stage,
+        status_message: progress.status_message,
+        failure_reason: progress.failure_reason,
+        progress_percent: progress.progress_percent,
+    })
+}
+
+pub(crate) fn read_legacy_json<T: for<'de> Deserialize<'de>>(path: &Path) -> LocalResult<T> {
+    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    serde_json::from_slice(&bytes).map_err(|error| error.to_string())
 }

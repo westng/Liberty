@@ -378,7 +378,7 @@ apps/desktop/src/assets/images/shop/
 
 以下文件只保留设计背景和决策来源，不再作为当前规则来源：
 
-- [桌面宠物设计记录](./superpowers/specs/2026-05-06-desktop-pet-design.md)
-- [桌面宠物实现计划记录](./superpowers/plans/2026-05-06-desktop-pet-implementation-plan.md)
-- [宠物商店玩法设计记录](./superpowers/specs/2026-05-21-pet-store-gameplay-design.md)
-- [255 级成长策略记录](./superpowers/specs/2026-05-21-宠物255级成长生态策略.md)
+- [桌面宠物设计记录](./ai/designs/2026-05-06-desktop-pet-design.md)
+- [桌面宠物实现计划记录](./ai/plans/2026-05-06-desktop-pet-implementation-plan.md)
+- [宠物商店玩法设计记录](./ai/designs/2026-05-21-pet-store-gameplay-design.md)
+- [255 级成长策略记录](./ai/designs/2026-05-21-宠物255级成长生态策略.md)

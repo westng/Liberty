@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/runtime/v1/runtime.schema.json",
+  "title": "ManagedRuntimeStateV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["platformId", "runtimeVersion", "pythonVersion", "status", "updatedAt", "python", "ffmpeg", "models", "shellReady"],
+  "properties": {
+    "platformId": { "type": "string" },
+    "runtimeVersion": { "type": "string" },
+    "pythonVersion": { "type": "string" },
+    "status": { "enum": ["missing", "installing", "ready", "system_ready", "failed", "repair_required", "unsupported"] },
+    "pythonExecutablePath": { "type": ["string", "null"] },
+    "modelsRoot": { "type": ["string", "null"] },
+    "installRoot": { "type": ["string", "null"] },
+    "ffmpegPath": { "type": ["string", "null"] },
+    "lastError": { "type": ["string", "null"] },
+    "installedAt": { "type": ["string", "null"] },
+    "updatedAt": { "type": "string" },
+    "lastLogPath": { "type": ["string", "null"] },
+    "python": { "$ref": "#/$defs/component" },
+    "ffmpeg": { "$ref": "#/$defs/component" },
+    "models": { "$ref": "#/$defs/component" },
+    "shellReady": { "type": "boolean" }
+  },
+  "$defs": {
+    "artifact": {
+      "title": "RuntimeArtifactStateV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generationId", "artifactVersion", "resolvedPath"],
+      "properties": {
+        "generationId": { "type": "string" },
+        "artifactVersion": { "type": "string" },
+        "resolvedPath": { "type": "string" }
+      }
+    },
+    "operation": {
+      "title": "RuntimeOperationStateV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "generation", "phase"],
+      "properties": {
+        "kind": { "enum": ["idle", "detecting", "waiting_for_python", "downloading", "installing", "validating", "failed"] },
+        "generation": { "type": "integer", "minimum": 0 },
+        "phase": { "type": "string" },
+        "progress": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "lastError": { "type": ["string", "null"] }
+      }
+    },
+    "component": {
+      "title": "RuntimeComponentStateV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "availability", "operation", "updatedAt"],
+      "properties": {
+        "component": { "enum": ["python", "ffmpeg", "model"] },
+        "source": { "enum": ["managed", "system", null] },
+        "availability": { "enum": ["unavailable", "ready", "unsupported"] },
+        "activeArtifact": { "oneOf": [{ "$ref": "#/$defs/artifact" }, { "type": "null" }] },
+        "operation": { "$ref": "#/$defs/operation" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  }
+}

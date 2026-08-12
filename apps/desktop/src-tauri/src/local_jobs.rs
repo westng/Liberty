@@ -1,8 +1,11 @@
+use crate::application::complete_asr_job::{complete_asr_job, CompleteAsrJobRequest};
+use crate::domain::asr::{AsrBackend, DiarizationStatus};
 use crate::infrastructure::process_logs;
 use crate::infrastructure::runner_files;
 use crate::infrastructure::runner_process::{self, RunnerCommandInput, RunnerExit};
+use crate::infrastructure::runner_protocol;
 use crate::infrastructure::time::unix_timestamp_millis;
-use crate::local_db::{self, MeetingJob, MeetingSourceFile, MeetingSummary, TranscriptSegment};
+use crate::local_db::{self, MeetingJob, MeetingSourceFile, MeetingSummary};
 use crate::local_runtime;
 use serde::Deserialize;
 use serde::Serialize;
@@ -213,23 +216,6 @@ pub struct CreateJobInput {
     pub enable_speaker: bool,
     pub summary_template: String,
     pub created_at: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RunnerResult {
-    duration_minutes: Option<u32>,
-    transcript_segments: Option<Vec<TranscriptSegment>>,
-    speaker_segments: Option<Vec<TranscriptSegment>>,
-    failure_reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProgressSnapshot {
-    stage: String,
-    status_message: Option<String>,
-    failure_reason: Option<String>,
 }
 
 #[tauri::command]
@@ -455,40 +441,27 @@ fn execute_local_job(
         return Err(JobExecutionError::Failed(detailed));
     }
 
-    let runner_result = read_runner_result(&dir)?;
-    if let Some(reason) = runner_result.failure_reason.clone() {
-        return Err(JobExecutionError::Failed(reason));
-    }
-
-    let transcript_segments = runner_result.transcript_segments.unwrap_or_default();
-    let speaker_segments = runner_result
-        .speaker_segments
-        .unwrap_or_else(|| transcript_segments.clone());
-
-    if job.enable_speaker && speaker_segments.is_empty() {
-        return Err("Runner 未返回说话人分离结果。".into());
-    }
+    let legacy_backend = AsrBackend::try_from(resolved_runtime.asr_backend.as_str())?;
+    let runner_result =
+        runner_protocol::read_result(&dir.join("result.json"), job.enable_speaker, legacy_backend)?;
 
     let processing_finished_at_ms = unix_timestamp_millis() as u64;
     let processing_duration_seconds =
         Some(((processing_finished_at_ms.saturating_sub(processing_started_at_ms)) / 1000) as u32);
     let process_log = process_logs::read_recent(&dir, DATABASE_PROCESS_LOG_BYTES);
-    let accepted = local_db::complete_local_job_run(
-        app,
-        job_id,
-        execution.fence.attempt_id,
-        execution.fence.lease_token,
-        &transcript_segments,
-        &speaker_segments,
-        derived_duration_minutes(
-            runner_result.duration_minutes,
-            job.duration_minutes,
-            &transcript_segments,
-            &speaker_segments,
-        ),
-        processing_finished_at_ms,
-        processing_duration_seconds,
-        &process_log,
+    let completion_port = local_db::SqliteAsrJobCompletion::new(app);
+    let accepted = complete_asr_job(
+        &completion_port,
+        CompleteAsrJobRequest {
+            job_id: job_id.to_string(),
+            attempt_id: execution.fence.attempt_id,
+            lease_token: execution.fence.lease_token,
+            result: runner_result,
+            fallback_duration_minutes: job.duration_minutes,
+            processing_finished_at_ms,
+            processing_duration_seconds,
+            process_log,
+        },
     )?;
     if !accepted {
         return Err(JobExecutionError::Cancelled);
@@ -513,6 +486,14 @@ fn build_initial_job(input: CreateJobInput, runner_script_path: String) -> Meeti
         hotwords: input.hotwords,
         lang: input.lang,
         enable_speaker: input.enable_speaker,
+        runner_protocol_version: None,
+        asr_backend: AsrBackend::Unknown,
+        diarization_status: if input.enable_speaker {
+            DiarizationStatus::Pending
+        } else {
+            DiarizationStatus::Disabled
+        },
+        warnings: Vec::new(),
         summary_template: input.summary_template,
         upload_status: "uploaded".into(),
         asr_status: "queued".into(),
@@ -722,41 +703,8 @@ fn converge_job_deletion(
     local_db::complete_job_deletion_operation(app, &operation.operation_id)
 }
 
-fn derived_duration_minutes(
-    runner_duration_minutes: Option<u32>,
-    fallback_duration_minutes: u32,
-    transcript_segments: &[TranscriptSegment],
-    speaker_segments: &[TranscriptSegment],
-) -> u32 {
-    runner_duration_minutes
-        .filter(|value| *value > 0)
-        .or_else(|| derive_duration_minutes_from_segments(transcript_segments, speaker_segments))
-        .unwrap_or(fallback_duration_minutes)
-}
-
-fn derive_duration_minutes_from_segments(
-    transcript_segments: &[TranscriptSegment],
-    speaker_segments: &[TranscriptSegment],
-) -> Option<u32> {
-    let max_end_ms = transcript_segments
-        .iter()
-        .chain(speaker_segments.iter())
-        .map(|segment| segment.end_ms)
-        .max()?;
-
-    if max_end_ms == 0 {
-        return None;
-    }
-
-    Some(((max_end_ms as f64) / 60_000.0).ceil() as u32)
-}
-
-fn read_runner_result(job_dir: &Path) -> LocalResult<RunnerResult> {
-    runner_files::read_json_file(job_dir, "result.json")
-}
-
-fn read_progress_snapshot(job_dir: &Path) -> Option<ProgressSnapshot> {
-    runner_files::read_optional_json_file(job_dir, "progress.json")
+fn read_progress_snapshot(job_dir: &Path) -> Option<runner_protocol::NormalizedProgress> {
+    runner_protocol::read_progress(&job_dir.join("progress.json")).ok()
 }
 
 fn read_runner_failure_reason(job_dir: &Path) -> Option<String> {

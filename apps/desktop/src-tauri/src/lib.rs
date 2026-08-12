@@ -17,6 +17,7 @@ mod local_work_game;
 mod process_utils;
 mod single_instance;
 mod system;
+mod webview_policy;
 mod window_scope;
 
 #[cfg(target_os = "macos")]
@@ -93,6 +94,7 @@ fn set_macos_menu(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = single_instance::builder()
+        .plugin(webview_policy::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -123,6 +125,7 @@ pub fn run() {
             local_ai::save_ai_template,
             local_ai::start_or_resume_ai_summary_run,
             local_ai::set_active_ai_summary_run,
+            local_export::export_job_text,
             local_export::export_job_summary_docx,
             local_farm::get_farm_state,
             local_farm::get_work_market_state,

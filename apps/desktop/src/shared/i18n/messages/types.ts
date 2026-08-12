@@ -1,6 +1,16 @@
 import type { JobStage } from "@/shared/types/meeting";
 
 export type MessageTree = {
+  errors: {
+    remoteServiceUnavailable: string;
+    aiCredentialOperationFailed: string;
+    validationError: string;
+    notFound: string;
+    conflict: string;
+    infrastructureError: string;
+    unexpected: string;
+    retryableHint: string;
+  };
   nav: {
     dashboard: string;
     newJob: string;
@@ -306,6 +316,10 @@ export type MessageTree = {
     filesCount: string;
     fileDuration: string;
     diarizationEnabled: string;
+    diarizationCompleted: string;
+    diarizationUnavailable: string;
+    diarizationFailed: string;
+    diarizationUnverified: string;
     transcriptOnly: string;
     processCompleted: string;
     processFailed: string;
@@ -335,6 +349,11 @@ export type MessageTree = {
     settingsSection: string;
     language: string;
     speakerDiarization: string;
+    diarizationCompleted: string;
+    diarizationUnavailable: string;
+    diarizationFailed: string;
+    diarizationUnverified: string;
+    diarizationPending: string;
     logSection: string;
     noLog: string;
     notFound: string;
@@ -403,6 +422,7 @@ export type MessageTree = {
     template: string;
     chooseTemplate: string;
     includeSpeaker: string;
+    speakerUnavailable: string;
     includeTimestamp: string;
     useMemberMapping: string;
     extraInstructions: string;

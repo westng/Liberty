@@ -5,7 +5,7 @@ import StatusBadge from "@/shared/components/StatusBadge";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { getMessages } from "@/shared/i18n";
 import progressBarUrl from "@/assets/progress-bar.webp";
-import type { JobStage } from "@/shared/types/meeting";
+import type { DiarizationStatus, JobStage } from "@/shared/types/meeting";
 import {
   jobRef,
   jobWorkbenchPath,
@@ -23,6 +23,27 @@ const stageProgressBands: Record<JobStage, { min: number; max: number }> = {
   completed: { min: 100, max: 100 },
   failed: { min: 0, max: 99 },
 };
+
+function diarizationMessage(
+  status: DiarizationStatus,
+  messages: ReturnType<typeof getMessages>["jobDetail"],
+) {
+  switch (status) {
+    case "completed":
+      return messages.diarizationCompleted;
+    case "unavailable":
+      return messages.diarizationUnavailable;
+    case "failed":
+      return messages.diarizationFailed;
+    case "legacy_unverified":
+      return messages.diarizationUnverified;
+    case "pending":
+    case "processing":
+      return messages.diarizationPending;
+    case "disabled":
+      return null;
+  }
+}
 
 export default function JobDetailView() {
   const router = useRouter();
@@ -67,6 +88,7 @@ export default function JobDetailView() {
         { label: messages.stageOverall, status: job.overallStatus },
       ]
     : [];
+  const speakerStatusMessage = job ? diarizationMessage(job.diarizationStatus, messages) : null;
 
   useEffect(() => {
     if (routeJobRef) {
@@ -243,6 +265,9 @@ export default function JobDetailView() {
                 <span>{messages.hotwords} {job.hotwords.length}</span>
                 <span>{messages.speaker} {job.enableSpeaker ? commonMessages.enabled : commonMessages.disabled}</span>
               </div>
+              {speakerStatusMessage && job.diarizationStatus !== "completed" && (
+                <div className="note-block">{speakerStatusMessage}</div>
+              )}
 
               <div className="button-row">
                 {job.overallStatus === "completed" && (
@@ -300,7 +325,7 @@ export default function JobDetailView() {
               </div>
               <div className="metric-pill">
                 <span className="muted">{messages.speakerDiarization}</span>
-                <strong>{job.enableSpeaker ? commonMessages.enabled : commonMessages.disabled}</strong>
+                <strong>{speakerStatusMessage ?? commonMessages.disabled}</strong>
               </div>
               <div className="metric-pill">
                 <span className="muted">{messages.hotwords}</span>
@@ -334,6 +359,11 @@ export default function JobDetailView() {
               <h3>{messages.logSection}</h3>
             </div>
             {job.failureReason && <div className="note-block error-block">{job.failureReason}</div>}
+            {job.warnings.map((warning) => (
+              <div key={`${warning.code}:${warning.message}`} className="note-block">
+                {warning.message}
+              </div>
+            ))}
             {logEntries.length ? (
               <div className="job-log-list">
                 {logEntries.map((entry) => (

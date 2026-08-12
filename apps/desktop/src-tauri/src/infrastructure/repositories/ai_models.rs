@@ -1,11 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
-use crate::infrastructure::credentials::{
-    credential_key_for_ai_model, default_credential_store, CredentialStore,
-};
-use crate::local_db::{
-    AiModelConfig, AiModelCredentialUpdate, AiModelMetadata, AiModelSaveInput, LocalResult,
-};
+use crate::infrastructure::credentials::{default_credential_store, CredentialStore};
+use crate::local_db::{AiModelConfig, AiModelMetadata, AiModelSaveInput, LocalResult};
 
 pub fn list_ai_models(conn: &Connection) -> LocalResult<Vec<AiModelMetadata>> {
     let mut statement = conn
@@ -110,6 +106,42 @@ pub fn get_ai_model(conn: &Connection, model_id: &str) -> LocalResult<Option<AiM
     get_ai_model_with_store(conn, model_id, &default_credential_store())
 }
 
+pub fn find_credential_reference(conn: &Connection, model_id: &str) -> LocalResult<Option<String>> {
+    conn.query_row(
+        "SELECT NULLIF(TRIM(api_key_ref), '') FROM ai_model_configs WHERE id = ?1",
+        params![model_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map(|value| value.flatten())
+    .map_err(|error| error.to_string())
+}
+
+pub fn credential_reference_matches(
+    conn: &Connection,
+    model_id: &str,
+    expected_reference: Option<&str>,
+) -> LocalResult<bool> {
+    let stored = conn
+        .query_row(
+            "SELECT COALESCE(api_key_ref, '') FROM ai_model_configs WHERE id = ?1",
+            params![model_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    Ok(stored.as_deref() == Some(expected_reference.unwrap_or_default()))
+}
+
+pub fn model_exists(conn: &Connection, model_id: &str) -> LocalResult<bool> {
+    conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM ai_model_configs WHERE id = ?1)",
+        params![model_id],
+        |row| row.get(0),
+    )
+    .map_err(|error| error.to_string())
+}
+
 fn get_ai_model_with_store(
     conn: &Connection,
     model_id: &str,
@@ -163,59 +195,11 @@ fn get_ai_model_with_store(
     }))
 }
 
-pub fn save_ai_model_tx(tx: &Transaction<'_>, model: &AiModelSaveInput) -> LocalResult<()> {
-    save_ai_model_tx_with_store(tx, model, &default_credential_store())
-}
-
-fn save_ai_model_tx_with_store(
+pub fn save_ai_model_metadata_tx(
     tx: &Transaction<'_>,
     model: &AiModelSaveInput,
-    credential_store: &dyn CredentialStore,
+    credential_reference: Option<&str>,
 ) -> LocalResult<()> {
-    let existing_credential = tx
-        .query_row(
-            "SELECT api_key, COALESCE(api_key_ref, '')
-             FROM ai_model_configs WHERE id = ?1",
-            params![model.id],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-        )
-        .optional()
-        .map_err(|error| error.to_string())?;
-
-    let (api_key_for_database, api_key_ref) = match (&model.credential, existing_credential) {
-        (AiModelCredentialUpdate::Keep, Some(existing)) => existing,
-        (AiModelCredentialUpdate::Set { value }, existing) => {
-            let value = value.trim();
-            if value.is_empty() {
-                return Err("设置 AI 模型凭据时 API Key 不能为空。".into());
-            }
-            let api_key_ref = existing
-                .as_ref()
-                .map(|(_, reference)| reference.trim())
-                .filter(|reference| !reference.is_empty())
-                .map(str::to_string)
-                .unwrap_or_else(|| credential_key_for_ai_model(&model.id));
-            credential_store
-                .set_secret(&api_key_ref, value)
-                .map_err(String::from)?;
-            (String::new(), api_key_ref)
-        }
-        (AiModelCredentialUpdate::Clear, Some((_, existing_ref))) => {
-            let reference = if existing_ref.trim().is_empty() {
-                credential_key_for_ai_model(&model.id)
-            } else {
-                existing_ref
-            };
-            credential_store
-                .delete_secret(&reference)
-                .map_err(String::from)?;
-            (String::new(), String::new())
-        }
-        (AiModelCredentialUpdate::Keep | AiModelCredentialUpdate::Clear, None) => {
-            return Err("新建 AI 模型必须设置 API Key。".into());
-        }
-    };
-
     if model.is_default {
         tx.execute("UPDATE ai_model_configs SET is_default = 0", [])
             .map_err(|error| error.to_string())?;
@@ -239,8 +223,8 @@ fn save_ai_model_tx_with_store(
             model.id,
             model.name,
             model.base_url,
-            api_key_for_database,
-            api_key_ref,
+            "",
+            credential_reference.unwrap_or_default(),
             model.model,
             if model.enabled { 1 } else { 0 },
             if model.is_default { 1 } else { 0 },
@@ -253,35 +237,19 @@ fn save_ai_model_tx_with_store(
     Ok(())
 }
 
-pub fn delete_ai_model(conn: &Connection, model_id: &str) -> LocalResult<()> {
-    let credential_key = conn
-        .query_row(
-            "SELECT COALESCE(api_key_ref, '') FROM ai_model_configs WHERE id = ?1",
-            params![model_id],
-            |row| row.get::<_, String>(0),
-        )
-        .unwrap_or_default();
-
-    conn.execute(
+pub fn delete_ai_model_tx(tx: &Transaction<'_>, model_id: &str) -> LocalResult<usize> {
+    tx.execute(
         "DELETE FROM ai_model_configs WHERE id = ?1",
         params![model_id],
     )
-    .map_err(|error| error.to_string())?;
-
-    if !credential_key.trim().is_empty() {
-        default_credential_store()
-            .delete_secret(&credential_key)
-            .map_err(String::from)?;
-    }
-
-    Ok(())
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, collections::HashMap};
 
-    use super::{get_ai_model_with_store, save_ai_model_tx_with_store};
+    use super::{get_ai_model_with_store, save_ai_model_metadata_tx};
     use crate::{
         infrastructure::credentials::{CredentialResult, CredentialStore},
         local_db::{AiModelCredentialUpdate, AiModelMetadata, AiModelSaveInput},
@@ -399,43 +367,20 @@ mod tests {
     }
 
     #[test]
-    fn new_model_requires_set_credential_action() {
+    fn metadata_save_only_publishes_the_provided_reference() {
         let mut connection = database();
-        let store = TestCredentialStore::default();
         let transaction = connection.transaction().expect("transaction");
 
-        let error = save_ai_model_tx_with_store(
-            &transaction,
-            &model(AiModelCredentialUpdate::Keep),
-            &store,
-        )
-        .expect_err("new model must set credential");
-
-        assert!(error.contains("必须设置 API Key"));
-    }
-
-    #[test]
-    fn set_stores_new_credential_outside_database() {
-        let mut connection = database();
-        let store = TestCredentialStore::default();
-        let transaction = connection.transaction().expect("transaction");
-
-        save_ai_model_tx_with_store(
+        save_ai_model_metadata_tx(
             &transaction,
             &model(AiModelCredentialUpdate::Set {
                 value: "new-secret".into(),
             }),
-            &store,
+            Some("ai-model:model-a:api-key:staged:write-1"),
         )
         .expect("save model");
         transaction.commit().expect("commit model");
 
-        assert_eq!(
-            store
-                .get_secret("ai-model:model-a:api-key")
-                .expect("read credential"),
-            Some("new-secret".into())
-        );
         let stored = connection
             .query_row(
                 "SELECT api_key, api_key_ref FROM ai_model_configs WHERE id = 'model-a'",
@@ -443,82 +388,12 @@ mod tests {
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )
             .expect("stored model");
-        assert_eq!(stored, (String::new(), "ai-model:model-a:api-key".into()));
-    }
-
-    #[test]
-    fn keep_preserves_existing_credential_reference() {
-        let mut connection = database();
-        connection
-            .execute(
-                "INSERT INTO ai_model_configs VALUES (?1, ?2, ?3, '', ?4, ?5, 1, 1, ?6, ?6)",
-                params![
-                    "model-a",
-                    "Old Name",
-                    "https://example.com",
-                    "ai-model:model-a:api-key",
-                    "example",
-                    "2026-07-15T00:00:00Z"
-                ],
-            )
-            .expect("seed model");
-        let store = TestCredentialStore::default();
-        store
-            .set_secret("ai-model:model-a:api-key", "existing-secret")
-            .expect("seed credential");
-        let transaction = connection.transaction().expect("transaction");
-
-        save_ai_model_tx_with_store(&transaction, &model(AiModelCredentialUpdate::Keep), &store)
-            .expect("save model");
-        transaction.commit().expect("commit model");
-
         assert_eq!(
-            store
-                .get_secret("ai-model:model-a:api-key")
-                .expect("read credential"),
-            Some("existing-secret".into())
-        );
-    }
-
-    #[test]
-    fn clear_deletes_existing_credential_and_reference() {
-        let mut connection = database();
-        connection
-            .execute(
-                "INSERT INTO ai_model_configs VALUES (?1, ?2, ?3, '', ?4, ?5, 1, 1, ?6, ?6)",
-                params![
-                    "model-a",
-                    "Old Name",
-                    "https://example.com",
-                    "ai-model:model-a:api-key",
-                    "example",
-                    "2026-07-15T00:00:00Z"
-                ],
+            stored,
+            (
+                String::new(),
+                "ai-model:model-a:api-key:staged:write-1".into()
             )
-            .expect("seed model");
-        let store = TestCredentialStore::default();
-        store
-            .set_secret("ai-model:model-a:api-key", "existing-secret")
-            .expect("seed credential");
-        let transaction = connection.transaction().expect("transaction");
-
-        save_ai_model_tx_with_store(&transaction, &model(AiModelCredentialUpdate::Clear), &store)
-            .expect("save model");
-        transaction.commit().expect("commit model");
-
-        assert_eq!(
-            store
-                .get_secret("ai-model:model-a:api-key")
-                .expect("read credential"),
-            None
         );
-        let stored = connection
-            .query_row(
-                "SELECT api_key, api_key_ref FROM ai_model_configs WHERE id = 'model-a'",
-                [],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
-            )
-            .expect("stored model");
-        assert_eq!(stored, (String::new(), String::new()));
     }
 }

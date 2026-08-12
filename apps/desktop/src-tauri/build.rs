@@ -12,6 +12,7 @@ const COMMANDS: &[&str] = &[
     "save_ai_template",
     "start_or_resume_ai_summary_run",
     "set_active_ai_summary_run",
+    "export_job_text",
     "export_job_summary_docx",
     "get_farm_state",
     "get_work_market_state",

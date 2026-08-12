@@ -1,0 +1,19 @@
+{
+  "id": "job-fixture-1",
+  "source": "local",
+  "title": "脱敏会议",
+  "createdAt": "2026-08-12T00:00:00Z",
+  "enableSpeaker": true,
+  "runnerProtocolVersion": 2,
+  "asrBackend": "funasr",
+  "diarizationStatus": "completed",
+  "warnings": [],
+  "overallStatus": "completed",
+  "failureReason": null,
+  "transcriptSegments": [
+    { "id": "segment-1", "startMs": 0, "endMs": 1200, "text": "脱敏内容" }
+  ],
+  "speakerSegments": [
+    { "id": "speaker-1", "startMs": 0, "endMs": 1200, "speaker": "人员A", "text": "脱敏内容" }
+  ]
+}

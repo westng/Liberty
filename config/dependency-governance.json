@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "deniedLicenses": ["AGPL-3.0-only", "AGPL-3.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later", "SSPL-1.0"],
+  "allowedSourceKinds": ["registry", "workspace"],
+  "vulnerabilitySeverityBlocklist": ["LOW", "MODERATE", "MEDIUM", "HIGH", "CRITICAL", "UNKNOWN"],
+  "requireIntegrityForNodePackages": true,
+  "requireHashesForPythonLocks": true,
+  "tools": {
+    "cargoDeny": "0.20.2",
+    "osvScanner": "2.5.0"
+  }
+}

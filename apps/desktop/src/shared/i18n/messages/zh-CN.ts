@@ -1,6 +1,16 @@
 import type { MessageTree } from "./types";
 
 export const zhCNMessages: MessageTree = {
+    errors: {
+      remoteServiceUnavailable: "远端会议服务暂时不可用，请检查配置和网络连接。",
+      aiCredentialOperationFailed: "AI 模型凭据操作未完成，请检查系统凭据存储。",
+      validationError: "提交的数据无效，请检查后重试。",
+      notFound: "请求的数据不存在或已被删除。",
+      conflict: "数据已被其他操作更新，请刷新后重试。",
+      infrastructureError: "本地服务暂时不可用。",
+      unexpected: "发生未预期的错误。",
+      retryableHint: "稍后可以重试。",
+    },
     nav: {
       dashboard: "工作台",
       newJob: "新建任务",
@@ -344,6 +354,10 @@ export const zhCNMessages: MessageTree = {
       filesCount: "{count} 个文件",
       fileDuration: "文件时长 {duration}",
       diarizationEnabled: "含说话人分离",
+      diarizationCompleted: "说话人已验证",
+      diarizationUnavailable: "说话人不可用，已降级为逐字稿",
+      diarizationFailed: "说话人处理失败，已保留逐字稿",
+      diarizationUnverified: "历史说话人未验证，仅使用逐字稿",
       transcriptOnly: "仅转写",
       processCompleted: "处理完成",
       processFailed: "处理失败",
@@ -373,6 +387,11 @@ export const zhCNMessages: MessageTree = {
       settingsSection: "任务设置",
       language: "语言",
       speakerDiarization: "说话人分离",
+      diarizationCompleted: "已完成并验证",
+      diarizationUnavailable: "当前后端未提供真实说话人标签，结果已降级为逐字稿。",
+      diarizationFailed: "说话人处理失败，逐字稿仍可正常使用。",
+      diarizationUnverified: "这是历史未验证的说话人结果，默认不会用于总结或导出。",
+      diarizationPending: "等待说话人处理",
       logSection: "处理日志",
       noLog: "当前还没有处理日志。",
       notFound: "没有找到这个任务。",
@@ -441,6 +460,7 @@ export const zhCNMessages: MessageTree = {
       template: "模板",
       chooseTemplate: "请选择模板",
       includeSpeaker: "包含说话人",
+      speakerUnavailable: "当前任务没有经过验证的说话人结果，将使用不含人员归属的逐字稿生成总结。",
       includeTimestamp: "包含时间戳",
       useMemberMapping: "使用人员管理映射",
       extraInstructions: "补充要求",

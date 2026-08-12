@@ -111,8 +111,8 @@ See [docs/pet-system.md](./docs/pet-system.md) for the current implementation no
 ├─ docs/
 │  ├─ architecture/              Architecture and release readiness docs
 │  ├─ images/                    README screenshots
-│  ├─ pet-system.md              Current pet system notes
-│  └─ superpowers/               Historical designs and implementation plans
+│  ├─ ai/                        AI process docs and migrated historical records
+│  └─ pet-system.md              Current pet system notes
 ├─ Cargo.toml                    Rust workspace
 ├─ package.json                  pnpm workspace scripts
 └─ pnpm-workspace.yaml

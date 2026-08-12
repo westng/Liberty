@@ -9,6 +9,9 @@ output/
 release-assets/
 release-package/
 release-upload/
+artifacts/
+benchmarks/asr/manifest.local.json
+benchmarks/asr/smoke.local.json
 log/
 logs/
 *.log
@@ -23,6 +26,7 @@ apps/*/dist/
 .vite/
 apps/*/.vite/
 .venv/
+.venv-dev/
 .venv310/
 .venv311/
 .venv39/

@@ -1,0 +1,39 @@
+{
+  "platformId": "darwin-aarch64",
+  "runtimeVersion": "fixture-runtime",
+  "pythonVersion": "3.10",
+  "status": "missing",
+  "pythonExecutablePath": null,
+  "modelsRoot": null,
+  "installRoot": null,
+  "ffmpegPath": null,
+  "lastError": null,
+  "installedAt": null,
+  "updatedAt": "2026-08-12T00:00:00Z",
+  "lastLogPath": null,
+  "python": {
+    "component": "python",
+    "source": "managed",
+    "availability": "unavailable",
+    "activeArtifact": null,
+    "operation": { "kind": "idle", "generation": 0, "phase": "idle", "progress": null, "lastError": null },
+    "updatedAt": "2026-08-12T00:00:00Z"
+  },
+  "ffmpeg": {
+    "component": "ffmpeg",
+    "source": "managed",
+    "availability": "unavailable",
+    "activeArtifact": null,
+    "operation": { "kind": "idle", "generation": 0, "phase": "idle", "progress": null, "lastError": null },
+    "updatedAt": "2026-08-12T00:00:00Z"
+  },
+  "models": {
+    "component": "model",
+    "source": "managed",
+    "availability": "unavailable",
+    "activeArtifact": null,
+    "operation": { "kind": "idle", "generation": 0, "phase": "idle", "progress": null, "lastError": null },
+    "updatedAt": "2026-08-12T00:00:00Z"
+  },
+  "shellReady": false
+}

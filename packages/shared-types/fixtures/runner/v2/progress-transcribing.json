@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 2,
+  "revision": 1,
+  "stage": "transcribing",
+  "statusMessage": "正在进行本地转写。",
+  "failureReason": null,
+  "progressPercent": 32,
+  "updatedAt": "1786536000000000000"
+}

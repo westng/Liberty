@@ -3,6 +3,8 @@ mod prompt;
 mod response;
 mod summary_runs;
 
+use crate::domain::error::{AppErrorDto, ErrorCategory};
+use crate::infrastructure::observability::{emit_audit, AuditEvent};
 use crate::local_db::{
     self, AiModelMetadata, AiModelSaveInput, AiSummaryRun, AiSummaryTemplate, LocalResult,
     MeetingJob, MeetingMember,
@@ -86,9 +88,11 @@ pub fn save_ai_model(
     app: AppHandle,
     window: tauri::WebviewWindow,
     model: AiModelSaveInput,
-) -> LocalResult<()> {
-    require_model_management_window(window.label())?;
-    local_db::save_ai_model(&app, &model)
+) -> Result<(), AppErrorDto> {
+    require_model_management_window(window.label()).map_err(ai_credential_error)?;
+    local_db::save_ai_model(&app, &model).map_err(ai_credential_error)?;
+    emit_ai_credential_audit("ai_model_saved");
+    Ok(())
 }
 
 #[tauri::command]
@@ -96,9 +100,28 @@ pub fn delete_ai_model(
     app: AppHandle,
     window: tauri::WebviewWindow,
     id: String,
-) -> LocalResult<()> {
-    require_model_management_window(window.label())?;
-    local_db::delete_ai_model(&app, &id)
+) -> Result<(), AppErrorDto> {
+    require_model_management_window(window.label()).map_err(ai_credential_error)?;
+    local_db::delete_ai_model(&app, &id).map_err(ai_credential_error)?;
+    emit_ai_credential_audit("ai_model_deleted");
+    Ok(())
+}
+
+fn ai_credential_error(_source: String) -> AppErrorDto {
+    AppErrorDto::new(
+        "ai_credential_operation_failed",
+        ErrorCategory::Credentials,
+        true,
+    )
+}
+
+fn emit_ai_credential_audit(code: &str) {
+    emit_audit(&AuditEvent {
+        code: code.into(),
+        actor: "local_user".into(),
+        outcome: "succeeded".into(),
+        context: Default::default(),
+    });
 }
 
 #[tauri::command]
@@ -207,6 +230,12 @@ pub fn start_or_resume_ai_summary_run(
 }
 
 pub fn resume_ai_summary_runs(app: &AppHandle) -> LocalResult<()> {
+    local_db::init_database(app)?;
+    let connection = local_db::open_connection(app)?;
+    crate::application::delete_ai_model::recover_ai_credential_cleanup(
+        &connection,
+        &crate::infrastructure::credentials::default_credential_store(),
+    )?;
     summary_runs::resume_running_on_startup(app)
 }
 

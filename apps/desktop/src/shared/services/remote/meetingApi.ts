@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { MeetingJob } from "@/shared/types/meeting";
+import { appError, normalizeAppError } from "@/shared/services/errors/appError";
 
 const PROTOCOL_NAME = "liberty-meeting";
 const PROTOCOL_VERSION = 1;
@@ -36,8 +37,21 @@ export interface RemoteMeetingCapabilities {
 
 export class RemoteCapabilityError extends Error {
   constructor(message: string) {
-    super(`capability_unavailable: ${message}`);
+    super(message);
     this.name = "RemoteCapabilityError";
+  }
+}
+
+async function invokeRemote<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    throw normalizeAppError(error, {
+      code: "remote_service_unavailable",
+      category: "network",
+      retryable: true,
+      params: {},
+    });
   }
 }
 
@@ -46,7 +60,7 @@ function requireOperation(
   operation: RemoteMeetingOperation,
 ) {
   if (!capabilities.operations.includes(operation)) {
-    throw new RemoteCapabilityError(`远端服务未声明 ${operation} 能力。`);
+    throw appError("remote_service_unavailable", "protocol", false, { operation });
   }
 }
 
@@ -58,7 +72,7 @@ function normalizeCapabilities(value: RemoteMeetingCapabilities): RemoteMeetingC
     || !value.serviceVersion?.trim()
     || !Array.isArray(value.operations)
   ) {
-    throw new RemoteCapabilityError("远端服务协议版本与当前客户端不兼容。");
+    throw appError("remote_service_unavailable", "protocol", false);
   }
   return value;
 }
@@ -66,27 +80,27 @@ function normalizeCapabilities(value: RemoteMeetingCapabilities): RemoteMeetingC
 export function createMeetingApi() {
   return {
     getCapabilities: async () => normalizeCapabilities(
-      await invoke<RemoteMeetingCapabilities>("get_remote_capabilities"),
+      await invokeRemote<RemoteMeetingCapabilities>("get_remote_capabilities"),
     ),
     listJobs: async (capabilities: RemoteMeetingCapabilities) => {
       requireOperation(capabilities, "jobs.list");
-      return invoke<MeetingJob[]>("remote_list_jobs");
+      return invokeRemote<MeetingJob[]>("remote_list_jobs");
     },
     getJob: async (capabilities: RemoteMeetingCapabilities, id: string) => {
       requireOperation(capabilities, "jobs.read");
-      return invoke<MeetingJob>("remote_get_job", { id });
+      return invokeRemote<MeetingJob>("remote_get_job", { id });
     },
     getResult: async (capabilities: RemoteMeetingCapabilities, id: string) => {
       requireOperation(capabilities, "jobs.result.read");
-      return invoke<MeetingJob>("remote_get_job_result", { id });
+      return invokeRemote<MeetingJob>("remote_get_job_result", { id });
     },
     retryJob: async (capabilities: RemoteMeetingCapabilities, id: string) => {
       requireOperation(capabilities, "jobs.retry");
-      return invoke<MeetingJob>("remote_retry_job", { id });
+      return invokeRemote<MeetingJob>("remote_retry_job", { id });
     },
     deleteJob: async (capabilities: RemoteMeetingCapabilities, id: string) => {
       requireOperation(capabilities, "jobs.delete");
-      await invoke<void>("remote_delete_job", { id });
+      await invokeRemote<void>("remote_delete_job", { id });
     },
     renameSpeaker: async (
       capabilities: RemoteMeetingCapabilities,
@@ -95,7 +109,7 @@ export function createMeetingApi() {
       toSpeaker: string,
     ) => {
       requireOperation(capabilities, "transcript.speakers.rename");
-      return invoke<MeetingJob>("remote_rename_job_speaker", {
+      return invokeRemote<MeetingJob>("remote_rename_job_speaker", {
         id,
         fromSpeaker,
         toSpeaker,

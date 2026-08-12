@@ -4,10 +4,10 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import sys
 import tarfile
 import tempfile
 import urllib.request
-import sys
 from pathlib import Path
 
 

@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from "node:url";
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
 
 const tauriHost = process.env.TAURI_DEV_HOST;
 const devHost = tauriHost || "127.0.0.1";
@@ -8,9 +8,14 @@ const devHost = tauriHost || "127.0.0.1";
 export default defineConfig({
   clearScreen: false,
   plugins: [react()],
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@liberty-contracts": fileURLToPath(new URL("../../packages/shared-types/src/generated", import.meta.url)),
     },
   },
   server: {

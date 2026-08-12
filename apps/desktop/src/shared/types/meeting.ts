@@ -125,6 +125,7 @@ export interface MeetingMinutesSpeakerReport {
 
 export interface MeetingMinutesPayload {
   schemaVersion: number;
+  meetingInfoSource: "user" | "ai" | "empty";
   templateId: string;
   sourceSummaryRunId?: string;
   meetingInfo: MeetingMinutesInfo;
@@ -646,6 +647,22 @@ export interface AiSummaryRun {
   updatedAt: string;
 }
 
+export type AsrBackend = "funasr" | "sherpa-onnx" | "unknown";
+
+export type DiarizationStatus =
+  | "disabled"
+  | "pending"
+  | "processing"
+  | "completed"
+  | "unavailable"
+  | "failed"
+  | "legacy_unverified";
+
+export interface RunnerWarning {
+  code: string;
+  message: string;
+}
+
 export interface MeetingJob {
   id: string;
   source: ProcessingMode;
@@ -661,6 +678,10 @@ export interface MeetingJob {
   hotwords: string[];
   lang: string;
   enableSpeaker: boolean;
+  runnerProtocolVersion?: number;
+  asrBackend: AsrBackend;
+  diarizationStatus: DiarizationStatus;
+  warnings: RunnerWarning[];
   summaryTemplate: string;
   uploadStatus: JobStage;
   asrStatus: JobStage;

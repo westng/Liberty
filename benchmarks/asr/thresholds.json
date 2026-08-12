@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "requiredScenarios": [
+    "short_meeting",
+    "long_meeting",
+    "overlapping_speakers",
+    "noise",
+    "mixed_zh_en",
+    "chinese_numbers"
+  ],
+  "candidate": {
+    "maximumNewFailures": 0,
+    "maximumChineseCerRegression": 0.005,
+    "maximumDiarizationDerRegression": 0.01,
+    "maximumP95RealTimeFactor": 1.0,
+    "maximumPeakRssBytes": 4294967296,
+    "maximumRuntimeMetricRegressionRatio": 1.1,
+    "maximumInstallSizeIncreaseBytes": 524288000
+  }
+}

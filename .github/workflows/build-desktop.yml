@@ -335,6 +335,12 @@ jobs:
             --manifest "release-manifest.json" \
             --tag "${RELEASE_TAG}" \
             --version "${RELEASE_VERSION}"
+          node scripts/generate-sbom.mjs \
+            --output "liberty-${RELEASE_VERSION}.cdx.json"
+          node scripts/check-release-assets.mjs add-sbom \
+            --input "liberty-${RELEASE_VERSION}.cdx.json" \
+            --output "release-upload" \
+            --manifest "release-manifest.json"
           (
             cd release-upload
             sha256sum liberty-* > SHA256SUMS.txt

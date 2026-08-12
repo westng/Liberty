@@ -1,21 +1,22 @@
-use std::{
-    collections::HashSet,
-    io::Read,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
-    time::Duration,
-};
+use std::{collections::HashSet, io::Read, time::Duration};
 
 use reqwest::{
     blocking::{Client, Response},
     header::{ACCEPT, CONTENT_TYPE},
-    redirect::Policy,
-    Method, Url,
+    Method,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, WebviewWindow};
 
-use crate::local_db::{self, LocalResult, MeetingJob};
+use crate::{
+    domain::{
+        asr::{AsrBackend, DiarizationStatus, RunnerWarning},
+        error::{AppErrorDto, ErrorCategory},
+    },
+    infrastructure::network::{TrustedHttpPolicy, TrustedHttpTarget},
+    local_db::{self, LocalResult, MeetingJob},
+};
 
 const PROTOCOL_NAME: &str = "liberty-meeting";
 const PROTOCOL_VERSION: u32 = 1;
@@ -78,32 +79,30 @@ struct RemoteErrorDetail {
 
 struct RemoteContext {
     client: Client,
-    base_url: Url,
+    target: TrustedHttpTarget,
     api_token: String,
-}
-
-struct ResolvedRemoteTarget {
-    base_url: Url,
-    dns_override: Option<(String, Vec<SocketAddr>)>,
 }
 
 #[tauri::command]
 pub fn get_remote_capabilities(
     app: AppHandle,
     window: WebviewWindow,
-) -> LocalResult<RemoteMeetingCapabilities> {
-    require_main_window(window.label())?;
-    let context = remote_context(&app)?;
-    fetch_capabilities(&context)
+) -> Result<RemoteMeetingCapabilities, AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    fetch_capabilities(&context).map_err(remote_command_error)
 }
 
 #[tauri::command]
-pub fn remote_list_jobs(app: AppHandle, window: WebviewWindow) -> LocalResult<Vec<MeetingJob>> {
-    require_main_window(window.label())?;
-    let context = remote_context(&app)?;
-    let capabilities = fetch_capabilities(&context)?;
-    require_operation(&capabilities, "jobs.list")?;
-    request_jobs(&context, Method::GET, &["api", "jobs"], None)
+pub fn remote_list_jobs(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<Vec<MeetingJob>, AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
+    require_operation(&capabilities, "jobs.list").map_err(remote_command_error)?;
+    request_jobs(&context, Method::GET, &["api", "jobs"], None).map_err(remote_command_error)
 }
 
 #[tauri::command]
@@ -111,13 +110,13 @@ pub fn remote_get_job(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
-) -> LocalResult<MeetingJob> {
-    require_main_window(window.label())?;
-    let id = normalize_job_id(&id)?;
-    let context = remote_context(&app)?;
-    let capabilities = fetch_capabilities(&context)?;
-    require_operation(&capabilities, "jobs.read")?;
-    request_job(&context, Method::GET, &["api", "jobs", id], None, id)
+) -> Result<MeetingJob, AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
+    require_operation(&capabilities, "jobs.read").map_err(remote_command_error)?;
+    request_job(&context, Method::GET, &["api", "jobs", id], None, id).map_err(remote_command_error)
 }
 
 #[tauri::command]
@@ -125,12 +124,12 @@ pub fn remote_get_job_result(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
-) -> LocalResult<MeetingJob> {
-    require_main_window(window.label())?;
-    let id = normalize_job_id(&id)?;
-    let context = remote_context(&app)?;
-    let capabilities = fetch_capabilities(&context)?;
-    require_operation(&capabilities, "jobs.result.read")?;
+) -> Result<MeetingJob, AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
+    require_operation(&capabilities, "jobs.result.read").map_err(remote_command_error)?;
     request_job(
         &context,
         Method::GET,
@@ -138,6 +137,7 @@ pub fn remote_get_job_result(
         None,
         id,
     )
+    .map_err(remote_command_error)
 }
 
 #[tauri::command]
@@ -145,12 +145,12 @@ pub fn remote_retry_job(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
-) -> LocalResult<MeetingJob> {
-    require_main_window(window.label())?;
-    let id = normalize_job_id(&id)?;
-    let context = remote_context(&app)?;
-    let capabilities = fetch_capabilities(&context)?;
-    require_operation(&capabilities, "jobs.retry")?;
+) -> Result<MeetingJob, AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
+    require_operation(&capabilities, "jobs.retry").map_err(remote_command_error)?;
     request_job(
         &context,
         Method::POST,
@@ -158,17 +158,23 @@ pub fn remote_retry_job(
         None,
         id,
     )
+    .map_err(remote_command_error)
 }
 
 #[tauri::command]
-pub fn remote_delete_job(app: AppHandle, window: WebviewWindow, id: String) -> LocalResult<()> {
-    require_main_window(window.label())?;
-    let id = normalize_job_id(&id)?;
-    let context = remote_context(&app)?;
-    let capabilities = fetch_capabilities(&context)?;
-    require_operation(&capabilities, "jobs.delete")?;
-    let response = send_request(&context, Method::DELETE, &["api", "jobs", id], None)?;
-    discard_success_body(response)
+pub fn remote_delete_job(
+    app: AppHandle,
+    window: WebviewWindow,
+    id: String,
+) -> Result<(), AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
+    require_operation(&capabilities, "jobs.delete").map_err(remote_command_error)?;
+    let response = send_request(&context, Method::DELETE, &["api", "jobs", id], None)
+        .map_err(remote_command_error)?;
+    discard_success_body(response).map_err(remote_command_error)
 }
 
 #[tauri::command]
@@ -178,14 +184,15 @@ pub fn remote_rename_job_speaker(
     id: String,
     from_speaker: String,
     to_speaker: String,
-) -> LocalResult<MeetingJob> {
-    require_main_window(window.label())?;
-    let id = normalize_job_id(&id)?;
-    let from_speaker = normalize_speaker(&from_speaker, "原讲话人")?;
-    let to_speaker = normalize_speaker(&to_speaker, "新讲话人")?;
-    let context = remote_context(&app)?;
-    let capabilities = fetch_capabilities(&context)?;
-    require_operation(&capabilities, "transcript.speakers.rename")?;
+) -> Result<MeetingJob, AppErrorDto> {
+    require_main_window(window.label()).map_err(remote_command_error)?;
+    let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    let from_speaker =
+        normalize_speaker(&from_speaker, "原讲话人").map_err(remote_command_error)?;
+    let to_speaker = normalize_speaker(&to_speaker, "新讲话人").map_err(remote_command_error)?;
+    let context = remote_context(&app).map_err(remote_command_error)?;
+    let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
+    require_operation(&capabilities, "transcript.speakers.rename").map_err(remote_command_error)?;
     request_job(
         &context,
         Method::POST,
@@ -196,6 +203,11 @@ pub fn remote_rename_job_speaker(
         })),
         id,
     )
+    .map_err(remote_command_error)
+}
+
+fn remote_command_error(_source: String) -> AppErrorDto {
+    AppErrorDto::new("remote_service_unavailable", ErrorCategory::Network, true)
 }
 
 fn require_main_window(window_label: &str) -> LocalResult<()> {
@@ -209,22 +221,16 @@ fn require_main_window(window_label: &str) -> LocalResult<()> {
 fn remote_context(app: &AppHandle) -> LocalResult<RemoteContext> {
     let settings = local_db::get_settings(app)?;
     let api_token = normalize_api_token(&settings.api_token)?;
-    let target = resolve_remote_target(&settings.backend_url)?;
-    let mut client_builder = Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .redirect(Policy::none())
-        .no_proxy()
-        .https_only(target.base_url.scheme() == "https");
-    if let Some((domain, addresses)) = target.dns_override.as_ref() {
-        client_builder = client_builder.resolve_to_addrs(domain, addresses);
-    }
-    let client = client_builder
-        .build()
-        .map_err(|error| format!("初始化远端服务客户端失败: {error}"))?;
+    let target =
+        TrustedHttpTarget::resolve(&settings.backend_url, TrustedHttpPolicy::RemoteMeeting)
+            .map_err(|error| format!("capability_unavailable: {error}"))?;
+    let client = target
+        .blocking_client(REQUEST_TIMEOUT)
+        .map_err(|error| format!("capability_unavailable: {error}"))?;
 
     Ok(RemoteContext {
         client,
-        base_url: target.base_url,
+        target,
         api_token,
     })
 }
@@ -235,204 +241,6 @@ fn normalize_api_token(value: &str) -> LocalResult<String> {
         Err("capability_unavailable: 未配置远端 API Token，已拒绝发起网络请求。".into())
     } else {
         Ok(value.to_string())
-    }
-}
-
-fn resolve_remote_target(value: &str) -> LocalResult<ResolvedRemoteTarget> {
-    let base_url = parse_remote_base_url(value)?;
-    let host = base_url
-        .host_str()
-        .ok_or_else(|| "capability_unavailable: 远端服务地址缺少主机名。".to_string())?
-        .to_string();
-
-    if literal_host_ip(&base_url).is_some() {
-        validate_remote_destination(&base_url, &[])?;
-        return Ok(ResolvedRemoteTarget {
-            base_url,
-            dns_override: None,
-        });
-    }
-
-    if base_url.scheme() != "https" {
-        return Err(
-            "capability_unavailable: 携带 API Token 的 HTTP 请求仅允许 IP 字面量 loopback 本机端点。"
-                .into(),
-        );
-    }
-
-    let port = base_url
-        .port_or_known_default()
-        .ok_or_else(|| "capability_unavailable: 远端服务地址缺少有效端口。".to_string())?;
-    let addresses = resolve_domain_addresses(&host, port)?;
-    let resolved_ips = addresses
-        .iter()
-        .map(|address| address.ip())
-        .collect::<Vec<_>>();
-    validate_remote_destination(&base_url, &resolved_ips)?;
-
-    Ok(ResolvedRemoteTarget {
-        base_url,
-        dns_override: Some((host, addresses)),
-    })
-}
-
-fn parse_remote_base_url(value: &str) -> LocalResult<Url> {
-    let mut base_url = Url::parse(value.trim())
-        .map_err(|_| "capability_unavailable: 远端服务地址不是有效 URL。".to_string())?;
-    if !matches!(base_url.scheme(), "http" | "https") {
-        return Err("capability_unavailable: 远端服务只支持 HTTP(S) URL。".into());
-    }
-    if !base_url.username().is_empty() || base_url.password().is_some() {
-        return Err("capability_unavailable: 远端服务地址不能内嵌用户名或密码。".into());
-    }
-    if base_url.host_str().is_none() {
-        return Err("capability_unavailable: 远端服务地址缺少主机名。".into());
-    }
-    base_url.set_query(None);
-    base_url.set_fragment(None);
-    Ok(base_url)
-}
-
-fn resolve_domain_addresses(host: &str, port: u16) -> LocalResult<Vec<SocketAddr>> {
-    let resolved = (host, port)
-        .to_socket_addrs()
-        .map_err(|error| format!("capability_unavailable: 解析远端服务域名失败: {error}"))?;
-    let mut seen = HashSet::new();
-    let addresses = resolved
-        .filter(|address| seen.insert(*address))
-        .collect::<Vec<_>>();
-    if addresses.is_empty() {
-        Err("capability_unavailable: 远端服务域名未解析到任何地址。".into())
-    } else {
-        Ok(addresses)
-    }
-}
-
-fn validate_remote_destination(base_url: &Url, resolved_ips: &[IpAddr]) -> LocalResult<()> {
-    if base_url.host_str().is_none() {
-        return Err("capability_unavailable: 远端服务地址缺少主机名。".into());
-    }
-
-    if let Some(literal_ip) = literal_host_ip(base_url) {
-        if is_loopback_ip(literal_ip) {
-            return Ok(());
-        }
-        if base_url.scheme() != "https" {
-            return Err(
-                "capability_unavailable: 禁止通过非 loopback HTTP 端点传输 API Token。".into(),
-            );
-        }
-        if !is_public_remote_ip(literal_ip) {
-            return Err("capability_unavailable: 远端服务地址指向受限网络。".into());
-        }
-        return Ok(());
-    }
-
-    if base_url.scheme() != "https" {
-        return Err(
-            "capability_unavailable: 携带 API Token 的 HTTP 请求仅允许 IP 字面量 loopback 本机端点。"
-                .into(),
-        );
-    }
-    if resolved_ips.is_empty() {
-        return Err("capability_unavailable: 远端服务域名缺少已验证的解析地址。".into());
-    }
-    if resolved_ips.iter().any(|ip| !is_public_remote_ip(*ip)) {
-        return Err(
-            "capability_unavailable: 远端服务域名解析到私网、loopback、link-local、metadata 或保留地址。"
-                .into(),
-        );
-    }
-    Ok(())
-}
-
-fn literal_host_ip(url: &Url) -> Option<IpAddr> {
-    let host = url.host_str()?;
-    host.strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .unwrap_or(host)
-        .parse()
-        .ok()
-}
-
-fn is_loopback_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => ip.is_loopback(),
-        IpAddr::V6(ip) => {
-            ip.is_loopback()
-                || mapped_ipv4(ip)
-                    .map(|mapped| mapped.is_loopback())
-                    .unwrap_or(false)
-        }
-    }
-}
-
-fn is_public_remote_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ip) => is_public_ipv4(ip),
-        IpAddr::V6(ip) => mapped_ipv4(ip)
-            .map(is_public_ipv4)
-            .unwrap_or_else(|| is_public_ipv6(ip)),
-    }
-}
-
-fn is_public_ipv4(ip: Ipv4Addr) -> bool {
-    let [first, second, third, fourth] = ip.octets();
-    if first == 0
-        || first == 10
-        || first == 127
-        || first >= 224
-        || (first == 100 && (64..=127).contains(&second))
-        || (first == 169 && second == 254)
-        || (first == 172 && (16..=31).contains(&second))
-        || (first == 192 && second == 168)
-        || (first == 192 && second == 0 && third == 0)
-        || (first == 192 && second == 0 && third == 2)
-        || (first == 192 && second == 88 && third == 99)
-        || (first == 198 && matches!(second, 18 | 19))
-        || (first == 198 && second == 51 && third == 100)
-        || (first == 203 && second == 0 && third == 113)
-    {
-        return false;
-    }
-
-    // Azure exposes host metadata on this otherwise globally-routable virtual address.
-    [first, second, third, fourth] != [168, 63, 129, 16]
-}
-
-fn is_public_ipv6(ip: Ipv6Addr) -> bool {
-    let segments = ip.segments();
-    if segments[0] & 0xe000 != 0x2000 {
-        return false;
-    }
-
-    let special_2001 = segments[0] == 0x2001
-        && (segments[1] == 0
-            || (segments[1] == 2 && segments[2] == 0)
-            || (segments[1] & 0xfff0) == 0x0010
-            || (segments[1] & 0xfff0) == 0x0020
-            || segments[1] == 0x0db8);
-    let documentation_3fff = segments[0] == 0x3fff && (segments[1] & 0xf000) == 0;
-    !special_2001 && segments[0] != 0x2002 && !documentation_3fff
-}
-
-fn mapped_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
-    let segments = ip.segments();
-    if segments[0] == 0
-        && segments[1] == 0
-        && segments[2] == 0
-        && segments[3] == 0
-        && segments[4] == 0
-        && segments[5] == 0xffff
-    {
-        Some(Ipv4Addr::new(
-            (segments[6] >> 8) as u8,
-            segments[6] as u8,
-            (segments[7] >> 8) as u8,
-            segments[7] as u8,
-        ))
-    } else {
-        None
     }
 }
 
@@ -555,7 +363,10 @@ fn send_request(
     path: &[&str],
     body: Option<Value>,
 ) -> LocalResult<Response> {
-    let url = endpoint(&context.base_url, path)?;
+    let url = context
+        .target
+        .endpoint(path)
+        .map_err(|error| error.to_string())?;
     let mut request = context
         .client
         .request(method, url)
@@ -572,20 +383,6 @@ fn send_request(
     } else {
         Err(remote_response_error(response))
     }
-}
-
-fn endpoint(base_url: &Url, path: &[&str]) -> LocalResult<Url> {
-    let mut url = base_url.clone();
-    {
-        let mut segments = url
-            .path_segments_mut()
-            .map_err(|_| "远端服务地址不能作为 API 基础地址。".to_string())?;
-        segments.pop_if_empty();
-        for segment in path {
-            segments.push(segment);
-        }
-    }
-    Ok(url)
 }
 
 fn decode_json_response<T: for<'de> Deserialize<'de>>(response: Response) -> LocalResult<T> {
@@ -639,6 +436,7 @@ fn read_limited(response: Response, limit: u64) -> LocalResult<Vec<u8>> {
 }
 
 fn parse_remote_job(value: Value) -> LocalResult<MeetingJob> {
+    let mut value = value;
     let object = value
         .as_object()
         .ok_or_else(|| "远端任务响应不是对象。".to_string())?;
@@ -660,6 +458,41 @@ fn parse_remote_job(value: Value) -> LocalResult<MeetingJob> {
     if object.get("summary").and_then(Value::as_object).is_none() {
         return Err("远端任务响应字段 summary 不是对象。".into());
     }
+
+    let explicit_diarization_status = object
+        .get("diarizationStatus")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let normalized_status = match explicit_diarization_status.as_deref() {
+        Some("completed") => DiarizationStatus::Completed,
+        Some(value) => DiarizationStatus::try_from(value)
+            .map_err(|error| format!("远端任务响应包含无效 diarizationStatus: {error}"))?,
+        None => DiarizationStatus::LegacyUnverified,
+    };
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "远端任务响应不是对象。".to_string())?;
+    object.insert(
+        "asrBackend".into(),
+        object
+            .get("asrBackend")
+            .cloned()
+            .unwrap_or_else(|| Value::String(AsrBackend::Unknown.as_str().into())),
+    );
+    object.insert(
+        "diarizationStatus".into(),
+        Value::String(normalized_status.as_str().into()),
+    );
+    object.insert(
+        "warnings".into(),
+        object.get("warnings").cloned().unwrap_or_else(|| {
+            serde_json::to_value(vec![RunnerWarning {
+                code: "remote_diarization_unverified".into(),
+                message: "远端旧版任务未声明版本化说话人状态，默认仅使用逐字稿。".into(),
+            }])
+            .expect("serializable warning")
+        }),
+    );
 
     let mut job: MeetingJob = serde_json::from_value(value)
         .map_err(|error| format!("远端任务响应不符合 Job V1 schema: {error}"))?;
@@ -700,23 +533,10 @@ fn normalize_speaker<'a>(value: &'a str, label: &str) -> LocalResult<&'a str> {
 
 #[cfg(test)]
 mod tests {
-    use std::net::IpAddr;
-
     use super::{
-        endpoint, normalize_api_token, parse_remote_base_url, require_matching_job_id,
-        validate_capabilities, validate_remote_destination, MeetingJob, RemoteMeetingCapabilities,
+        normalize_api_token, require_matching_job_id, validate_capabilities, MeetingJob,
+        RemoteMeetingCapabilities,
     };
-    use reqwest::Url;
-
-    #[test]
-    fn endpoint_preserves_configured_base_path_and_encodes_ids() {
-        let base = Url::parse("https://example.com/liberty/").expect("base URL");
-        let url = endpoint(&base, &["api", "jobs", "job / one"]).expect("endpoint");
-        assert_eq!(
-            url.as_str(),
-            "https://example.com/liberty/api/jobs/job%20%2F%20one"
-        );
-    }
 
     #[test]
     fn capabilities_reject_unknown_operations() {
@@ -740,69 +560,6 @@ mod tests {
             normalize_api_token("  secret-token  ").unwrap(),
             "secret-token"
         );
-    }
-
-    #[test]
-    fn http_exception_requires_a_literal_loopback_address() {
-        for value in ["http://127.0.0.1:8787", "http://[::1]:8787"] {
-            let url = Url::parse(value).expect("loopback URL");
-            assert!(validate_remote_destination(&url, &[]).is_ok(), "{value}");
-        }
-
-        let localhost = Url::parse("http://localhost:8787").expect("localhost URL");
-        let loopback = ["127.0.0.1".parse::<IpAddr>().unwrap()];
-        assert!(validate_remote_destination(&localhost, &loopback).is_err());
-
-        let public_http = Url::parse("http://8.8.8.8").expect("public HTTP URL");
-        assert!(validate_remote_destination(&public_http, &[]).is_err());
-    }
-
-    #[test]
-    fn destination_rejects_private_link_local_metadata_and_mixed_dns_answers() {
-        let base = Url::parse("https://api.example.com").expect("remote URL");
-        let public = [
-            "8.8.8.8".parse::<IpAddr>().unwrap(),
-            "2606:4700:4700::1111".parse::<IpAddr>().unwrap(),
-        ];
-        assert!(validate_remote_destination(&base, &public).is_ok());
-
-        for blocked in [
-            "10.0.0.1",
-            "100.100.100.200",
-            "127.0.0.1",
-            "169.254.169.254",
-            "168.63.129.16",
-            "192.168.1.1",
-            "224.0.0.1",
-            "::1",
-            "fd00::1",
-            "fe80::1",
-            "2001:db8::1",
-            "::ffff:10.0.0.1",
-            "::ffff:172.31.9.7",
-        ] {
-            let addresses = [blocked.parse::<IpAddr>().unwrap()];
-            assert!(
-                validate_remote_destination(&base, &addresses).is_err(),
-                "accepted blocked address {blocked}"
-            );
-        }
-
-        let mixed = [
-            "8.8.8.8".parse::<IpAddr>().unwrap(),
-            "10.0.0.1".parse::<IpAddr>().unwrap(),
-        ];
-        assert!(validate_remote_destination(&base, &mixed).is_err());
-
-        let private_literal = Url::parse("https://192.168.1.1").expect("private URL");
-        assert!(validate_remote_destination(&private_literal, &[]).is_err());
-    }
-
-    #[test]
-    fn base_url_normalization_preserves_path_and_removes_query_and_fragment() {
-        let url = parse_remote_base_url(" https://example.com/liberty/?debug=1#fragment ")
-            .expect("base URL");
-        assert_eq!(url.as_str(), "https://example.com/liberty/");
     }
 
     #[test]

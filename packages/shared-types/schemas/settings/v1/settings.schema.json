@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/settings/v1/settings.schema.json",
+  "title": "SettingsSnapshotV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["themeMode", "liquidGlassStyle", "accentColor", "locale", "backendUrl", "apiTokenConfigured", "processingMode", "defaultHotwords", "summaryTemplate", "concurrency", "pythonPath", "ffmpegPath", "pythonRuntimeSource", "ffmpegRuntimeSource", "runnerScriptPath", "localAsrDevice", "localAsrThreads", "localAsrBatchSizeSeconds", "runtimeDownloadSource", "settingsRevision"],
+  "properties": {
+    "themeMode": { "enum": ["auto", "light", "dark"] },
+    "liquidGlassStyle": { "enum": ["transparent", "tinted"] },
+    "accentColor": { "type": "string" },
+    "locale": { "enum": ["zh-CN", "en-US"] },
+    "backendUrl": { "type": "string" },
+    "apiTokenConfigured": { "type": "boolean" },
+    "processingMode": { "enum": ["local", "remote"] },
+    "defaultHotwords": { "type": "string" },
+    "summaryTemplate": { "type": "string" },
+    "concurrency": { "type": "integer", "minimum": 1 },
+    "pythonPath": { "type": "string" },
+    "ffmpegPath": { "type": "string" },
+    "pythonRuntimeSource": { "enum": ["managed", "system"] },
+    "ffmpegRuntimeSource": { "enum": ["managed", "system"] },
+    "runnerScriptPath": { "type": "string" },
+    "localAsrDevice": { "enum": ["auto", "cpu", "mps", "cuda"] },
+    "localAsrThreads": { "type": "integer", "minimum": 0 },
+    "localAsrBatchSizeSeconds": { "type": "integer", "minimum": 1 },
+    "runtimeDownloadSource": { "type": "string" },
+    "settingsRevision": { "type": "integer", "minimum": 0 }
+  }
+}

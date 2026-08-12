@@ -1,8 +1,12 @@
-use crate::infrastructure::{
-    ids, migrations,
-    repositories::{
-        ai_models, ai_summary_runs, ai_templates, farm, job_events, members, pet, pet_blind_box,
-        pet_check_in, pet_redeem_key, pet_store, runtime_state, settings, work_game,
+use crate::{
+    application::complete_asr_job::{AsrJobCompletion, AsrJobCompletionPort},
+    infrastructure::{
+        ids, migrations,
+        repositories::{
+            ai_models, ai_summary_runs, ai_templates, farm, job_events, members, pet,
+            pet_blind_box, pet_check_in, pet_redeem_key, pet_store, runtime_state, settings,
+            work_game,
+        },
     },
 };
 use rusqlite::{params, Connection, Transaction, TransactionBehavior};
@@ -14,6 +18,9 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Manager};
+
+pub use crate::domain::settings::{AppSettings, AppSettingsSnapshot};
+pub use crate::domain::transcript::TranscriptSegment;
 
 pub type LocalResult<T> = Result<T, String>;
 
@@ -552,33 +559,22 @@ pub fn update_local_job_process_log(
     Ok(updated == 1)
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn complete_local_job_run(
-    app: &AppHandle,
-    job_id: &str,
-    attempt_id: u64,
-    lease_token: u64,
-    transcript_segments: &[TranscriptSegment],
-    speaker_segments: &[TranscriptSegment],
-    duration_minutes: u32,
-    processing_finished_at_ms: u64,
-    processing_duration_seconds: Option<u32>,
-    process_log: &str,
-) -> LocalResult<bool> {
-    init_database(app)?;
-    let mut conn = open_connection(app)?;
-    complete_local_job_run_on_connection(
-        &mut conn,
-        job_id,
-        attempt_id,
-        lease_token,
-        transcript_segments,
-        speaker_segments,
-        duration_minutes,
-        processing_finished_at_ms,
-        processing_duration_seconds,
-        process_log,
-    )
+pub struct SqliteAsrJobCompletion<'app> {
+    app: &'app AppHandle,
+}
+
+impl<'app> SqliteAsrJobCompletion<'app> {
+    pub fn new(app: &'app AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl AsrJobCompletionPort for SqliteAsrJobCompletion<'_> {
+    fn complete(&self, completion: &AsrJobCompletion) -> LocalResult<bool> {
+        init_database(self.app)?;
+        let mut conn = open_connection(self.app)?;
+        complete_local_job_run_on_connection(&mut conn, completion)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -757,6 +753,11 @@ fn begin_local_job_run_on_connection(
              SET asr_status = 'transcribing',
                  summary_status = 'idle',
                  overall_status = 'transcribing',
+                 diarization_status = CASE
+                   WHEN enable_speaker = 1 THEN 'processing'
+                   ELSE 'disabled'
+                 END,
+                 warnings_json = '[]',
                  failure_reason = NULL,
                  processing_started_at_ms = ?2,
                  processing_finished_at_ms = NULL,
@@ -810,6 +811,11 @@ fn requeue_recovered_local_job_run_on_connection(
         tx.execute(
             "UPDATE jobs
              SET asr_status = 'queued', summary_status = 'idle', overall_status = 'queued',
+                 diarization_status = CASE
+                   WHEN enable_speaker = 1 THEN 'pending'
+                   ELSE 'disabled'
+                 END,
+                 warnings_json = '[]',
                  failure_reason = NULL, processing_started_at_ms = NULL,
                  processing_finished_at_ms = NULL, processing_duration_seconds = NULL
              WHERE id = ?1",
@@ -842,48 +848,68 @@ fn is_current_local_job_run_on_connection(
     .map_err(|err| err.to_string())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn complete_local_job_run_on_connection(
     conn: &mut Connection,
-    job_id: &str,
-    attempt_id: u64,
-    lease_token: u64,
-    transcript_segments: &[TranscriptSegment],
-    speaker_segments: &[TranscriptSegment],
-    duration_minutes: u32,
-    processing_finished_at_ms: u64,
-    processing_duration_seconds: Option<u32>,
-    process_log: &str,
+    completion: &AsrJobCompletion,
 ) -> LocalResult<bool> {
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|err| err.to_string())?;
-    if !claim_current_run_tx(&tx, job_id, attempt_id, lease_token, "completed")? {
+    if !claim_current_run_tx(
+        &tx,
+        &completion.job_id,
+        completion.attempt_id,
+        completion.lease_token,
+        "completed",
+    )? {
         return Ok(false);
     }
-    jobs::replace_segments_tx(&tx, job_id, "transcript", transcript_segments)?;
-    jobs::replace_segments_tx(&tx, job_id, "speaker", speaker_segments)?;
+    jobs::replace_segments_tx(
+        &tx,
+        &completion.job_id,
+        "transcript",
+        &completion.result.transcript_segments,
+    )?;
+    jobs::replace_segments_tx(
+        &tx,
+        &completion.job_id,
+        "speaker",
+        &completion.result.speaker_segments,
+    )?;
+    let warnings_json = serde_json::to_string(&completion.result.warnings)
+        .map_err(|error| format!("无法序列化 Runner warnings: {error}"))?;
     tx.execute(
         "UPDATE jobs
          SET duration_minutes = ?2,
              processing_finished_at_ms = ?3,
              processing_duration_seconds = ?4,
+             runner_protocol_version = ?5,
+             asr_backend = ?6,
+             diarization_status = ?7,
+             warnings_json = ?8,
              summary_status = 'idle',
              asr_status = 'completed',
              overall_status = 'completed',
              failure_reason = NULL,
-             process_log = ?5
+             process_log = ?9
          WHERE id = ?1",
         params![
-            job_id,
-            i64::from(duration_minutes),
-            as_sql_i64(processing_finished_at_ms, "processing_finished_at_ms")?,
-            processing_duration_seconds.map(i64::from),
-            process_log
+            completion.job_id,
+            i64::from(completion.duration_minutes),
+            as_sql_i64(
+                completion.processing_finished_at_ms,
+                "processing_finished_at_ms"
+            )?,
+            completion.processing_duration_seconds.map(i64::from),
+            i64::from(completion.result.protocol_version),
+            completion.result.asr_backend.as_str(),
+            completion.result.diarization_status.as_str(),
+            warnings_json,
+            completion.process_log
         ],
     )
     .map_err(|err| err.to_string())?;
-    job_events::append_job_event_tx(&tx, job_id, "completed", "任务处理完成。", None)?;
+    job_events::append_job_event_tx(&tx, &completion.job_id, "completed", "任务处理完成。", None)?;
     tx.commit().map_err(|err| err.to_string())?;
     Ok(true)
 }
@@ -922,6 +948,10 @@ fn fail_local_job_run_on_connection(
              asr_status = 'failed',
              summary_status = 'idle',
              overall_status = 'failed',
+             diarization_status = CASE
+               WHEN enable_speaker = 1 THEN 'failed'
+               ELSE 'disabled'
+             END,
              failure_reason = ?4,
              process_log = ?5
          WHERE id = ?1",
@@ -1035,6 +1065,13 @@ fn reset_job_for_retry_on_connection(
              asr_status = ?3,
              summary_status = ?4,
              overall_status = ?5,
+             runner_protocol_version = NULL,
+             asr_backend = 'unknown',
+             diarization_status = CASE
+               WHEN enable_speaker = 1 THEN 'pending'
+               ELSE 'disabled'
+             END,
+             warnings_json = '[]',
              failure_reason = NULL,
              process_log = NULL,
              duration_minutes = 0,
@@ -1176,15 +1213,21 @@ pub fn list_ai_models(app: &AppHandle) -> LocalResult<Vec<AiModelMetadata>> {
 pub fn save_ai_model(app: &AppHandle, model: &AiModelSaveInput) -> LocalResult<()> {
     init_database(app)?;
     let mut conn = open_connection(app)?;
-    let tx = conn.transaction().map_err(|err| err.to_string())?;
-    ai_models::save_ai_model_tx(&tx, model)?;
-    tx.commit().map_err(|err| err.to_string())
+    crate::application::save_ai_model::save_ai_model(
+        &mut conn,
+        &crate::infrastructure::credentials::default_credential_store(),
+        model,
+    )
 }
 
 pub fn delete_ai_model(app: &AppHandle, model_id: &str) -> LocalResult<()> {
     init_database(app)?;
-    let conn = open_connection(app)?;
-    ai_models::delete_ai_model(&conn, model_id)
+    let mut conn = open_connection(app)?;
+    crate::application::delete_ai_model::delete_ai_model(
+        &mut conn,
+        &crate::infrastructure::credentials::default_credential_store(),
+        model_id,
+    )
 }
 
 pub fn list_ai_templates(app: &AppHandle) -> LocalResult<Vec<AiSummaryTemplate>> {
@@ -1610,7 +1653,12 @@ mod tests {
                processing_finished_at_ms INTEGER,
                processing_duration_seconds INTEGER,
                python_path TEXT,
-               runner_script_path TEXT
+               runner_script_path TEXT,
+               enable_speaker INTEGER NOT NULL DEFAULT 1,
+               runner_protocol_version INTEGER,
+               asr_backend TEXT NOT NULL DEFAULT 'unknown',
+               diarization_status TEXT NOT NULL DEFAULT 'pending',
+               warnings_json TEXT NOT NULL DEFAULT '[]'
              );
              CREATE TABLE transcript_segments (job_id TEXT, segment_type TEXT);
              CREATE TABLE ai_summary_runs (id TEXT PRIMARY KEY, job_id TEXT NOT NULL);
@@ -1635,7 +1683,12 @@ mod tests {
                metadata_json TEXT,
                created_at TEXT NOT NULL
              );
-             INSERT INTO jobs VALUES(
+             INSERT INTO jobs(
+               id, upload_status, asr_status, summary_status, overall_status,
+               failure_reason, process_log, duration_minutes,
+               processing_started_at_ms, processing_finished_at_ms,
+               processing_duration_seconds, python_path, runner_script_path
+             ) VALUES(
                'job-1700000000000-1', 'uploaded', 'failed', 'completed', 'failed',
                'old failure', 'old log', 12, 10, 20, 10, '/old/python', '/old/runner'
              );

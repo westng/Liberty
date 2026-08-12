@@ -1,0 +1,22 @@
+{
+  "themeMode": "auto",
+  "liquidGlassStyle": "transparent",
+  "accentColor": "#2f6dff",
+  "locale": "zh-CN",
+  "backendUrl": "https://example.com",
+  "apiTokenConfigured": false,
+  "processingMode": "local",
+  "defaultHotwords": "Liberty",
+  "summaryTemplate": "表格版会议纪要",
+  "concurrency": 2,
+  "pythonPath": "",
+  "ffmpegPath": "",
+  "pythonRuntimeSource": "managed",
+  "ffmpegRuntimeSource": "managed",
+  "runnerScriptPath": "",
+  "localAsrDevice": "auto",
+  "localAsrThreads": 0,
+  "localAsrBatchSizeSeconds": 300,
+  "runtimeDownloadSource": "",
+  "settingsRevision": 1
+}

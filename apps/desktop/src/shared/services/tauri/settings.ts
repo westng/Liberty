@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SettingsSnapshotV1 } from "@liberty-contracts/settings-v1";
 import type {
   SettingsCommandError,
   SettingsCredentialUpdate,
@@ -38,14 +39,14 @@ function normalizeSettingsCommandError(error: unknown): Error {
 
 export function createLocalSettingsService() {
   return {
-    getSettings: () => invoke<SettingsSnapshot>("get_settings"),
+    getSettings: () => invoke<SettingsSnapshotV1>("get_settings"),
     getUiPreferences: () => invoke<UiPreferences>("get_ui_preferences"),
     saveSettings: async (
       settings: SettingsState,
       credential: SettingsCredentialUpdate = { action: "keep" },
     ): Promise<SettingsSnapshot> => {
       try {
-        return await invoke<SettingsSnapshot>("save_settings", {
+        return await invoke<SettingsSnapshotV1>("save_settings", {
           settings: { ...settings, credential },
         });
       } catch (error) {

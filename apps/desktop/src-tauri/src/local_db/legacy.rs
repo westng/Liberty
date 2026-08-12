@@ -57,11 +57,13 @@ fn read_legacy_job(job_dir: &Path) -> LocalResult<MeetingJob> {
     let raw = fs::read(&job_path).map_err(|err| err.to_string())?;
     let mut job: MeetingJob = serde_json::from_slice(&raw).map_err(|err| err.to_string())?;
 
-    if let Ok(progress) = progress::read_json::<ProgressSnapshot>(&job_dir.join("progress.json")) {
+    if let Ok(progress) = progress::read_runner_progress(&job_dir.join("progress.json")) {
         progress::apply_progress_snapshot(&mut job, &progress);
     }
 
-    if let Ok(result) = progress::read_json::<LegacyRunnerResult>(&job_dir.join("result.json")) {
+    if let Ok(result) =
+        progress::read_legacy_json::<LegacyRunnerResult>(&job_dir.join("result.json"))
+    {
         if job.transcript_segments.is_empty() {
             job.transcript_segments = result.transcript_segments.unwrap_or_default();
         }
@@ -145,6 +147,7 @@ fn imported_summary_run(job: &MeetingJob) -> LocalResult<AiSummaryRun> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::transcript::TranscriptSegment;
 
     #[test]
     fn imported_completed_run_persists_verified_payload_with_snapshot_speakers() {

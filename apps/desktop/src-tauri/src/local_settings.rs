@@ -1,4 +1,8 @@
-use crate::local_db::{self, AppSettings, AppSettingsSnapshot, LocalResult, UiPreferences};
+use crate::{
+    application::save_settings::{self, SettingsPort},
+    domain::settings::{AppSettings, AppSettingsSnapshot, CredentialUpdate},
+    local_db::{self, LocalResult, UiPreferences},
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, WebviewWindow};
 
@@ -77,17 +81,30 @@ pub fn save_settings(
     settings: SaveSettingsInput,
 ) -> Result<PublicSettingsSnapshot, SettingsCommandError> {
     require_main_window(window.label()).map_err(SettingsCommandError::failed)?;
-    let stored = local_db::get_settings_snapshot(&app).map_err(SettingsCommandError::failed)?;
-    let prepared =
-        prepare_settings_snapshot(settings, &stored).map_err(SettingsCommandError::failed)?;
-    local_db::save_settings_snapshot(&app, &prepared)
+    let expected_revision = settings.settings.settings_revision;
+    let (incoming, credential) = internal_save_input(settings);
+    save_settings::save_settings(&LocalSettingsPort { app: &app }, incoming, credential)
         .map(public_settings_snapshot)
         .map_err(|message| {
             let current = local_db::get_settings_snapshot(&app)
                 .ok()
                 .map(public_settings_snapshot);
-            SettingsCommandError::from_save_failure(message, prepared.settings_revision, current)
+            SettingsCommandError::from_save_failure(message, expected_revision, current)
         })
+}
+
+struct LocalSettingsPort<'a> {
+    app: &'a AppHandle,
+}
+
+impl SettingsPort for LocalSettingsPort<'_> {
+    fn load(&self) -> LocalResult<AppSettingsSnapshot> {
+        local_db::get_settings_snapshot(self.app)
+    }
+
+    fn save(&self, snapshot: &AppSettingsSnapshot) -> LocalResult<AppSettingsSnapshot> {
+        local_db::save_settings_snapshot(self.app, snapshot)
+    }
 }
 
 fn require_main_window(window_label: &str) -> LocalResult<()> {
@@ -98,47 +115,41 @@ fn require_main_window(window_label: &str) -> LocalResult<()> {
     }
 }
 
-fn prepare_settings_snapshot(
-    incoming: SaveSettingsInput,
-    stored: &AppSettingsSnapshot,
-) -> LocalResult<AppSettingsSnapshot> {
+fn internal_save_input(incoming: SaveSettingsInput) -> (AppSettingsSnapshot, CredentialUpdate) {
     let public = incoming.settings;
-    let api_token = match incoming.credential {
-        SettingsCredentialUpdate::Keep => stored.settings.api_token.clone(),
-        SettingsCredentialUpdate::Set { value } => {
-            let value = value.trim();
-            if value.is_empty() {
-                return Err("设置远端 API Token 时凭据不能为空。".into());
-            }
-            value.to_string()
-        }
-        SettingsCredentialUpdate::Clear => String::new(),
-    };
     let settings = AppSettings {
         theme_mode: public.theme_mode,
         liquid_glass_style: public.liquid_glass_style,
         accent_color: public.accent_color,
         locale: public.locale,
         backend_url: public.backend_url,
-        api_token,
+        api_token: String::new(),
         processing_mode: public.processing_mode,
         default_hotwords: public.default_hotwords,
         summary_template: public.summary_template,
         concurrency: public.concurrency,
-        python_path: stored.settings.python_path.clone(),
-        ffmpeg_path: stored.settings.ffmpeg_path.clone(),
-        python_runtime_source: stored.settings.python_runtime_source.clone(),
-        ffmpeg_runtime_source: stored.settings.ffmpeg_runtime_source.clone(),
+        python_path: public.python_path,
+        ffmpeg_path: public.ffmpeg_path,
+        python_runtime_source: public.python_runtime_source,
+        ffmpeg_runtime_source: public.ffmpeg_runtime_source,
         runner_script_path: public.runner_script_path,
         local_asr_device: public.local_asr_device,
         local_asr_threads: public.local_asr_threads,
         local_asr_batch_size_seconds: public.local_asr_batch_size_seconds,
         runtime_download_source: public.runtime_download_source,
     };
-    Ok(AppSettingsSnapshot {
-        settings,
-        settings_revision: public.settings_revision.or(stored.settings_revision),
-    })
+    let credential = match incoming.credential {
+        SettingsCredentialUpdate::Keep => CredentialUpdate::Keep,
+        SettingsCredentialUpdate::Set { value } => CredentialUpdate::Set(value),
+        SettingsCredentialUpdate::Clear => CredentialUpdate::Clear,
+    };
+    (
+        AppSettingsSnapshot {
+            settings,
+            settings_revision: public.settings_revision,
+        },
+        credential,
+    )
 }
 
 fn public_settings_snapshot(snapshot: AppSettingsSnapshot) -> PublicSettingsSnapshot {
@@ -200,10 +211,10 @@ impl SettingsCommandError {
 #[cfg(test)]
 mod tests {
     use super::{
-        prepare_settings_snapshot, public_settings_snapshot, require_main_window,
-        PublicSettingsSnapshot, SaveSettingsInput, SettingsCommandError, SettingsCredentialUpdate,
-        SETTINGS_CONFLICT,
+        internal_save_input, public_settings_snapshot, require_main_window, PublicSettingsSnapshot,
+        SaveSettingsInput, SettingsCommandError, SettingsCredentialUpdate, SETTINGS_CONFLICT,
     };
+    use crate::domain::settings::{prepare_settings_snapshot, CredentialUpdate};
     use crate::local_db::{AppSettings, AppSettingsSnapshot, UiPreferences};
 
     fn snapshot(revision: Option<i64>) -> AppSettingsSnapshot {
@@ -236,9 +247,10 @@ mod tests {
         stored.settings.python_runtime_source = "system".into();
         stored.settings.ffmpeg_runtime_source = "system".into();
 
+        let (incoming, credential) =
+            internal_save_input(save_input(None, SettingsCredentialUpdate::Keep));
         let prepared =
-            prepare_settings_snapshot(save_input(None, SettingsCredentialUpdate::Keep), &stored)
-                .expect("prepare settings");
+            prepare_settings_snapshot(incoming, credential, &stored).expect("prepare settings");
 
         assert_eq!(prepared.settings_revision, Some(7));
         assert_eq!(prepared.settings.api_token, "stored-secret");
@@ -253,23 +265,21 @@ mod tests {
         let mut stored = snapshot(Some(2));
         stored.settings.api_token = "stored-secret".into();
 
-        let replaced = prepare_settings_snapshot(
-            save_input(
-                Some(2),
-                SettingsCredentialUpdate::Set {
-                    value: " new-secret ".into(),
-                },
-            ),
-            &stored,
-        )
-        .expect("replace token");
+        let (incoming, credential) = internal_save_input(save_input(
+            Some(2),
+            SettingsCredentialUpdate::Set {
+                value: " new-secret ".into(),
+            },
+        ));
+        let replaced =
+            prepare_settings_snapshot(incoming, credential, &stored).expect("replace token");
         assert_eq!(replaced.settings.api_token, "new-secret");
 
-        let cleared = prepare_settings_snapshot(
-            save_input(Some(2), SettingsCredentialUpdate::Clear),
-            &stored,
-        )
-        .expect("clear token");
+        let (incoming, credential) =
+            internal_save_input(save_input(Some(2), SettingsCredentialUpdate::Clear));
+        assert_eq!(credential, CredentialUpdate::Clear);
+        let cleared =
+            prepare_settings_snapshot(incoming, credential, &stored).expect("clear token");
         assert!(cleared.settings.api_token.is_empty());
     }
 

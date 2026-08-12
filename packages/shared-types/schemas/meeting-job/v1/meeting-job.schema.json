@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/meeting-job/v1/meeting-job.schema.json",
+  "title": "MeetingJobV1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "source", "title", "createdAt", "enableSpeaker", "asrBackend", "diarizationStatus", "warnings", "overallStatus", "transcriptSegments", "speakerSegments"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "source": { "enum": ["local", "remote"] },
+    "title": { "type": "string" },
+    "createdAt": { "type": "string", "minLength": 1 },
+    "enableSpeaker": { "type": "boolean" },
+    "runnerProtocolVersion": { "type": ["integer", "null"], "minimum": 1 },
+    "asrBackend": { "enum": ["funasr", "sherpa-onnx", "unknown"] },
+    "diarizationStatus": { "enum": ["disabled", "pending", "processing", "completed", "unavailable", "failed", "legacy_unverified"] },
+    "warnings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/warning" }
+    },
+    "overallStatus": { "enum": ["idle", "uploaded", "queued", "transcribing", "speaker_processing", "summarizing", "completed", "failed"] },
+    "failureReason": { "type": ["string", "null"] },
+    "error": { "oneOf": [{ "$ref": "#/$defs/appError" }, { "type": "null" }] },
+    "transcriptSegments": { "type": "array", "items": { "$ref": "#/$defs/segment" } },
+    "speakerSegments": { "type": "array", "items": { "$ref": "#/$defs/segment" } }
+  },
+  "$defs": {
+    "appError": {
+      "title": "AppErrorDtoV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "category", "retryable", "params"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "category": { "enum": ["validation", "not_found", "conflict", "authorization", "network", "credentials", "runtime", "protocol", "infrastructure"] },
+        "retryable": { "type": "boolean" },
+        "params": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "warning": {
+      "title": "MeetingJobWarningV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" }
+      }
+    },
+    "segment": {
+      "title": "MeetingJobSegmentV1",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startMs", "endMs", "text"],
+      "properties": {
+        "id": { "type": "string" },
+        "startMs": { "type": "integer", "minimum": 0 },
+        "endMs": { "type": "integer", "minimum": 0 },
+        "speaker": { "type": ["string", "null"] },
+        "text": { "type": "string" }
+      }
+    }
+  }
+}

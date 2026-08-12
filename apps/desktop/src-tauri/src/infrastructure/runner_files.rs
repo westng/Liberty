@@ -4,8 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::de::DeserializeOwned;
-
 use crate::local_db::LocalResult;
 
 pub fn validate_job_id(job_id: &str) -> LocalResult<()> {
@@ -204,22 +202,6 @@ pub fn reset_runner_files(job_dir: &Path) -> LocalResult<()> {
     }
 
     Ok(())
-}
-
-pub fn read_json_file<T>(job_dir: &Path, file_name: &str) -> LocalResult<T>
-where
-    T: DeserializeOwned,
-{
-    let bytes = fs::read(job_dir.join(file_name)).map_err(|err| err.to_string())?;
-    serde_json::from_slice(&bytes).map_err(|err| err.to_string())
-}
-
-pub fn read_optional_json_file<T>(job_dir: &Path, file_name: &str) -> Option<T>
-where
-    T: DeserializeOwned,
-{
-    let bytes = fs::read(job_dir.join(file_name)).ok()?;
-    serde_json::from_slice(&bytes).ok()
 }
 
 fn canonical_directory(path: &Path, label: &str) -> LocalResult<PathBuf> {

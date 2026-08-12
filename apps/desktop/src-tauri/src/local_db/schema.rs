@@ -21,6 +21,12 @@ const MIGRATIONS: &[Migration] = &[
         ai_summary_runs::migrate_v7_ai_summary_runs,
     ),
     Migration::new(8, "persistent job deletion log", migrate_v8_job_deletions),
+    Migration::new(9, "runner protocol metadata", migrate_v9_runner_protocol),
+    Migration::new(
+        10,
+        "credential cleanup intents",
+        migrate_v10_credential_cleanup_intents,
+    ),
 ];
 
 pub(crate) fn apply_schema(conn: &Connection) -> LocalResult<()> {
@@ -680,6 +686,44 @@ fn migrate_v8_job_deletions(transaction: &Transaction<'_>) -> LocalResult<()> {
         .map_err(|err| err.to_string())
 }
 
+fn migrate_v9_runner_protocol(transaction: &Transaction<'_>) -> LocalResult<()> {
+    transaction
+        .execute_batch(
+            "ALTER TABLE jobs ADD COLUMN runner_protocol_version INTEGER;
+             ALTER TABLE jobs ADD COLUMN asr_backend TEXT NOT NULL DEFAULT 'unknown';
+             ALTER TABLE jobs ADD COLUMN diarization_status TEXT NOT NULL DEFAULT 'pending';
+             ALTER TABLE jobs ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]';
+             UPDATE jobs
+             SET diarization_status = CASE
+               WHEN enable_speaker = 0 THEN 'disabled'
+               WHEN overall_status = 'failed' OR asr_status = 'failed' THEN 'failed'
+               WHEN overall_status = 'completed' OR asr_status = 'completed'
+                 THEN 'legacy_unverified'
+               ELSE 'pending'
+             END;",
+        )
+        .map_err(|err| err.to_string())
+}
+
+fn migrate_v10_credential_cleanup_intents(transaction: &Transaction<'_>) -> LocalResult<()> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS credential_cleanup_intents (
+               id TEXT PRIMARY KEY,
+               model_id TEXT NOT NULL,
+               credential_reference TEXT NOT NULL UNIQUE,
+               operation TEXT NOT NULL CHECK (operation IN ('retire', 'rollback')),
+               attempt INTEGER NOT NULL DEFAULT 0,
+               last_error TEXT,
+               created_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_credential_cleanup_intents_model
+               ON credential_cleanup_intents(model_id, created_at);",
+        )
+        .map_err(|error| error.to_string())
+}
+
 fn migrate_runtime_source_settings(transaction: &Transaction<'_>) -> LocalResult<()> {
     let migrated = transaction
         .query_row(
@@ -1118,6 +1162,8 @@ mod tests {
              INSERT INTO app_meta(key, value) VALUES('schema_version', '4');
              CREATE TABLE jobs (
                id TEXT PRIMARY KEY,
+               enable_speaker INTEGER NOT NULL DEFAULT 1,
+               asr_status TEXT NOT NULL DEFAULT 'queued',
                overall_status TEXT NOT NULL,
                processing_started_at_ms INTEGER,
                summary_status TEXT NOT NULL DEFAULT 'idle'
@@ -1167,6 +1213,91 @@ mod tests {
             ]
         );
         assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn v9_maps_legacy_diarization_without_changing_segments() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch(
+            "CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO app_meta(key, value) VALUES('schema_version', '8');
+             CREATE TABLE jobs (
+               id TEXT PRIMARY KEY,
+               enable_speaker INTEGER NOT NULL,
+               asr_status TEXT NOT NULL,
+               overall_status TEXT NOT NULL
+             );
+             CREATE TABLE transcript_segments (
+               id TEXT PRIMARY KEY,
+               job_id TEXT NOT NULL,
+               segment_type TEXT NOT NULL
+             );
+             INSERT INTO jobs VALUES
+               ('disabled', 0, 'completed', 'completed'),
+               ('completed', 1, 'completed', 'completed'),
+               ('running', 1, 'transcribing', 'transcribing'),
+               ('failed', 1, 'failed', 'failed');
+             INSERT INTO transcript_segments VALUES
+               ('t1', 'completed', 'transcript'),
+               ('t2', 'completed', 'transcript'),
+               ('s1', 'completed', 'speaker'),
+               ('s2', 'completed', 'speaker');",
+        )
+        .expect("v8 fixture");
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM transcript_segments", [], |row| {
+                row.get(0)
+            })
+            .expect("segment count");
+
+        migrations::run_migrations(&conn, &TestCredentialStore::default(), MIGRATIONS)
+            .expect("v9 migration");
+        migrations::run_migrations(&conn, &TestCredentialStore::default(), MIGRATIONS)
+            .expect("idempotent startup");
+
+        let statuses = {
+            let mut statement = conn
+                .prepare("SELECT id, diarization_status FROM jobs ORDER BY id")
+                .expect("status query");
+            statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .expect("status rows")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("collect statuses")
+        };
+        assert_eq!(
+            statuses,
+            vec![
+                ("completed".into(), "legacy_unverified".into()),
+                ("disabled".into(), "disabled".into()),
+                ("failed".into(), "failed".into()),
+                ("running".into(), "pending".into()),
+            ]
+        );
+        let after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM transcript_segments", [], |row| {
+                row.get(0)
+            })
+            .expect("segment count after migration");
+        assert_eq!(before, after);
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+        let metadata = conn
+            .query_row(
+                "SELECT runner_protocol_version, asr_backend, warnings_json
+                 FROM jobs WHERE id = 'completed'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<i64>>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .expect("metadata defaults");
+        assert_eq!(metadata, (None, "unknown".into(), "[]".into()));
     }
 
     fn legacy_v1_database() -> Connection {

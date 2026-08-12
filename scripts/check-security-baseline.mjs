@@ -23,12 +23,28 @@ const handlerSource = readFileSync(
   "apps/desktop/src-tauri/src/lib.rs",
   "utf8",
 );
+const webviewPolicySource = readFileSync(
+  "apps/desktop/src-tauri/src/webview_policy.rs",
+  "utf8",
+);
 const localJobsSource = readFileSync(
   "apps/desktop/src-tauri/src/local_jobs.rs",
   "utf8",
 );
 const localAiSource = readFileSync(
   "apps/desktop/src-tauri/src/local_ai.rs",
+  "utf8",
+);
+const localExportSource = readFileSync(
+  "apps/desktop/src-tauri/src/local_export.rs",
+  "utf8",
+);
+const localExportOutputSource = readFileSync(
+  "apps/desktop/src-tauri/src/local_export/output.rs",
+  "utf8",
+);
+const localExportTextSource = readFileSync(
+  "apps/desktop/src-tauri/src/local_export/text.rs",
   "utf8",
 );
 const windowScopeSource = readFileSync(
@@ -76,7 +92,6 @@ const expectedPermissionsByWindow = {
     "core:window:allow-toggle-maximize",
     "dialog:default",
     "dialog:allow-confirm",
-    "fs:allow-write-text-file",
     ...[
       "export_desktop_pet_diagnostic_log",
       "get_diagnostics",
@@ -91,6 +106,7 @@ const expectedPermissionsByWindow = {
       "save_ai_template",
       "start_or_resume_ai_summary_run",
       "set_active_ai_summary_run",
+      "export_job_text",
       "export_job_summary_docx",
       "get_farm_state",
       "get_work_market_state",
@@ -271,16 +287,36 @@ if (csp === null) {
   errors.push("Tauri CSP must not be null.");
 }
 
+for (const requiredWebviewPolicy of [
+  "js_init_script_on_all_frames(WEBVIEW_POLICY_SCRIPT)",
+  'window.addEventListener("contextmenu"',
+  'key === "f5"',
+  'key === "r"',
+  "SetAreDefaultContextMenusEnabled(false)",
+  "SetAreBrowserAcceleratorKeysEnabled(false)",
+]) {
+  if (!webviewPolicySource.includes(requiredWebviewPolicy)) {
+    errors.push(`WebView policy is missing required control: ${requiredWebviewPolicy}.`);
+  }
+}
+
+if (
+  !handlerSource.includes("mod webview_policy;")
+  || !handlerSource.includes(".plugin(webview_policy::init())")
+) {
+  errors.push("The global WebView policy must be registered during Tauri startup.");
+}
+
 if (capabilities.length < 2) {
   errors.push("Tauri capabilities must be split by window role, not kept as one broad capability.");
 }
 
-const capabilitiesWithFsWrite = capabilities.filter(({ data }) =>
+const capabilitiesWithWebviewTextWrite = capabilities.filter(({ data }) =>
   (data.permissions ?? []).includes("fs:allow-write-text-file"),
 );
 
-if (capabilitiesWithFsWrite.length !== 1 || capabilitiesWithFsWrite[0]?.fileName !== "main.json") {
-  errors.push("Dynamic text export permission must exist only in main.json.");
+if (capabilitiesWithWebviewTextWrite.length > 0) {
+  errors.push("WebViews must not receive direct text-file write permission; exports must use Rust commands.");
 }
 
 for (const { fileName, data } of capabilities) {
@@ -412,7 +448,6 @@ for (const { fileName, data } of capabilities) {
 }
 
 for (const [sourcePath, requiredChecks] of Object.entries({
-  "apps/desktop/src-tauri/src/local_export.rs": 1,
   "apps/desktop/src-tauri/src/local_members.rs": 1,
   "apps/desktop/src-tauri/src/local_jobs.rs": 1,
   "apps/desktop/src-tauri/src/commands/diagnostics.rs": 1,
@@ -422,6 +457,18 @@ for (const [sourcePath, requiredChecks] of Object.entries({
   if (checks < requiredChecks) {
     errors.push(`${sourcePath}: user-selected paths must be checked against the dialog-granted FS scope.`);
   }
+}
+
+if (!localExportOutputSource.includes("webview.fs_scope().is_allowed(&output_path)")) {
+  errors.push("The shared Rust export output boundary must enforce the dialog-granted FS scope.");
+}
+
+if (!localExportSource.includes("authorized_output_path(&webview, &file_path)")) {
+  errors.push("DOCX export must use the shared authorized output path boundary.");
+}
+
+if (!localExportTextSource.includes("authorized_output_path(&webview, &input.file_path)")) {
+  errors.push("Text export must use the shared authorized output path boundary.");
 }
 
 

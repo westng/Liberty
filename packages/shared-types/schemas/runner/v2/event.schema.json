@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/runner/v2/event.schema.json",
+  "title": "RunnerV2Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "type", "level", "code", "message"],
+  "properties": {
+    "protocolVersion": { "const": 2 },
+    "type": { "enum": ["progress", "warning", "failure", "diagnostic"] },
+    "level": { "enum": ["info", "warning", "error"] },
+    "code": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "message": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "timestamp": { "type": "string", "minLength": 1 }
+  }
+}

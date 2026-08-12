@@ -2,6 +2,7 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { formatMessage, getCurrentMessages } from "@/shared/i18n";
 import type { MessageTree } from "@/shared/i18n";
+import { localizeAppError } from "@/shared/services/errors/appError";
 
 export type AppStatusTone = "idle" | "progress" | "success" | "error";
 export type AppStatusAction = keyof MessageTree["shell"]["statusActions"];
@@ -155,7 +156,7 @@ export async function runAppStatusAction<T>(
 
     return result;
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = localizeAppError(error);
     clearAppStatusNotification(pendingId);
     publishAppStatus(
       formatMessage(shell.statusFailed, { action: actionLabel, message: detail }),

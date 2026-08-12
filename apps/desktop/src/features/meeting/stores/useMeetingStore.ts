@@ -7,6 +7,10 @@ import {
 } from "@/features/meeting/application/settingsPolicy";
 import { hasActiveJobs, mergeJobSnapshot } from "@/features/meeting/application/jobSnapshots";
 import { createPollingScheduler } from "@/features/meeting/application/polling";
+import { createJobQueryController } from "@/features/meeting/application/JobQueryController";
+import { createRemoteCapabilitySession } from "@/features/meeting/application/RemoteCapabilitySession";
+import { createRuntimeInstallController } from "@/features/meeting/application/RuntimeInstallController";
+import { createSettingsSaveCoordinator } from "@/features/meeting/application/SettingsSaveCoordinator";
 import { applyAppearance } from "@/shared/services/ui/appearance";
 import { runAppStatusAction } from "@/shared/services/ui/statusNotifications";
 import { publishEntityChanged } from "@/shared/services/ui/windows";
@@ -50,18 +54,6 @@ type MeetingState = {
   remoteError: string | null;
 };
 
-type JobIdentity = Pick<MeetingJobRef, "jobId" | "source">;
-type JobRequestFence = JobIdentity & {
-  key: string;
-  sequence: number;
-  sourceGeneration: number;
-  writeGeneration: number;
-};
-type JobMutationFence = JobIdentity & {
-  key: string;
-  sequence: number;
-  sourceGeneration: number;
-};
 type SettingsSaveIntent = {
   base: SettingsState;
   next: SettingsState;
@@ -128,27 +120,13 @@ const remoteMeetingApi = createMeetingApi();
 let settingsLoadPromise: Promise<void> | null = null;
 let globalServicesPromise: Promise<void> | null = null;
 let globalServicesInitialized = false;
-let runtimeInstallPromise: Promise<ManagedRuntimeStatus> | null = null;
 const hydratedJobIds: Record<ProcessingMode, Set<string>> = {
   local: new Set<string>(),
   remote: new Set<string>(),
 };
 const localJobPolling = createPollingScheduler();
-const runtimeInstallPolling = createPollingScheduler();
 let globalPollingEnabled = false;
-let jobListRequestSequence = 0;
-const jobRequestSequences = new Map<string, number>();
-const jobMutationSequences = new Map<string, number>();
-const sourceRequestGenerations: Record<ProcessingMode, number> = { local: 0, remote: 0 };
-const sourceWriteGenerations: Record<ProcessingMode, number> = { local: 0, remote: 0 };
-let remoteHandshakeSequence = 0;
-let remoteHandshakePromise: Promise<RemoteMeetingCapabilities> | null = null;
-let remoteHandshakeRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-let remoteHandshakeRetryAttempt = 0;
-let remoteConnectionWasReady = false;
-let settingsSaveQueue: Promise<unknown> = Promise.resolve();
-let settingsSaveProjection: SettingsState = state.settings;
-let pendingSettingsSaves = 0;
+const jobQueries = createJobQueryController();
 
 const REMOTE_HANDSHAKE_RETRY_DELAYS_MS = [2_000, 5_000, 15_000] as const;
 
@@ -182,109 +160,15 @@ function getLocalMode() {
   return state.settings.processingMode === "local";
 }
 
-function jobIdentityKey(reference: JobIdentity) {
-  return JSON.stringify([reference.source, reference.jobId]);
-}
-
 function invalidateJobSource(source: ProcessingMode, clearHydratedJobs = false) {
-  sourceRequestGenerations[source] += 1;
-  sourceWriteGenerations[source] += 1;
-  jobListRequestSequence += 1;
+  jobQueries.invalidateSource(source);
   if (clearHydratedJobs) {
     hydratedJobIds[source].clear();
   }
 }
 
-function beginJobRequest(reference: JobIdentity): JobRequestFence {
-  const key = jobIdentityKey(reference);
-  const sequence = (jobRequestSequences.get(key) ?? 0) + 1;
-  jobRequestSequences.set(key, sequence);
-  return {
-    ...reference,
-    key,
-    sequence,
-    sourceGeneration: sourceRequestGenerations[reference.source],
-    writeGeneration: sourceWriteGenerations[reference.source],
-  };
-}
-
-function isJobRequestCurrent(fence: JobRequestFence) {
-  return jobRequestSequences.get(fence.key) === fence.sequence
-    && sourceRequestGenerations[fence.source] === fence.sourceGeneration
-    && sourceWriteGenerations[fence.source] === fence.writeGeneration;
-}
-
-function beginJobMutation(reference: JobIdentity): JobMutationFence {
-  const key = jobIdentityKey(reference);
-  const sequence = (jobMutationSequences.get(key) ?? 0) + 1;
-  jobMutationSequences.set(key, sequence);
-  sourceWriteGenerations[reference.source] += 1;
-  return {
-    ...reference,
-    key,
-    sequence,
-    sourceGeneration: sourceRequestGenerations[reference.source],
-  };
-}
-
-function isJobMutationCurrent(fence: JobMutationFence) {
-  return jobMutationSequences.get(fence.key) === fence.sequence
-    && sourceRequestGenerations[fence.source] === fence.sourceGeneration;
-}
-
-function commitJobMutation(fence: JobMutationFence) {
-  if (!isJobMutationCurrent(fence)) {
-    return false;
-  }
-  sourceWriteGenerations[fence.source] += 1;
-  return true;
-}
-
-function cancelRemoteHandshakeRetry(resetAttempt = false) {
-  if (remoteHandshakeRetryTimer !== null) {
-    globalThis.clearTimeout(remoteHandshakeRetryTimer);
-    remoteHandshakeRetryTimer = null;
-  }
-  if (resetAttempt) {
-    remoteHandshakeRetryAttempt = 0;
-  }
-}
-
-function scheduleInitialRemoteHandshakeRetry() {
-  if (
-    remoteConnectionWasReady
-    || remoteHandshakeRetryTimer !== null
-    || remoteHandshakeRetryAttempt >= REMOTE_HANDSHAKE_RETRY_DELAYS_MS.length
-    || !globalPollingEnabled
-    || state.settings.processingMode !== "remote"
-  ) {
-    return;
-  }
-
-  const delayMs = REMOTE_HANDSHAKE_RETRY_DELAYS_MS[remoteHandshakeRetryAttempt];
-  remoteHandshakeRetryAttempt += 1;
-  remoteHandshakeRetryTimer = globalThis.setTimeout(() => {
-    remoteHandshakeRetryTimer = null;
-    if (
-      remoteConnectionWasReady
-      || !globalPollingEnabled
-      || state.settings.processingMode !== "remote"
-      || state.remoteStatus !== "unavailable"
-    ) {
-      return;
-    }
-
-    void requestRemoteCapabilities(true, false)
-      .then(() => refreshJobs())
-      .catch(() => undefined);
-  }, delayMs);
-}
-
 function resetRemoteConnection() {
-  cancelRemoteHandshakeRetry(true);
-  remoteConnectionWasReady = false;
-  remoteHandshakeSequence += 1;
-  remoteHandshakePromise = null;
+  remoteCapabilities.reset();
   setState({
     remoteStatus: "idle",
     remoteCapabilities: null,
@@ -297,31 +181,16 @@ function remoteErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function degradeRemoteConnection(error: unknown, requestSequence: number) {
-  if (requestSequence !== remoteHandshakeSequence) {
-    return;
-  }
-  remoteHandshakeSequence += 1;
-  remoteHandshakePromise = null;
-  invalidateJobSource("remote");
-  setState({
-    remoteStatus: "unavailable",
-    remoteCapabilities: null,
-    remoteError: remoteErrorMessage(error),
-  });
-  syncJobPolling();
-}
-
 async function requestRemoteCapabilities(force = false, resetRetryBudget = false) {
   await ensureSettingsLoaded();
   if (!isMainWindow()) {
     throw capabilityUnavailable("独立窗口不允许连接远端会议服务。");
   }
   if (resetRetryBudget) {
-    cancelRemoteHandshakeRetry(true);
+    remoteCapabilities.reset();
   }
   if (!state.settings.backendUrl.trim()) {
-    cancelRemoteHandshakeRetry(true);
+    remoteCapabilities.reset();
     const message = "capability_unavailable: 远端模式未配置在线后端地址。";
     setState({
       remoteStatus: "unavailable",
@@ -331,52 +200,7 @@ async function requestRemoteCapabilities(force = false, resetRetryBudget = false
     syncJobPolling();
     throw new Error(message);
   }
-  if (!force && state.remoteStatus === "ready" && state.remoteCapabilities) {
-    return state.remoteCapabilities;
-  }
-  if (!force && remoteHandshakePromise) {
-    return remoteHandshakePromise;
-  }
-
-  if (force) {
-    invalidateJobSource("remote");
-  }
-  const requestSequence = ++remoteHandshakeSequence;
-  setState({ remoteStatus: "checking", remoteCapabilities: null, remoteError: null });
-  syncJobPolling();
-  const request = remoteMeetingApi.getCapabilities()
-    .then((capabilities) => {
-      if (requestSequence === remoteHandshakeSequence) {
-        remoteConnectionWasReady = true;
-        cancelRemoteHandshakeRetry(true);
-        setState({
-          remoteStatus: "ready",
-          remoteCapabilities: capabilities,
-          remoteError: null,
-        });
-        syncJobPolling();
-      }
-      return capabilities;
-    })
-    .catch((error) => {
-      if (requestSequence === remoteHandshakeSequence) {
-        setState({
-          remoteStatus: "unavailable",
-          remoteCapabilities: null,
-          remoteError: remoteErrorMessage(error),
-        });
-        syncJobPolling();
-        scheduleInitialRemoteHandshakeRetry();
-      }
-      throw error;
-    })
-    .finally(() => {
-      if (remoteHandshakePromise === request) {
-        remoteHandshakePromise = null;
-      }
-    });
-  remoteHandshakePromise = request;
-  return request;
+  return remoteCapabilities.request(force, resetRetryBudget);
 }
 
 async function ensureRemoteCapabilities(force = false) {
@@ -401,11 +225,11 @@ async function runRemoteOperation<T>(
   if (isCurrent && !isCurrent()) {
     return undefined;
   }
-  const requestSequence = remoteHandshakeSequence;
+  const requestSequence = remoteCapabilities.generation();
   try {
     return await request(capabilities);
   } catch (error) {
-    degradeRemoteConnection(error, requestSequence);
+    remoteCapabilities.degrade(error, requestSequence);
     throw error;
   }
 }
@@ -482,25 +306,16 @@ function syncJobPolling() {
 
 function setGlobalEffectsEnabled(enabled: boolean) {
   globalPollingEnabled = enabled;
-  if (!enabled) {
-    cancelRemoteHandshakeRetry();
-  }
+  remoteCapabilities.setEnabled(enabled);
   syncJobPolling();
+  syncRuntimePolling();
   if (enabled) {
     void ensureGlobalServicesInitialized().catch(() => undefined);
   }
 }
 
 function syncRuntimePolling() {
-  const shouldPoll = globalPollingEnabled && state.settingsLoaded && [
-    state.runtimeStatus.python,
-    state.runtimeStatus.ffmpeg,
-    state.runtimeStatus.models,
-  ].some((component) =>
-    ["detecting", "downloading", "installing", "validating"].includes(component.operation.kind));
-  runtimeInstallPolling.sync(shouldPoll, 1500, () => {
-    return Promise.all([refreshRuntimeStatus(), refreshRuntimeInstallLog()]).then(() => undefined);
-  });
+  runtimeInstall.sync(globalPollingEnabled && state.settingsLoaded, state.runtimeStatus);
 }
 
 function settingsLoadFailure(error: unknown): Error {
@@ -669,22 +484,60 @@ async function refreshRuntimeDownloadSources() {
 }
 
 async function beginManagedRuntimeInstall() {
-  if (runtimeInstallPromise) {
-    return runtimeInstallPromise;
-  }
+  return runtimeInstall.install();
+}
 
-  runtimeInstallPromise = (async () => {
+const runtimeInstall = createRuntimeInstallController({
+  pollingIntervalMs: 1500,
+  isOperationActive: (status: ManagedRuntimeStatus) => [
+    status.python,
+    status.ffmpeg,
+    status.models,
+  ].some((component) => [
+    "detecting",
+    "downloading",
+    "installing",
+    "validating",
+  ].includes(component.operation.kind)),
+  install: async () => {
     setState({ runtimeStatus: await localRuntimeService.install() });
     await refreshRuntimeInstallLog();
     syncJobPolling();
     syncRuntimePolling();
     return state.runtimeStatus;
-  })().finally(() => {
-    runtimeInstallPromise = null;
-  });
+  },
+  refresh: () => Promise.all([
+    refreshRuntimeStatus(),
+    refreshRuntimeInstallLog(),
+  ]).then(() => undefined),
+});
 
-  return runtimeInstallPromise;
-}
+const remoteCapabilities = createRemoteCapabilitySession({
+  retryDelaysMs: REMOTE_HANDSHAKE_RETRY_DELAYS_MS,
+  connect: () => remoteMeetingApi.getCapabilities(),
+  canRetry: () => globalPollingEnabled
+    && state.settings.processingMode === "remote"
+    && state.remoteStatus === "unavailable",
+  cached: () => state.remoteStatus === "ready" ? state.remoteCapabilities : null,
+  onChecking: () => {
+    setState({ remoteStatus: "checking", remoteCapabilities: null, remoteError: null });
+    syncJobPolling();
+  },
+  onReady: (capabilities) => {
+    setState({ remoteStatus: "ready", remoteCapabilities: capabilities, remoteError: null });
+    syncJobPolling();
+  },
+  onUnavailable: (error) => {
+    setState({
+      remoteStatus: "unavailable",
+      remoteCapabilities: null,
+      remoteError: remoteErrorMessage(error),
+    });
+    syncJobPolling();
+  },
+  onInvalidate: () => invalidateJobSource("remote"),
+  onRetryReady: () => refreshJobs().then(() => undefined),
+});
 
 function sleep(ms: number) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
@@ -695,14 +548,9 @@ async function refreshJobs() {
   if (!isMainWindow()) {
     throw capabilityUnavailable("独立窗口不允许读取任务列表。");
   }
-  const requestSequence = ++jobListRequestSequence;
   const processingMode = state.settings.processingMode;
-  const sourceGeneration = sourceRequestGenerations[processingMode];
-  const writeGeneration = sourceWriteGenerations[processingMode];
-  const isCurrent = () => requestSequence === jobListRequestSequence
-    && processingMode === state.settings.processingMode
-    && sourceGeneration === sourceRequestGenerations[processingMode]
-    && writeGeneration === sourceWriteGenerations[processingMode];
+  const isCurrentRequest = jobQueries.beginList(processingMode);
+  const isCurrent = () => processingMode === state.settings.processingMode && isCurrentRequest();
   const incomingJobs = processingMode === "local"
     ? await localMeetingService.listJobs()
     : await runRemoteOperation(
@@ -771,9 +619,9 @@ async function refreshJobFromSource(reference: string | MeetingJobRef, resultOnl
     throw capabilityUnavailable("远端任务尚无安全的独立窗口后端代理。");
   }
   const source = explicitSource;
-  const fence = beginJobRequest({ jobId: id, source });
+  const fence = jobQueries.beginRequest({ jobId: id, source });
   const applyRefreshedJob = (refreshed: MeetingJob) => {
-    if (!isJobRequestCurrent(fence)) {
+    if (!jobQueries.isRequestCurrent(fence)) {
       return getJobById(id, source);
     }
     hydratedJobIds[source].add(id);
@@ -798,12 +646,12 @@ async function refreshJobFromSource(reference: string | MeetingJobRef, resultOnl
     ? await runRemoteOperation(
         "jobs.result.read",
         (capabilities) => remoteMeetingApi.getResult(capabilities, id),
-        () => isJobRequestCurrent(fence),
+        () => jobQueries.isRequestCurrent(fence),
       )
     : await runRemoteOperation(
         "jobs.read",
         (capabilities) => remoteMeetingApi.getJob(capabilities, id),
-        () => isJobRequestCurrent(fence),
+        () => jobQueries.isRequestCurrent(fence),
       );
   if (!refreshed) {
     return getJobById(id, source);
@@ -827,7 +675,7 @@ async function refreshJobRuns(reference: string | MeetingJobRef) {
 
 async function createJobOperation(input: NewMeetingJobInput) {
   await ensureSettingsLoaded();
-  const sourceGeneration = sourceRequestGenerations.local;
+  const sourceGeneration = jobQueries.sourceGeneration("local");
 
   if (getLocalMode() && !isManagedRuntimeReady(state.runtimeStatus)) {
     await ensureManagedRuntimeReadyForLocalWork();
@@ -853,7 +701,7 @@ async function createJobOperation(input: NewMeetingJobInput) {
     syncJobPolling();
     const sourcedJob = withJobSource(created, "local");
     if (
-      sourceGeneration === sourceRequestGenerations.local
+      sourceGeneration === jobQueries.sourceGeneration("local")
       && state.settings.processingMode === "local"
     ) {
       hydratedJobIds.local.add(created.id);
@@ -880,18 +728,18 @@ async function retryJobOperation(reference: MeetingJobRef) {
   const { reference: jobRef, job } = resolveExistingJob(reference);
   const { jobId: id, source } = jobRef;
   requireJobSource(job);
-  const fence = beginJobMutation(jobRef);
+  const fence = jobQueries.beginMutation(jobRef);
 
   if (source === "local" && !isManagedRuntimeReady(state.runtimeStatus)) {
     await ensureManagedRuntimeReadyForLocalWork();
   }
-  if (!isJobMutationCurrent(fence)) {
+  if (!jobQueries.isMutationCurrent(fence)) {
     return;
   }
 
   if (source === "local") {
     const updated = await localMeetingService.retryJob(id);
-    if (!commitJobMutation(fence)) {
+    if (!jobQueries.commitMutation(fence)) {
       return;
     }
     syncJobPolling();
@@ -902,9 +750,9 @@ async function retryJobOperation(reference: MeetingJobRef) {
   const updated = await runRemoteOperation(
     "jobs.retry",
     (capabilities) => remoteMeetingApi.retryJob(capabilities, id),
-    () => isJobMutationCurrent(fence),
+    () => jobQueries.isMutationCurrent(fence),
   );
-  if (!updated || !commitJobMutation(fence)) {
+  if (!updated || !jobQueries.commitMutation(fence)) {
     return;
   }
   hydratedJobIds[source].add(updated.id);
@@ -916,7 +764,7 @@ async function deleteJobOperation(reference: MeetingJobRef) {
   const { reference: jobRef, job } = resolveExistingJob(reference);
   const { jobId: id, source } = jobRef;
   requireJobSource(job);
-  const fence = beginJobMutation(jobRef);
+  const fence = jobQueries.beginMutation(jobRef);
 
   if (source === "local") {
     await localMeetingService.deleteJob(id);
@@ -927,14 +775,14 @@ async function deleteJobOperation(reference: MeetingJobRef) {
         await remoteMeetingApi.deleteJob(capabilities, id);
         return true;
       },
-      () => isJobMutationCurrent(fence),
+      () => jobQueries.isMutationCurrent(fence),
     );
     if (!completed) {
       return false;
     }
   }
 
-  if (!commitJobMutation(fence)) {
+  if (!jobQueries.commitMutation(fence)) {
     return false;
   }
   hydratedJobIds[source].delete(id);
@@ -953,7 +801,7 @@ async function renameSpeakerOperation(
   const { reference: jobRef, job } = resolveExistingJob(reference);
   const { jobId: id, source } = jobRef;
   requireJobSource(job);
-  const fence = beginJobMutation(jobRef);
+  const fence = jobQueries.beginMutation(jobRef);
 
   const normalizedTarget = toSpeaker.trim();
 
@@ -963,7 +811,7 @@ async function renameSpeakerOperation(
 
   if (source === "local") {
     const updated = await localMeetingService.renameSpeaker(id, fromSpeaker, normalizedTarget);
-    if (!commitJobMutation(fence)) {
+    if (!jobQueries.commitMutation(fence)) {
       return;
     }
     hydratedJobIds[source].add(updated.id);
@@ -978,9 +826,9 @@ async function renameSpeakerOperation(
       fromSpeaker,
       normalizedTarget,
     ),
-    () => isJobMutationCurrent(fence),
+    () => jobQueries.isMutationCurrent(fence),
   );
-  if (!updated || !commitJobMutation(fence)) {
+  if (!updated || !jobQueries.commitMutation(fence)) {
     return;
   }
   hydratedJobIds[source].add(updated.id);
@@ -1149,29 +997,25 @@ function saveSettings(
   next: SettingsState,
   credential: SettingsCredentialUpdate = { action: "keep" },
 ) {
-  if (pendingSettingsSaves === 0) {
-    settingsSaveProjection = state.settings;
-  }
+  const base = settingsSaves.pendingCount() === 0
+    ? state.settings
+    : settingsSaves.projected();
   const intent: SettingsSaveIntent = {
-    base: settingsSaveProjection,
+    base,
     next: normalizeSettings(next),
     credential,
   };
-  settingsSaveProjection = rebaseSettingsIntent(intent, settingsSaveProjection);
-  pendingSettingsSaves += 1;
-  const queuedRequest = settingsSaveQueue.then(() => runAppStatusAction(
+  return settingsSaves.enqueue(intent);
+}
+
+const settingsSaves = createSettingsSaveCoordinator({
+  current: () => state.settings,
+  project: rebaseSettingsIntent,
+  execute: (intent: SettingsSaveIntent) => runAppStatusAction(
     "saveSettings",
     () => saveSettingsOperation(intent),
-  ));
-  const request = queuedRequest.finally(() => {
-    pendingSettingsSaves -= 1;
-    if (pendingSettingsSaves === 0) {
-      settingsSaveProjection = state.settings;
-    }
-  });
-  settingsSaveQueue = request.catch(() => undefined);
-  return request;
-}
+  ),
+});
 
 function installManagedRuntime() {
   return runAppStatusAction("downloadRuntime", installManagedRuntimeOperation, { completedAsStarted: true });
@@ -1233,7 +1077,7 @@ function getJobById(id: string, source?: ProcessingMode) {
 async function setActiveSummaryRun(reference: MeetingJobRef, runId: string) {
   await ensureSettingsLoaded();
   const { reference: jobRef, job } = resolveExistingJob(reference);
-  const fence = beginJobMutation(jobRef);
+  const fence = jobQueries.beginMutation(jobRef);
 
   if (job && requireJobSource(job) === "local") {
     await localAiService.setActiveSummaryRun(
@@ -1242,11 +1086,11 @@ async function setActiveSummaryRun(reference: MeetingJobRef, runId: string) {
       runId,
       jobRef.windowScopeToken,
     );
-    if (!commitJobMutation(fence)) {
+    if (!jobQueries.commitMutation(fence)) {
       return;
     }
     await refreshJobRuns(jobRef);
-    if (!isJobMutationCurrent(fence)) {
+    if (!jobQueries.isMutationCurrent(fence)) {
       return;
     }
     await publishEntityChanged({ entity: "summary", id: jobRef.jobId, action: "saved" }).catch(() => undefined);
@@ -1259,7 +1103,7 @@ async function setActiveSummaryRun(reference: MeetingJobRef, runId: string) {
 async function deleteSummaryRun(reference: MeetingJobRef, runId: string) {
   await ensureSettingsLoaded();
   const { reference: jobRef, job } = resolveExistingJob(reference);
-  const fence = beginJobMutation(jobRef);
+  const fence = jobQueries.beginMutation(jobRef);
 
   if (job && requireJobSource(job) === "local") {
     await localAiService.deleteSummaryRun(
@@ -1268,11 +1112,11 @@ async function deleteSummaryRun(reference: MeetingJobRef, runId: string) {
       runId,
       jobRef.windowScopeToken,
     );
-    if (!commitJobMutation(fence)) {
+    if (!jobQueries.commitMutation(fence)) {
       return;
     }
     await refreshJobRuns(jobRef);
-    if (!isJobMutationCurrent(fence)) {
+    if (!jobQueries.isMutationCurrent(fence)) {
       return;
     }
     await publishEntityChanged({ entity: "summary", id: jobRef.jobId, action: "deleted" }).catch(() => undefined);

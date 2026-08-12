@@ -2,6 +2,7 @@ pub mod ai_models;
 pub mod ai_summary_run_models;
 pub mod ai_summary_runs;
 pub mod ai_templates;
+pub mod credential_cleanup;
 pub mod farm;
 pub mod job_events;
 pub mod members;

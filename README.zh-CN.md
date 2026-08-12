@@ -111,8 +111,8 @@ AI 接口由 Rust 侧 `local_ai` 模块请求 OpenAI 兼容接口。模型 API K
 ├─ docs/
 │  ├─ architecture/              架构和发布检查文档
 │  ├─ images/                    README 截图
-│  ├─ pet-system.md              当前宠物系统说明
-│  └─ superpowers/               历史设计和实施计划
+│  ├─ ai/                        AI 过程文档和迁移后的历史记录
+│  └─ pet-system.md              当前宠物系统说明
 ├─ Cargo.toml                    Rust workspace
 ├─ package.json                  pnpm workspace 脚本
 └─ pnpm-workspace.yaml

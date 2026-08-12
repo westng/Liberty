@@ -19,6 +19,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 docx-rs = "0.4"
 flate2 = "1.1"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+regress = "0.11.1"
 ring = "0.17.14"
 rust_xlsxwriter = "0.79"
 rusqlite = { version = "0.31", features = ["backup", "bundled"] }
@@ -32,6 +33,7 @@ tar = "0.4"
 tauri = { version = "2.0.0", features = ["macos-private-api", "unstable"] }
 tauri-plugin-dialog = "2.0.0"
 tauri-plugin-fs = "2.0.0"
+typify = "0.7.0"
 xmltree = "0.11"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
@@ -66,6 +68,8 @@ libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
+webview2-com = "0.38.2"
+windows = "0.61.3"
 windows-sys = { version = ">=0.60, <=0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",

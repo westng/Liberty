@@ -2,6 +2,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::json;
 use std::time::Duration;
 
+use crate::infrastructure::network::{TrustedHttpPolicy, TrustedHttpTarget};
 use crate::local_ai::prompt::{
     REQUIRED_SPEAKERS_PREFIX, TRANSCRIPT_END_MARKER, TRANSCRIPT_START_MARKER,
 };
@@ -15,18 +16,20 @@ const MAX_SUMMARY_INPUT_TOKENS: usize = 12_000;
 pub(super) async fn send_ai_chat_completion_chunk(
     input: AiChatCompletionInput,
 ) -> LocalResult<AiChatCompletionOutput> {
-    let (client, normalized_input, normalized_base_url) = prepare_request(input)?;
-    send_ai_chat_completion_with_retry(&client, &normalized_input, &normalized_base_url).await
+    let (client, normalized_input, target) = prepare_request(input)?;
+    send_ai_chat_completion_with_retry(&client, &normalized_input, &target).await
 }
 
 fn prepare_request(
     input: AiChatCompletionInput,
-) -> LocalResult<(Client, AiChatCompletionInput, String)> {
+) -> LocalResult<(Client, AiChatCompletionInput, TrustedHttpTarget)> {
     let normalized_base_url = normalize_chat_base_url(&input.base_url);
-    let normalized_model = normalize_model_id(&normalized_base_url, &input.model);
     if normalized_base_url.is_empty() {
         return Err("AI 接口地址不能为空。".into());
     }
+    let target = TrustedHttpTarget::resolve(&normalized_base_url, TrustedHttpPolicy::AiProvider)
+        .map_err(|error| format!("AI 接口地址未通过安全校验：{error}"))?;
+    let normalized_model = normalize_model_id(target.base_url().as_str(), &input.model);
 
     if input.api_key.trim().is_empty() {
         return Err("AI API Key 不能为空。".into());
@@ -36,54 +39,46 @@ fn prepare_request(
         return Err("AI 模型名称不能为空。".into());
     }
 
-    let client = Client::builder()
-        .connect_timeout(AI_CONNECT_TIMEOUT)
-        .timeout(AI_REQUEST_TIMEOUT)
-        .build()
-        .map_err(|err| format!("AI 请求客户端初始化失败: {err}"))?;
+    let client = target
+        .async_client(AI_CONNECT_TIMEOUT, AI_REQUEST_TIMEOUT)
+        .map_err(|error| format!("AI 请求客户端初始化失败：{error}"))?;
 
     let normalized_input = AiChatCompletionInput {
         model: normalized_model,
         ..input
     };
-    Ok((client, normalized_input, normalized_base_url))
+    Ok((client, normalized_input, target))
 }
 
 async fn send_ai_chat_completion_with_retry(
     client: &Client,
     input: &AiChatCompletionInput,
-    normalized_base_url: &str,
+    target: &TrustedHttpTarget,
 ) -> LocalResult<AiChatCompletionOutput> {
-    match send_ai_chat_completion_once(client, input, normalized_base_url, true).await {
+    match send_ai_chat_completion_once(client, input, target, true).await {
         Ok(output) => Ok(output),
-        Err(first_error) => {
-            handle_first_request_error(client, input, normalized_base_url, first_error).await
-        }
+        Err(first_error) => handle_first_request_error(client, input, target, first_error).await,
     }
 }
 
 async fn handle_first_request_error(
     client: &Client,
     input: &AiChatCompletionInput,
-    normalized_base_url: &str,
+    target: &TrustedHttpTarget,
     first_error: AiRequestError,
 ) -> LocalResult<AiChatCompletionOutput> {
     eprintln!(
-        "[ai] request failed: base_url={} model={} include_response_format=true error={}",
-        normalized_base_url,
-        input.model,
-        first_error.user_message()
+        "[ai] request failed: kind={} include_response_format=true",
+        first_error.diagnostic_kind()
     );
 
     if should_retry_without_response_format(&first_error) {
-        return send_ai_chat_completion_once(client, input, normalized_base_url, false)
+        return send_ai_chat_completion_once(client, input, target, false)
             .await
             .map_err(|fallback_error| {
                 eprintln!(
-                    "[ai] fallback request failed: base_url={} model={} include_response_format=false error={}",
-                    normalized_base_url,
-                    input.model,
-                    fallback_error.user_message()
+                    "[ai] fallback request failed: kind={} include_response_format=false",
+                    fallback_error.diagnostic_kind()
                 );
                 format!(
                     "{}；移除 response_format 兼容重试后仍失败：{}",
@@ -94,14 +89,12 @@ async fn handle_first_request_error(
     }
 
     if first_error.is_retryable_network() {
-        return send_ai_chat_completion_once(client, input, normalized_base_url, true)
+        return send_ai_chat_completion_once(client, input, target, true)
             .await
             .map_err(|retry_error| {
                 eprintln!(
-                    "[ai] retry request failed: base_url={} model={} include_response_format=true error={}",
-                    normalized_base_url,
-                    input.model,
-                    retry_error.user_message()
+                    "[ai] retry request failed: kind={} include_response_format=true",
+                    retry_error.diagnostic_kind()
                 );
                 format!(
                     "{}；自动重试 1 次后仍失败：{}",
@@ -117,7 +110,7 @@ async fn handle_first_request_error(
 async fn send_ai_chat_completion_once(
     client: &Client,
     input: &AiChatCompletionInput,
-    normalized_base_url: &str,
+    target: &TrustedHttpTarget,
     include_response_format: bool,
 ) -> Result<AiChatCompletionOutput, AiRequestError> {
     let mut payload = json!({
@@ -138,8 +131,11 @@ async fn send_ai_chat_completion_once(
         payload["response_format"] = json!({ "type": "json_object" });
     }
 
+    let endpoint = target
+        .endpoint(&["chat", "completions"])
+        .map_err(|_| AiRequestError::Configuration)?;
     let response = client
-        .post(format!("{normalized_base_url}/chat/completions"))
+        .post(endpoint)
         .bearer_auth(input.api_key.trim())
         .json(&payload)
         .send()
@@ -156,7 +152,6 @@ async fn send_ai_chat_completion_once(
         return Err(AiRequestError::http(
             status,
             raw_response,
-            normalized_base_url.to_string(),
             include_response_format,
         ));
     }
@@ -330,11 +325,11 @@ fn mentions_response_format(body: &str) -> bool {
 
 #[derive(Debug)]
 enum AiRequestError {
+    Configuration,
     Network(reqwest::Error),
     Http {
         status: StatusCode,
         body: String,
-        base_url: String,
         include_response_format: bool,
     },
 }
@@ -344,16 +339,10 @@ impl AiRequestError {
         Self::Network(error)
     }
 
-    fn http(
-        status: StatusCode,
-        body: String,
-        base_url: String,
-        include_response_format: bool,
-    ) -> Self {
+    fn http(status: StatusCode, body: String, include_response_format: bool) -> Self {
         Self::Http {
             status,
             body,
-            base_url,
             include_response_format,
         }
     }
@@ -367,13 +356,19 @@ impl AiRequestError {
 
     fn user_message(&self) -> String {
         match self {
+            Self::Configuration => "AI 接口地址无法构造请求端点。".into(),
             Self::Network(error) => network_error_message(error),
-            Self::Http {
-                status,
-                body,
-                base_url,
-                ..
-            } => http_error_message(*status, body, base_url),
+            Self::Http { status, .. } => http_error_message(*status),
+        }
+    }
+
+    fn diagnostic_kind(&self) -> &'static str {
+        match self {
+            Self::Configuration => "configuration",
+            Self::Network(error) if error.is_timeout() => "timeout",
+            Self::Network(error) if error.is_connect() => "connect",
+            Self::Network(_) => "network",
+            Self::Http { .. } => "http_status",
         }
     }
 }
@@ -385,34 +380,15 @@ fn network_error_message(error: &reqwest::Error) -> String {
             AI_REQUEST_TIMEOUT.as_secs()
         )
     } else if error.is_connect() {
-        format!("AI 连接建立失败: {error}")
+        "AI 连接建立失败。".into()
     } else if error.is_request() {
-        format!("AI 请求未发送成功: {error}")
+        "AI 请求未发送成功。".into()
     } else {
-        format!("AI 网络请求失败: {error}")
+        "AI 网络请求失败。".into()
     }
 }
 
-fn http_error_message(status: StatusCode, body: &str, base_url: &str) -> String {
-    let trimmed = body.trim();
-    if !trimmed.is_empty() {
-        if base_url.contains("api.deepseek.com")
-            && (trimmed.contains("supported API model names") || trimmed.contains("but you passed"))
-        {
-            return format!(
-                "AI 接口请求失败，HTTP {status}: {trimmed}。模型字段必须填写 API model id，例如 deepseek-v4-flash，而不是展示名称。"
-            );
-        }
-
-        return format!("AI 接口请求失败，HTTP {status}: {trimmed}");
-    }
-
-    if status == StatusCode::NOT_FOUND && !base_url.contains("/v1") {
-        return format!(
-            "AI 接口请求失败，HTTP {status}。请检查 Base URL 是否需要以 /v1 结尾，例如 OpenAI 兼容接口通常应填到 .../v1。"
-        );
-    }
-
+fn http_error_message(status: StatusCode) -> String {
     format!("AI 接口请求失败，HTTP {status}")
 }
 

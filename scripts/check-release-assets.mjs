@@ -35,6 +35,8 @@ try {
     await preparePlatform(args);
   } else if (command === "assemble") {
     await assemble(args);
+  } else if (command === "add-sbom") {
+    await addSbom(args);
   } else if (command === "verify-directory") {
     await verifyDirectory(args);
   } else if (command === "plan-draft-upload") {
@@ -176,6 +178,35 @@ async function verifyDirectory(options) {
     verifyChecksumFile(join(options.input, "SHA256SUMS.txt"), manifest.assets);
   }
   console.log(`Verified ${manifest.assets.length} release assets and their SHA-256 digests.`);
+}
+
+async function addSbom(options) {
+  requireOptions(options, ["input", "output", "manifest"]);
+  const manifest = JSON.parse(readFileSync(options.manifest, "utf8"));
+  validateInstallerManifest(manifest);
+  const expectedName = `liberty-${manifest.version}.cdx.json`;
+  if (basename(options.input) !== expectedName) {
+    fail(`SBOM must be named ${expectedName}.`);
+  }
+  const sbom = JSON.parse(readFileSync(options.input, "utf8"));
+  if (sbom.bomFormat !== "CycloneDX" || sbom.specVersion !== "1.5"
+      || sbom.metadata?.component?.version !== manifest.version) {
+    fail("SBOM format or application version does not match the Release.");
+  }
+  const serialized = JSON.stringify(sbom);
+  if (containsAbsolutePath(sbom) || /api[_-]?key|bearer\s/i.test(serialized)) {
+    fail("SBOM contains a local absolute path or credential-like text.");
+  }
+  mkdirSync(options.output, { recursive: true });
+  const destination = join(options.output, expectedName);
+  copyFileSync(options.input, destination);
+  manifest.assets.push({
+    ...await describeAsset(destination, "sbom", "universal"),
+    platformId: "all",
+  });
+  manifest.assets.sort((left, right) => left.name.localeCompare(right.name));
+  writeFileSync(options.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(`Attached validated CycloneDX SBOM ${expectedName}.`);
 }
 
 async function planDraftUpload(options) {
@@ -339,29 +370,47 @@ function validateManifest(manifest, expectedVersion) {
 }
 
 function validateReleaseManifest(manifest) {
+  validateInstallerManifest(manifest);
+  const sbomName = `liberty-${manifest.version}.cdx.json`;
+  const sbom = manifest.assets.find(({ name }) => name === sbomName);
+  if (!sbom || sbom.kind !== "sbom" || sbom.platformId !== "all") {
+    fail(`Release manifest is missing ${sbomName}.`);
+  }
+  validateAssetMetadata(sbom, "SBOM", "universal");
+  if (manifest.assets.length !== installerAssets(manifest.version).length + 1) {
+    fail("Release manifest must contain only the platform installers and one SBOM.");
+  }
+}
+
+function validateInstallerManifest(manifest) {
   if (manifest.schemaVersion !== 1 || manifest.tag !== `v${manifest.version}`) {
     fail("Release manifest tag and version are invalid.");
   }
 
-  const expectedAssets = [...platformMatrix].flatMap(([platformId, platform]) =>
-    platform.kinds.map((kind) => ({
-      name: `liberty-${manifest.version}-${platformId}.${kind === "nsis" ? "exe" : kind}`,
-      kind,
-      platformId,
-      architecture: platform.architecture,
-    })),
-  );
-  if (!Array.isArray(manifest.assets) || manifest.assets.length !== expectedAssets.length) {
+  const expectedAssets = installerAssets(manifest.version);
+  const installers = manifest.assets.filter(({ kind }) => kind !== "sbom");
+  if (!Array.isArray(manifest.assets) || installers.length !== expectedAssets.length) {
     fail(`Release manifest must contain exactly ${expectedAssets.length} installer assets.`);
   }
 
   for (const expected of expectedAssets) {
-    const asset = manifest.assets.find(({ name }) => name === expected.name);
+    const asset = installers.find(({ name }) => name === expected.name);
     if (!asset || asset.kind !== expected.kind || asset.platformId !== expected.platformId) {
       fail(`Release manifest is missing ${expected.name} with the expected platform and kind.`);
     }
     validateAssetMetadata(asset, expected.platformId, expected.architecture);
   }
+}
+
+function installerAssets(version) {
+  return [...platformMatrix].flatMap(([platformId, platform]) =>
+    platform.kinds.map((kind) => ({
+      name: `liberty-${version}-${platformId}.${kind === "nsis" ? "exe" : kind}`,
+      kind,
+      platformId,
+      architecture: platform.architecture,
+    })),
+  );
 }
 
 function validateAssetMetadata(asset, context, expectedArchitecture) {
@@ -450,6 +499,12 @@ function assertVersion(expected, actual, source) {
 function sameValues(actual, expected) {
   return actual.length === expected.length
     && [...actual].sort().every((value, index) => value === [...expected].sort()[index]);
+}
+
+function containsAbsolutePath(value) {
+  if (typeof value === "string") return resolve(value) === value || /^[A-Za-z]:[\\/]/.test(value);
+  if (Array.isArray(value)) return value.some(containsAbsolutePath);
+  return value && typeof value === "object" && Object.values(value).some(containsAbsolutePath);
 }
 
 function parseOptions(values) {

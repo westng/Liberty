@@ -16,6 +16,78 @@ permissions:
   contents: read
 
 jobs:
+  supply-chain:
+    name: Dependency Security, Licenses, and SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.94.0
+
+      - name: Dependency Governance Self-Test
+        run: node scripts/test-dependency-governance.mjs
+
+      - name: Lock Integrity Policy
+        run: node scripts/check-dependency-governance.mjs locks
+
+      - name: Install Pinned Dependency Scanners
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/liberty-security-tools" "${HOME}/.local/bin"
+          curl --location --fail --silent --show-error \
+            --output "${RUNNER_TEMP}/liberty-security-tools/cargo-deny.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz"
+          printf '%s  %s\n' \
+            '9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f' \
+            "${RUNNER_TEMP}/liberty-security-tools/cargo-deny.tar.gz" \
+            | sha256sum --check
+          tar --extract --gzip \
+            --file "${RUNNER_TEMP}/liberty-security-tools/cargo-deny.tar.gz" \
+            --directory "${RUNNER_TEMP}/liberty-security-tools"
+          install -m 0755 \
+            "${RUNNER_TEMP}/liberty-security-tools/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny" \
+            "${HOME}/.local/bin/cargo-deny"
+
+          curl --location --fail --silent --show-error \
+            --output "${RUNNER_TEMP}/liberty-security-tools/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/v2.5.0/osv-scanner_linux_amd64"
+          printf '%s  %s\n' \
+            'edcfc41d257db36148f065055655fe3fcfc434b0b423ea67468a84c207524e0c' \
+            "${RUNNER_TEMP}/liberty-security-tools/osv-scanner" \
+            | sha256sum --check
+          install -m 0755 \
+            "${RUNNER_TEMP}/liberty-security-tools/osv-scanner" \
+            "${HOME}/.local/bin/osv-scanner"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
+      - name: License Policy
+        run: node scripts/check-dependency-governance.mjs licenses
+
+      - name: Vulnerability and Source Policy
+        run: node scripts/check-dependency-governance.mjs security
+
+      - name: Generate CycloneDX SBOM
+        run: node scripts/generate-sbom.mjs
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: liberty-sbom
+          path: artifacts/sbom/liberty.cdx.json
+          if-no-files-found: error
+          retention-days: 14
+
   quality:
     name: Typecheck, Test, and Release Checks
     runs-on: ubuntu-latest
@@ -29,6 +101,11 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
+
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
 
       - name: Enable Corepack PNPM
         shell: bash
@@ -63,6 +140,21 @@ jobs:
       - name: Install Dependencies
         shell: bash
         run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap Python Development Environment
+        run: pnpm python:bootstrap
+
+      - name: Contract Drift
+        run: pnpm contracts:check
+
+      - name: Frontend Tests
+        run: pnpm desktop:test
+
+      - name: Python Lint
+        run: pnpm python:lint
+
+      - name: Python Tests
+        run: pnpm python:test
 
       - name: Typecheck
         run: pnpm desktop:typecheck

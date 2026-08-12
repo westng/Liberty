@@ -1,5 +1,5 @@
 use std::{
-    io::Read,
+    io::{BufRead, BufReader, Read},
     path::Path,
     process::{Child, Command, ExitStatus},
     sync::mpsc::{self, RecvTimeoutError},
@@ -12,7 +12,7 @@ use sysinfo::{Pid, ProcessRefreshKind, System};
 use tauri::AppHandle;
 
 use crate::{
-    infrastructure::process_logs,
+    infrastructure::{process_logs, runner_protocol},
     local_db::{AppSettings, LocalResult, MeetingJob},
     local_runtime::ResolvedPythonRuntime,
     process_utils::configure_background_process,
@@ -20,6 +20,20 @@ use crate::{
 
 const MAX_LOCAL_ASR_THREADS: u32 = 32;
 const PROCESS_IDENTITY_VERSION: u8 = 1;
+const MAX_RUNNER_STDOUT_LINE_BYTES: usize = 16 * 1024;
+const MAX_RUNNER_STDERR_LINE_CHARS: usize = 4096;
+
+#[derive(Debug, Clone, Copy)]
+enum RunnerStream {
+    Stdout,
+    Stderr,
+}
+
+#[derive(Debug)]
+struct RunnerLine {
+    stream: RunnerStream,
+    bytes: Vec<u8>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -149,22 +163,22 @@ where
         .stderr
         .take()
         .ok_or_else(|| "本地 Python 处理进程未返回 stderr 管道。".to_string())?;
-    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    let (tx, rx) = mpsc::channel::<Result<RunnerLine, String>>();
 
-    spawn_log_reader(stdout, tx.clone());
-    spawn_log_reader(stderr, tx.clone());
+    spawn_line_reader(stdout, RunnerStream::Stdout, tx.clone());
+    spawn_line_reader(stderr, RunnerStream::Stderr, tx.clone());
     drop(tx);
 
     let mut last_sync_at = Instant::now();
     let mut last_heartbeat_at = Instant::now();
     loop {
         match rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(chunk) => process_logs::append_bytes(job_dir, &chunk)?,
+            Ok(line) => process_runner_line(job_dir, line?)?,
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {}
         }
-        for chunk in rx.try_iter() {
-            process_logs::append_bytes(job_dir, &chunk)?;
+        for line in rx.try_iter() {
+            process_runner_line(job_dir, line?)?;
         }
 
         if should_cancel() {
@@ -182,8 +196,8 @@ where
             last_sync_at = Instant::now();
         }
         if let Some(status) = child.try_wait().map_err(|err| err.to_string())? {
-            for chunk in rx.try_iter() {
-                process_logs::append_bytes(job_dir, &chunk)?;
+            for line in rx.try_iter() {
+                process_runner_line(job_dir, line?)?;
             }
             sync_log(app, job_id, job_dir)?;
             return Ok(RunnerExit::Finished(status));
@@ -437,24 +451,99 @@ pub fn terminate_runner(child: &mut Child) -> LocalResult<()> {
     tree_result.and(wait_result)
 }
 
-fn spawn_log_reader<R>(mut stream: R, tx: mpsc::Sender<Vec<u8>>)
-where
+fn spawn_line_reader<R>(
+    stream: R,
+    stream_kind: RunnerStream,
+    tx: mpsc::Sender<Result<RunnerLine, String>>,
+) where
     R: Read + Send + 'static,
 {
     std::thread::spawn(move || {
-        let mut buffer = [0u8; 4096];
+        let mut reader = BufReader::new(stream);
         loop {
-            match stream.read(&mut buffer) {
+            let mut bytes = Vec::new();
+            match reader.read_until(b'\n', &mut bytes) {
                 Ok(0) => break,
-                Ok(read) => {
-                    if tx.send(buffer[..read].to_vec()).is_err() {
+                Ok(_) => {
+                    if tx
+                        .send(Ok(RunnerLine {
+                            stream: stream_kind,
+                            bytes,
+                        }))
+                        .is_err()
+                    {
                         break;
                     }
                 }
-                Err(_) => break,
+                Err(error) => {
+                    let _ = tx.send(Err(format!("读取 Runner {stream_kind:?} 失败: {error}")));
+                    break;
+                }
             }
         }
     });
+}
+
+fn process_runner_line(job_dir: &Path, line: RunnerLine) -> LocalResult<()> {
+    match line.stream {
+        RunnerStream::Stdout => project_stdout_event(job_dir, &line.bytes),
+        RunnerStream::Stderr => {
+            let diagnostic = sanitize_stderr_line(&String::from_utf8_lossy(&line.bytes));
+            if diagnostic.is_empty() {
+                Ok(())
+            } else {
+                process_logs::append_line(job_dir, &format!("[runner-stderr] {diagnostic}"))
+            }
+        }
+    }
+}
+
+fn project_stdout_event(job_dir: &Path, bytes: &[u8]) -> LocalResult<()> {
+    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
+    if bytes.is_empty() {
+        return Ok(());
+    }
+    if bytes.len() > MAX_RUNNER_STDOUT_LINE_BYTES {
+        return Err("runner_protocol_event_too_large: stdout 事件超过大小限制。".into());
+    }
+    let line = std::str::from_utf8(bytes)
+        .map_err(|error| format!("runner_protocol_event_invalid_utf8: {error}"))?;
+    let event = runner_protocol::parse_event(line)?;
+    let revision = event
+        .revision
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "-".into());
+    let timestamp = event.timestamp.as_deref().unwrap_or("-");
+    let level = match event.level.as_str() {
+        "debug" => crate::infrastructure::observability::DiagnosticLevel::Debug,
+        "warn" => crate::infrastructure::observability::DiagnosticLevel::Warn,
+        "error" => crate::infrastructure::observability::DiagnosticLevel::Error,
+        _ => crate::infrastructure::observability::DiagnosticLevel::Info,
+    };
+    let diagnostic = crate::infrastructure::observability::DiagnosticEvent {
+        level,
+        code: event.code,
+        message: event.message,
+        context: [
+            ("type".into(), event.event_type),
+            ("revision".into(), revision),
+            ("timestamp".into(), timestamp.into()),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    process_logs::append_line(
+        job_dir,
+        &diagnostic.sanitized_line(MAX_RUNNER_STDERR_LINE_CHARS),
+    )
+}
+
+fn sanitize_stderr_line(line: &str) -> String {
+    crate::infrastructure::observability::redaction::sanitize_diagnostic_text(
+        line.trim(),
+        MAX_RUNNER_STDERR_LINE_CHARS,
+    )
 }
 
 #[cfg(test)]
@@ -499,5 +588,37 @@ mod tests {
             &current,
         )
         .unwrap());
+    }
+
+    #[test]
+    fn stdout_requires_a_valid_runner_event() {
+        let root = std::env::temp_dir().join(format!(
+            "liberty-runner-stdout-{}",
+            crate::infrastructure::time::unix_timestamp_millis()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        project_stdout_event(
+            &root,
+            br#"{"protocolVersion":2,"type":"progress","level":"info","code":"runner_progress","message":"ok","revision":1}"#,
+        )
+        .unwrap();
+        let projected: serde_json::Value =
+            serde_json::from_str(&process_logs::read_recent(&root, 4096)).unwrap();
+        assert_eq!(projected["code"], "runner_progress");
+        assert_eq!(projected["context"]["revision"], "1");
+        assert!(project_stdout_event(&root, b"ordinary log").is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stderr_redacts_secrets_and_paths() {
+        let line = sanitize_stderr_line(
+            "api_key=secret Bearer token123 failed at /Users/person/private/audio.wav",
+        );
+        assert!(!line.contains("secret"));
+        assert!(!line.contains("token123"));
+        assert!(!line.contains("/Users/person"));
+        assert!(line.contains("[redacted]"));
+        assert!(line.contains("[redacted-path]"));
     }
 }

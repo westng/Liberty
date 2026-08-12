@@ -23,6 +23,7 @@ const existing = join(root, "existing");
 const manifestPath = join(root, "release-manifest.json");
 const uploadList = join(root, "draft-upload-list.txt");
 const version = "9.8.7";
+const sbomPath = join(root, `liberty-${version}.cdx.json`);
 const largeFileSize = 256 * 1024 * 1024;
 const maxRssMib = Number(process.env.RELEASE_HASH_MAX_RSS_MIB ?? "192");
 
@@ -48,7 +49,7 @@ try {
     largeDigest.update(zeroChunk);
   }
 
-  const assets = assetDefinitions.map(([platformId, kind, architecture, isLarge], index) => {
+  let assets = assetDefinitions.map(([platformId, kind, architecture, isLarge], index) => {
     const extension = kind === "nsis" ? "exe" : kind;
     const name = `liberty-${version}-${platformId}.${extension}`;
     const path = join(local, name);
@@ -82,6 +83,23 @@ try {
     manifestPath,
     `${JSON.stringify({ schemaVersion: 1, tag: `v${version}`, version, assets }, null, 2)}\n`,
   );
+  writeFileSync(sbomPath, `${JSON.stringify({
+    bomFormat: "CycloneDX",
+    specVersion: "1.5",
+    metadata: { component: { type: "application", name: "Liberty", version } },
+    components: [],
+  }, null, 2)}\n`);
+  run(process.execPath, [
+    script,
+    "add-sbom",
+    "--input",
+    sbomPath,
+    "--output",
+    local,
+    "--manifest",
+    manifestPath,
+  ]);
+  assets = JSON.parse(readFileSync(manifestPath, "utf8")).assets;
   writeFileSync(
     join(local, "SHA256SUMS.txt"),
     `${assets.map(({ name, sha256 }) => `${sha256}  ${name}`).join("\n")}\n`,

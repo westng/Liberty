@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "operator": "qa-operator-id",
+  "deviceId": "registered-device-id",
+  "runtimeVersion": "2026.07.15-supply-chain.2",
+  "modelSetVersion": "paraformer-zh-2026.07.15.2",
+  "notes": "仅填写脱敏、可审核的信息。",
+  "checks": [
+    { "id": "native_install_start", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "single_instance", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "runtime_install", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "audio_transcription", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "degraded_diarization", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "ai_transcript_only", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "export", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "legacy_database_upgrade", "status": "blocked", "evidence": "尚未执行" },
+    { "id": "credential_store", "status": "blocked", "evidence": "尚未执行" }
+  ]
+}

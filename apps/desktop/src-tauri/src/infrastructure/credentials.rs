@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::domain::error::AppError;
+use crate::infrastructure::ids;
 
 pub type CredentialResult<T> = Result<T, AppError>;
 
@@ -42,6 +43,52 @@ pub fn default_credential_store() -> SystemCredentialStore {
 
 pub fn credential_key_for_ai_model(model_id: &str) -> String {
     format!("ai-model:{model_id}:api-key")
+}
+
+pub struct CredentialWritePlan {
+    previous_reference: Option<String>,
+    staged_reference: String,
+}
+
+impl CredentialWritePlan {
+    pub fn stage(
+        store: &dyn CredentialStore,
+        model_id: &str,
+        previous_reference: Option<&str>,
+        secret: &str,
+    ) -> CredentialResult<Self> {
+        let secret = secret.trim();
+        if secret.is_empty() {
+            return Err(AppError::Validation(
+                "设置 AI 模型凭据时 API Key 不能为空。".into(),
+            ));
+        }
+        let staged_reference = format!(
+            "{}:staged:{}",
+            credential_key_for_ai_model(model_id),
+            ids::timestamped_id("write")
+        );
+        store.set_secret(&staged_reference, secret)?;
+        Ok(Self {
+            previous_reference: previous_reference
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+            staged_reference,
+        })
+    }
+
+    pub fn staged_reference(&self) -> &str {
+        &self.staged_reference
+    }
+
+    pub fn previous_reference(&self) -> Option<&str> {
+        self.previous_reference.as_deref()
+    }
+
+    pub fn rollback(self, store: &dyn CredentialStore) -> CredentialResult<()> {
+        store.delete_secret(&self.staged_reference)
+    }
 }
 
 pub fn credential_key_for_remote_api_token() -> &'static str {

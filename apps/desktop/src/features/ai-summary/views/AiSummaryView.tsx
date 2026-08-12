@@ -9,7 +9,10 @@ import {
   summaryResultToMeetingSummary,
 } from "@/shared/services/ai/storage";
 import { startOrResumeAiSummaryRun } from "@/shared/services/ai/summary";
-import { getPrimaryTranscriptSegments } from "@/shared/services/meeting/transcript";
+import {
+  getPrimaryTranscriptSegments,
+  hasVerifiedSpeakerSegments,
+} from "@/shared/services/meeting/transcript";
 import { createLocalAiService, type AiSummaryOptions } from "@/shared/services/tauri/ai";
 import { createLocalMeetingService } from "@/shared/services/tauri/meeting";
 import { closeCurrentWindow } from "@/shared/services/tauri/window";
@@ -58,6 +61,7 @@ export default function AiSummaryView() {
   const remoteUnavailable = jobSource === "remote";
   const invalidJobRef = !jobSource || !jobId || !windowScopeToken;
   const transcriptCount = job ? getPrimaryTranscriptSegments(job).length : 0;
+  const speakerSummaryAvailable = job ? hasVerifiedSpeakerSegments(job) : false;
   const previewSummary = selectedRun?.result
     ? summaryResultToMeetingSummary(selectedRun.result)
     : job?.summary || createEmptyMeetingSummary(job?.title);
@@ -130,9 +134,9 @@ export default function AiSummaryView() {
     if (!selectedTemplate) {
       return;
     }
-    setIncludeSpeaker(selectedTemplate.includeSpeakerByDefault);
+    setIncludeSpeaker(selectedTemplate.includeSpeakerByDefault && speakerSummaryAvailable);
     setIncludeTimestamp(selectedTemplate.includeTimestampByDefault);
-  }, [selectedTemplate?.id]);
+  }, [selectedTemplate?.id, speakerSummaryAvailable]);
 
   useEffect(() => {
     void (async () => {
@@ -255,7 +259,7 @@ export default function AiSummaryView() {
         windowScopeToken,
         modelConfigId: selectedModel.id,
         templateId: selectedTemplate.id,
-        includeSpeaker,
+        includeSpeaker: includeSpeaker && speakerSummaryAvailable,
         includeTimestamp,
         useMemberMapping,
         extraInstructions: extraInstructions.trim(),
@@ -385,7 +389,7 @@ export default function AiSummaryView() {
 
               <div className="field-grid two-col">
                 <label className="toggle-field">
-                  <input checked={includeSpeaker} disabled={remoteUnavailable || Boolean(runningRun)} onChange={(event) => setIncludeSpeaker(event.target.checked)} type="checkbox" />
+                  <input checked={includeSpeaker} disabled={remoteUnavailable || Boolean(runningRun) || !speakerSummaryAvailable} onChange={(event) => setIncludeSpeaker(event.target.checked)} type="checkbox" />
                   <span>{messages.includeSpeaker}</span>
                 </label>
                 <label className="toggle-field">
@@ -394,9 +398,13 @@ export default function AiSummaryView() {
                 </label>
               </div>
 
+              {!speakerSummaryAvailable && job?.enableSpeaker && (
+                <div className="note-block">{messages.speakerUnavailable}</div>
+              )}
+
               <div className="field-grid two-col">
                 <label className="toggle-field">
-                  <input checked={useMemberMapping} disabled={remoteUnavailable || Boolean(runningRun)} onChange={(event) => setUseMemberMapping(event.target.checked)} type="checkbox" />
+                  <input checked={useMemberMapping && speakerSummaryAvailable} disabled={remoteUnavailable || Boolean(runningRun) || !speakerSummaryAvailable} onChange={(event) => setUseMemberMapping(event.target.checked)} type="checkbox" />
                   <span>{messages.useMemberMapping}</span>
                 </label>
               </div>

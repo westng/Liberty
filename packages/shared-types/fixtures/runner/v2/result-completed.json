@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 2,
+  "asrBackend": "funasr",
+  "diarizationRequested": true,
+  "diarizationStatus": "completed",
+  "warnings": [],
+  "durationMinutes": 1,
+  "transcriptSegments": [
+    { "id": "segment-1", "startMs": 0, "endMs": 1000, "text": "测试逐字稿" }
+  ],
+  "speakerSegments": [
+    { "id": "segment-1", "startMs": 0, "endMs": 1000, "text": "测试逐字稿", "speaker": "speaker-0" }
+  ]
+}

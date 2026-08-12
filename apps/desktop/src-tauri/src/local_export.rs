@@ -1,10 +1,14 @@
 mod model;
+mod output;
 mod parser;
 mod renderer;
 pub(crate) mod source;
+mod text;
 mod xml;
 
 use crate::{
+    application::project_meeting_minutes::{project_meeting_minutes, ProjectMeetingMinutesRequest},
+    domain::meeting_minutes::{MeetingMetadata, PersistedMeetingMetadata},
     infrastructure::repositories::ai_summary_runs,
     local_db::{
         self, AiSummaryResult, LocalResult, MeetingJob, MeetingMember, MeetingMinutesInfo,
@@ -13,21 +17,26 @@ use crate::{
     },
 };
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use tauri::{AppHandle, Webview};
-use tauri_plugin_fs::FsExt;
 
 use model::{ExportDocData, SpeechBlock};
+use output::authorized_output_path;
 use parser::{
     is_missing_value, non_empty, normalize_member_name, parse_overview_to_export_data,
     parse_speaker_header, trim_numbered_prefix,
 };
 use renderer::export_summary_docx;
 use source::{resolve_summary_source, SummaryExportSource};
+use text::TextExportInput;
 
-const FIXED_MEETING_TIME: &str = "9:00";
-const FIXED_MEETING_LOCATION: &str = "小会议室";
-const FIXED_MEETING_HOST: &str = "冯吉琼";
+#[tauri::command]
+pub fn export_job_text(
+    app: AppHandle,
+    webview: Webview,
+    input: TextExportInput,
+) -> LocalResult<()> {
+    text::export_job_text(app, webview, input)
+}
 
 #[tauri::command]
 pub fn export_job_summary_docx(
@@ -37,14 +46,7 @@ pub fn export_job_summary_docx(
     summary_run_id: Option<String>,
     file_path: String,
 ) -> LocalResult<()> {
-    if file_path.trim().is_empty() {
-        return Err("导出路径不能为空。".into());
-    }
-
-    let output_path = Path::new(file_path.trim());
-    if !webview.fs_scope().is_allowed(output_path) {
-        return Err("导出失败：目标路径未经保存对话框授权。".into());
-    }
+    let output_path = authorized_output_path(&webview, &file_path)?;
 
     let members = local_db::list_meeting_members(&app)?;
     let mut job = local_db::get_job(&app, &job_id)?;
@@ -77,7 +79,7 @@ pub fn export_job_summary_docx(
         }
     }
     let export_data = build_export_doc_data_from_source(&job, &summary_source, &members);
-    export_summary_docx(&export_data, output_path)
+    export_summary_docx(&export_data, &output_path)
 }
 
 fn build_export_doc_data_from_source(
@@ -121,33 +123,12 @@ fn derive_meeting_minutes_projection(
     source_summary_run_id: Option<String>,
 ) -> MeetingMinutesPayload {
     let mut data = parse_overview_to_export_data(&summary.overview);
+    let metadata = project_meeting_minutes(ProjectMeetingMinutesRequest {
+        persisted: None,
+        ai_metadata: metadata_from_export_data(&data),
+    });
     let mut summary_blocks = std::mem::take(&mut data.speech_blocks);
     let speech_blocks = resolve_speech_blocks(job, &mut summary_blocks, members);
-
-    let resolved_title = non_empty(&data.meeting_name)
-        .or_else(|| non_empty(&summary.title))
-        .unwrap_or(&job.title);
-
-    let recorder = if is_missing_value(&data.recorder) {
-        members
-            .iter()
-            .find(|member| member.is_recorder)
-            .map(|member| member.name.trim().to_string())
-            .unwrap_or_default()
-    } else {
-        data.recorder.trim().to_string()
-    };
-
-    let attendees = if is_missing_value(&data.attendees) {
-        speech_blocks
-            .iter()
-            .map(|block| block.name.trim())
-            .filter(|name| !name.is_empty())
-            .collect::<Vec<_>>()
-            .join("、")
-    } else {
-        data.attendees.trim().to_string()
-    };
 
     let topics = if !summary.topics.is_empty() {
         summary.topics.clone()
@@ -163,19 +144,11 @@ fn derive_meeting_minutes_projection(
     };
 
     MeetingMinutesPayload {
-        schema_version: 1,
+        schema_version: 2,
+        meeting_info_source: metadata.source,
         template_id: template_id.trim().to_string(),
         source_summary_run_id,
-        meeting_info: MeetingMinutesInfo {
-            meeting_name: resolved_title.to_string(),
-            meeting_time: FIXED_MEETING_TIME.to_string(),
-            meeting_location: FIXED_MEETING_LOCATION.to_string(),
-            recorder,
-            attendees,
-            absentees: data.absentees.trim().to_string(),
-            host: FIXED_MEETING_HOST.to_string(),
-            reviewer: data.reviewer.trim().to_string(),
-        },
+        meeting_info: minutes_info_from_metadata(metadata.metadata),
         participants: speech_blocks
             .iter()
             .map(|block| block_to_minutes_participant(block, members))
@@ -196,7 +169,19 @@ fn build_export_doc_data_from_minutes_payload(
     members: &[MeetingMember],
 ) -> ExportDocData {
     let mut data = ExportDocData::default();
-    let meeting_info = &payload.meeting_info;
+    let parsed = parse_overview_to_export_data(&summary.overview);
+    let metadata = project_meeting_minutes(ProjectMeetingMinutesRequest {
+        persisted: Some(PersistedMeetingMetadata {
+            schema_version: payload.schema_version,
+            source: payload.meeting_info_source,
+            metadata: metadata_from_minutes_info(&payload.meeting_info),
+        }),
+        ai_metadata: metadata_from_export_data(&parsed),
+    });
+    for warning in &metadata.warnings {
+        eprintln!("[meeting-minutes] warning={warning}");
+    }
+    let meeting_info = minutes_info_from_metadata(metadata.metadata);
     let resolved_title = non_empty(&meeting_info.meeting_name)
         .or_else(|| non_empty(&summary.title))
         .unwrap_or(&job.title);
@@ -207,17 +192,9 @@ fn build_export_doc_data_from_minutes_payload(
         format!("{resolved_title}会议纪要")
     };
     data.meeting_name = resolved_title.to_string();
-    data.meeting_time = FIXED_MEETING_TIME.to_string();
-    data.meeting_location = FIXED_MEETING_LOCATION.to_string();
-    data.recorder = if is_missing_value(&meeting_info.recorder) {
-        members
-            .iter()
-            .find(|member| member.is_recorder)
-            .map(|member| member.name.trim().to_string())
-            .unwrap_or_default()
-    } else {
-        meeting_info.recorder.trim().to_string()
-    };
+    data.meeting_time = meeting_info.meeting_time;
+    data.meeting_location = meeting_info.meeting_location;
+    data.recorder = meeting_info.recorder;
     data.attendees = meeting_info.attendees.trim().to_string();
     data.absentees = meeting_info.absentees.trim().to_string();
     data.topics = if !payload.topics.is_empty() {
@@ -225,8 +202,8 @@ fn build_export_doc_data_from_minutes_payload(
     } else {
         summary.topics.join("；")
     };
-    data.host = FIXED_MEETING_HOST.to_string();
-    data.reviewer = meeting_info.reviewer.trim().to_string();
+    data.host = meeting_info.host;
+    data.reviewer = meeting_info.reviewer;
     data.closing_summary = payload.global_summary.clone();
     data.fallback_overview = summary
         .overview
@@ -275,6 +252,45 @@ fn build_export_doc_data_from_minutes_payload(
     }
 
     data
+}
+
+fn metadata_from_export_data(data: &ExportDocData) -> MeetingMetadata {
+    MeetingMetadata {
+        meeting_name: data.meeting_name.clone(),
+        meeting_time: data.meeting_time.clone(),
+        meeting_location: data.meeting_location.clone(),
+        recorder: data.recorder.clone(),
+        attendees: data.attendees.clone(),
+        absentees: data.absentees.clone(),
+        host: data.host.clone(),
+        reviewer: data.reviewer.clone(),
+    }
+}
+
+fn metadata_from_minutes_info(info: &MeetingMinutesInfo) -> MeetingMetadata {
+    MeetingMetadata {
+        meeting_name: info.meeting_name.clone(),
+        meeting_time: info.meeting_time.clone(),
+        meeting_location: info.meeting_location.clone(),
+        recorder: info.recorder.clone(),
+        attendees: info.attendees.clone(),
+        absentees: info.absentees.clone(),
+        host: info.host.clone(),
+        reviewer: info.reviewer.clone(),
+    }
+}
+
+fn minutes_info_from_metadata(metadata: MeetingMetadata) -> MeetingMinutesInfo {
+    MeetingMinutesInfo {
+        meeting_name: metadata.meeting_name,
+        meeting_time: metadata.meeting_time,
+        meeting_location: metadata.meeting_location,
+        recorder: metadata.recorder,
+        attendees: metadata.attendees,
+        absentees: metadata.absentees,
+        host: metadata.host,
+        reviewer: metadata.reviewer,
+    }
 }
 
 fn resolve_speech_blocks(
@@ -521,10 +537,10 @@ fn sort_speech_blocks(blocks: &mut [SpeechBlock], members: &[MeetingMember]) {
 }
 
 fn collect_speaker_names(job: &MeetingJob) -> Vec<String> {
-    let source = if job.speaker_segments.is_empty() {
-        &job.transcript_segments
-    } else {
+    let source = if job.diarization_status.is_verified() && !job.speaker_segments.is_empty() {
         &job.speaker_segments
+    } else {
+        &job.transcript_segments
     };
 
     collect_speaker_names_from_segments(source)
@@ -861,6 +877,7 @@ mod tests {
             process_log: None,
             python_path: None,
             runner_script_path: None,
+            ..MeetingJob::default()
         };
         let summary = AiSummaryResult {
             title: "例会".into(),
@@ -927,6 +944,7 @@ mod tests {
             process_log: None,
             python_path: None,
             runner_script_path: None,
+            ..MeetingJob::default()
         };
         let summary = AiSummaryResult {
             title: "例会".into(),
@@ -949,7 +967,7 @@ mod tests {
     }
 
     #[test]
-    fn build_export_doc_data_replaces_placeholder_attendees_and_recorder() {
+    fn build_export_doc_data_keeps_missing_metadata_empty_for_renderer() {
         let job = MeetingJob {
             id: "job-3".into(),
             source: "local".into(),
@@ -1003,6 +1021,7 @@ mod tests {
             process_log: None,
             python_path: None,
             runner_script_path: None,
+            ..MeetingJob::default()
         };
         let summary = AiSummaryResult {
             title: "例会".into(),
@@ -1024,12 +1043,12 @@ mod tests {
         }];
 
         let data = build_export_doc_data(&job, &summary, &members);
-        assert_eq!(data.recorder, "肖明容");
+        assert!(data.recorder.is_empty());
         assert_eq!(data.attendees, "肖明容、李兰");
     }
 
     #[test]
-    fn build_export_doc_data_overrides_fixed_meeting_fields() {
+    fn build_export_doc_data_preserves_ai_meeting_fields() {
         let overview = SAMPLE_OVERVIEW
             .replace("会议时间：待补充", "会议时间：10:30")
             .replace("会议地点：待补充", "会议地点：大会议室")
@@ -1078,6 +1097,7 @@ mod tests {
             process_log: None,
             python_path: None,
             runner_script_path: None,
+            ..MeetingJob::default()
         };
         let summary = AiSummaryResult {
             title: "例会".into(),
@@ -1090,9 +1110,9 @@ mod tests {
         };
 
         let data = build_export_doc_data(&job, &summary, &[]);
-        assert_eq!(data.meeting_time, FIXED_MEETING_TIME);
-        assert_eq!(data.meeting_location, FIXED_MEETING_LOCATION);
-        assert_eq!(data.host, FIXED_MEETING_HOST);
+        assert_eq!(data.meeting_time, "10:30");
+        assert_eq!(data.meeting_location, "大会议室");
+        assert_eq!(data.host, "张三");
     }
 
     #[test]
@@ -1347,7 +1367,7 @@ mod tests {
 
         let data = build_export_doc_data_from_minutes_payload(&job, &summary, &payload, &members);
 
-        assert_eq!(data.recorder, "新姓名");
+        assert!(data.recorder.is_empty());
         assert_eq!(data.attendees, "新姓名");
         assert_eq!(data.speech_blocks[0].name, "新姓名");
         assert_eq!(data.speech_blocks[0].department, "新部门");

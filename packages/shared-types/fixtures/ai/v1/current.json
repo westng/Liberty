@@ -1,0 +1,36 @@
+{
+  "model": {
+    "id": "model-fixture-1",
+    "name": "脱敏模型",
+    "baseUrl": "https://example.com/v1",
+    "model": "example-model",
+    "enabled": true,
+    "isDefault": true,
+    "credentialPresent": true,
+    "createdAt": "2026-08-12T00:00:00Z",
+    "updatedAt": "2026-08-12T00:00:00Z"
+  },
+  "saveInput": {
+    "id": "model-fixture-1",
+    "name": "脱敏模型",
+    "baseUrl": "https://example.com/v1",
+    "model": "example-model",
+    "enabled": true,
+    "isDefault": true,
+    "createdAt": "2026-08-12T00:00:00Z",
+    "updatedAt": "2026-08-12T00:00:00Z",
+    "credential": { "action": "keep" }
+  },
+  "run": {
+    "id": "run-fixture-1",
+    "jobId": "job-fixture-1",
+    "modelConfigId": "model-fixture-1",
+    "templateId": "template-fixture-1",
+    "includeSpeaker": false,
+    "includeTimestamp": true,
+    "status": "completed",
+    "errorMessage": null,
+    "createdAt": "2026-08-12T00:00:00Z",
+    "updatedAt": "2026-08-12T00:00:01Z"
+  }
+}

@@ -84,7 +84,9 @@ pub fn start_or_resume(
     let template_id = required(&input.template_id, "请选择 AI 总结模板。")?;
     let model = find_model(app, model_id)?;
     let template = find_template(app, template_id)?;
-    let members = if input.use_member_mapping {
+    let include_speaker = input.include_speaker && job.diarization_status.is_verified();
+    let use_member_mapping = input.use_member_mapping && include_speaker;
+    let members = if use_member_mapping {
         local_db::list_meeting_members(app)?
     } else {
         Vec::new()
@@ -92,9 +94,9 @@ pub fn start_or_resume(
     let generate_input = GenerateAiSummaryInput {
         job: job.clone(),
         template: template.clone(),
-        include_speaker: input.include_speaker,
+        include_speaker,
         include_timestamp: input.include_timestamp,
-        use_member_mapping: input.use_member_mapping,
+        use_member_mapping,
         members: members.clone(),
         extra_instructions: input.extra_instructions.trim().to_string(),
     };
@@ -148,7 +150,7 @@ pub fn start_or_resume(
         job_id: snapshot.job.id.clone(),
         model_config_id: model_id.to_string(),
         template_id: template_id.to_string(),
-        include_speaker: input.include_speaker,
+        include_speaker,
         include_timestamp: input.include_timestamp,
         extra_instructions: input.extra_instructions.trim().to_string(),
         status: "running".into(),
@@ -360,7 +362,7 @@ fn find_template(app: &AppHandle, template_id: &str) -> LocalResult<AiSummaryTem
 }
 
 fn primary_segments(job: &MeetingJob) -> &[crate::local_db::TranscriptSegment] {
-    if job.enable_speaker && !job.speaker_segments.is_empty() {
+    if job.diarization_status.is_verified() && !job.speaker_segments.is_empty() {
         &job.speaker_segments
     } else {
         &job.transcript_segments

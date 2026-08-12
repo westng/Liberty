@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 2,
+  "asrBackend": "sherpa-onnx",
+  "diarizationRequested": true,
+  "diarizationStatus": "unavailable",
+  "warnings": [
+    { "code": "diarization_unavailable", "message": "当前后端不支持说话人分离。" }
+  ],
+  "durationMinutes": 1,
+  "transcriptSegments": [
+    { "id": "segment-1", "startMs": 0, "endMs": 1000, "text": "测试逐字稿" }
+  ],
+  "speakerSegments": []
+}

@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import datetime as dt
 import json
 import os
 import shutil
 import subprocess
 import sys
-import time
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Optional
@@ -27,14 +29,78 @@ def parse_args():
     return parser.parse_args()
 
 
+PROTOCOL_VERSION = 2
+_progress_revisions: dict[Path, int] = {}
+
+
 def write_json(path: Path, payload: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            json.dump(payload, temporary_file, ensure_ascii=False, indent=2)
+            temporary_file.write("\n")
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+        if hasattr(os, "O_DIRECTORY"):
+            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
-def log(message: str):
-    sys.stdout.write(f"{message}\n")
+def utc_timestamp() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def emit_event(
+    event_type: str,
+    level: str,
+    code: str,
+    message: str,
+    revision: int | None = None,
+):
+    payload = {
+        "protocolVersion": PROTOCOL_VERSION,
+        "type": event_type,
+        "level": level,
+        "code": code,
+        "message": message[:4096],
+        "timestamp": utc_timestamp(),
+    }
+    if revision is not None:
+        payload["revision"] = revision
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
     sys.stdout.flush()
+
+
+def log(message: str, code: str = "runner_diagnostic"):
+    emit_event("diagnostic", "info", code, message)
+
+
+def redact_runtime_paths(message: str) -> str:
+    redacted = message
+    for option in ("--input", "--job-dir"):
+        if option not in sys.argv:
+            continue
+        option_index = sys.argv.index(option) + 1
+        if option_index < len(sys.argv):
+            redacted = redacted.replace(sys.argv[option_index], "[redacted-path]")
+    return redacted
 
 
 def write_progress(
@@ -44,16 +110,24 @@ def write_progress(
     failure_reason: Optional[str] = None,
     progress_percent: Optional[int] = None,
 ):
+    progress_path = job_dir / "progress.json"
+    revision = _progress_revisions.get(progress_path, 0) + 1
+    _progress_revisions[progress_path] = revision
     write_json(
-        job_dir / "progress.json",
+        progress_path,
         {
+            "protocolVersion": PROTOCOL_VERSION,
+            "revision": revision,
             "stage": stage,
             "statusMessage": status_message,
             "failureReason": failure_reason,
             "progressPercent": progress_percent,
-            "updatedAt": str(time.time_ns()),
+            "updatedAt": utc_timestamp(),
         },
     )
+    event_type = "failure" if stage == "failed" else "progress"
+    level = "error" if stage == "failed" else "info"
+    emit_event(event_type, level, f"runner_{stage}", status_message, revision)
 
 
 def normalize_timestamp(value):
@@ -230,15 +304,17 @@ def extract_segments(result: dict, with_speaker: bool) -> tuple[list[dict], list
         }
         transcript_segments.append(base_segment)
 
-        speaker = item.get("speaker") or item.get("spk") or item.get("speaker_id")
-        if speaker is not None:
-            speaker_segments.append({**base_segment, "speaker": str(speaker)})
-        elif with_speaker:
-            speaker_segments.append({**base_segment, "speaker": "Speaker 1"})
+        speaker = next(
+            (item[key] for key in ("speaker", "spk", "speaker_id") if item.get(key) is not None),
+            None,
+        )
+        speaker_label = str(speaker).strip() if speaker is not None else ""
+        if speaker_label:
+            speaker_segments.append({**base_segment, "speaker": speaker_label})
 
     if transcript_segments:
-        if not speaker_segments and with_speaker:
-            speaker_segments = [{**segment, "speaker": "Speaker 1"} for segment in transcript_segments]
+        if with_speaker and len(speaker_segments) != len(transcript_segments):
+            speaker_segments = []
         return transcript_segments, speaker_segments
 
     full_text = str(result.get("text") or "").strip()
@@ -252,8 +328,6 @@ def extract_segments(result: dict, with_speaker: bool) -> tuple[list[dict], list
         "text": full_text,
     }
     transcript_segments = [fallback_segment]
-    if with_speaker:
-        speaker_segments = [{**fallback_segment, "speaker": "Speaker 1"}]
     return transcript_segments, speaker_segments
 
 
@@ -288,7 +362,8 @@ def find_required_file(root: Path, names: tuple[str, ...]) -> Path:
 
 
 def build_sherpa_recognizer(model_root: Path, lang: str):
-    import sherpa_onnx
+    with contextlib.redirect_stdout(sys.stderr):
+        import sherpa_onnx
 
     model_path = find_required_file(
         model_root,
@@ -297,16 +372,17 @@ def build_sherpa_recognizer(model_root: Path, lang: str):
     tokens_path = find_required_file(model_root, ("tokens.txt",))
     num_threads = parse_positive_int(os.getenv("OMP_NUM_THREADS"), 1)
 
-    recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
-        paraformer=str(model_path),
-        tokens=str(tokens_path),
-        num_threads=max(1, num_threads),
-        sample_rate=16000,
-        feature_dim=80,
-        decoding_method="greedy_search",
-        debug=False,
-        provider="cpu",
-    )
+    with contextlib.redirect_stdout(sys.stderr):
+        recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
+            paraformer=str(model_path),
+            tokens=str(tokens_path),
+            num_threads=max(1, num_threads),
+            sample_rate=16000,
+            feature_dim=80,
+            decoding_method="greedy_search",
+            debug=False,
+            provider="cpu",
+        )
     log(
         "Sherpa-ONNX runtime:"
         f" model={model_path.name}"
@@ -318,6 +394,7 @@ def build_sherpa_recognizer(model_root: Path, lang: str):
 
 def read_wav_mono_16k(path: Path):
     import wave
+
     import numpy as np
 
     with wave.open(str(path), "rb") as wav_file:
@@ -346,7 +423,8 @@ def run_sherpa_onnx(args, job_dir: Path, input_path: Path, wants_speaker: bool):
     samples, sample_rate = read_wav_mono_16k(prepared_input)
     stream = recognizer.create_stream()
     stream.accept_waveform(sample_rate, samples)
-    recognizer.decode_stream(stream)
+    with contextlib.redirect_stdout(sys.stderr):
+        recognizer.decode_stream(stream)
     text = str(stream.result.text or "").strip()
     if not text:
         raise RuntimeError("Sherpa-ONNX 未返回可用逐字稿内容。")
@@ -360,20 +438,30 @@ def run_sherpa_onnx(args, job_dir: Path, input_path: Path, wants_speaker: bool):
             "text": text,
         }
     ]
-    speaker_segments = (
-        [{**transcript_segments[0], "speaker": "Speaker 1"}] if wants_speaker else []
-    )
+    speaker_segments: list[dict] = []
+    warnings = []
+    diarization_status = "disabled"
 
     if wants_speaker:
-        write_progress(job_dir, "speaker_processing", "32 位离线模式暂不做真实说话人分离，已生成默认说话人。", progress_percent=94)
+        diarization_status = "unavailable"
+        warning = {
+            "code": "diarization_unavailable",
+            "message": "当前 Sherpa-ONNX 后端不支持真实说话人分离，已保留逐字稿。",
+        }
+        warnings.append(warning)
+        emit_event("warning", "warning", warning["code"], warning["message"])
 
     write_json(
         job_dir / "result.json",
         {
+            "protocolVersion": PROTOCOL_VERSION,
+            "asrBackend": "sherpa-onnx",
+            "diarizationRequested": wants_speaker,
+            "diarizationStatus": diarization_status,
+            "warnings": warnings,
             "durationMinutes": max(1, int((duration_ms + 59999) / 60000)) if duration_ms > 0 else 0,
             "transcriptSegments": transcript_segments,
             "speakerSegments": speaker_segments,
-            "failureReason": None,
         },
     )
     write_progress(job_dir, "completed", "本地处理已完成。", progress_percent=100)
@@ -400,12 +488,14 @@ def main():
     write_progress(job_dir, "transcribing", "正在加载本地 FunASR 模型。", progress_percent=18)
 
     try:
-        from funasr import AutoModel
+        with contextlib.redirect_stdout(sys.stderr):
+            from funasr import AutoModel
     except Exception as error:
         write_progress(job_dir, "failed", "导入 funasr 失败。", str(error), 18)
         raise
 
-    model, resolved_device = build_model(AutoModel, wants_speaker)
+    with contextlib.redirect_stdout(sys.stderr):
+        model, resolved_device = build_model(AutoModel, wants_speaker)
     batch_size_s = parse_positive_int(os.getenv("FUNASR_BATCH_SIZE_S"), 300)
     log(
         "FunASR runtime:"
@@ -417,11 +507,12 @@ def main():
     )
 
     write_progress(job_dir, "transcribing", "正在进行本地转写。", progress_percent=32)
-    result = model.generate(
-        input=str(prepared_input),
-        batch_size_s=batch_size_s,
-        hotword=args.hotwords or None,
-    )
+    with contextlib.redirect_stdout(sys.stderr):
+        result = model.generate(
+            input=str(prepared_input),
+            batch_size_s=batch_size_s,
+            hotword=args.hotwords or None,
+        )
 
     payload = result[0] if isinstance(result, list) and result else result
     if not isinstance(payload, dict):
@@ -434,13 +525,31 @@ def main():
     if not transcript_segments:
         raise RuntimeError("FunASR 未返回可用逐字稿内容。")
 
+    warnings = []
+    diarization_status = "disabled"
+    if wants_speaker:
+        if speaker_segments:
+            diarization_status = "completed"
+        else:
+            diarization_status = "unavailable"
+            warning = {
+                "code": "diarization_labels_missing",
+                "message": "FunASR 未返回完整的真实说话人标签，已保留逐字稿并关闭人员归属。",
+            }
+            warnings.append(warning)
+            emit_event("warning", "warning", warning["code"], warning["message"])
+
     write_json(
         job_dir / "result.json",
         {
+            "protocolVersion": PROTOCOL_VERSION,
+            "asrBackend": "funasr",
+            "diarizationRequested": wants_speaker,
+            "diarizationStatus": diarization_status,
+            "warnings": warnings,
             "durationMinutes": 0,
             "transcriptSegments": transcript_segments,
             "speakerSegments": speaker_segments,
-            "failureReason": None,
         },
     )
     write_progress(job_dir, "completed", "本地处理已完成。", progress_percent=100)
@@ -453,7 +562,7 @@ if __name__ == "__main__":
             current_job_dir = Path(sys.argv[sys.argv.index("--job-dir") + 1])
         main()
     except Exception as error:
-        failure_message = f"{error.__class__.__name__}: {error}"
+        failure_message = redact_runtime_paths(f"{error.__class__.__name__}: {error}")
         if current_job_dir is not None:
             write_progress(current_job_dir, "failed", failure_message, failure_message, 0)
         traceback.print_exc()

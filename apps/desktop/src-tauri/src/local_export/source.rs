@@ -152,14 +152,10 @@ pub(crate) fn validate_speaker_coverage(
     job: &MeetingJob,
     payload: &MeetingMinutesPayload,
 ) -> LocalResult<()> {
-    if !job.enable_speaker {
+    if !job.diarization_status.is_verified() {
         return Ok(());
     }
-    let segments = if job.speaker_segments.is_empty() {
-        &job.transcript_segments
-    } else {
-        &job.speaker_segments
-    };
+    let segments = &job.speaker_segments;
     let transcript_speakers = segments
         .iter()
         .filter_map(|segment| segment.speaker.as_deref())
@@ -237,14 +233,10 @@ fn make_payload_authoritative(
 }
 
 pub(crate) fn mark_missing_ai_speakers(job: &MeetingJob, payload: &mut MeetingMinutesPayload) {
-    if !job.enable_speaker {
+    if !job.diarization_status.is_verified() {
         return;
     }
-    let segments = if job.speaker_segments.is_empty() {
-        &job.transcript_segments
-    } else {
-        &job.speaker_segments
-    };
+    let segments = &job.speaker_segments;
     let transcript_speakers = segments
         .iter()
         .filter_map(|segment| segment.speaker.as_deref())
@@ -384,7 +376,8 @@ mod tests {
         run.minutes_payload = Some(MeetingMinutesPayload::default());
         let job = MeetingJob {
             enable_speaker: true,
-            transcript_segments: vec![crate::local_db::TranscriptSegment {
+            diarization_status: crate::domain::asr::DiarizationStatus::Completed,
+            speaker_segments: vec![crate::local_db::TranscriptSegment {
                 speaker: Some("李兰".into()),
                 ..crate::local_db::TranscriptSegment::default()
             }],
@@ -399,6 +392,25 @@ mod tests {
     }
 
     #[test]
+    fn degraded_diarization_does_not_require_speaker_payload() {
+        let mut run = completed_run("run-active", "活动版本");
+        run.minutes_payload = Some(MeetingMinutesPayload::default());
+        let job = MeetingJob {
+            enable_speaker: true,
+            diarization_status: crate::domain::asr::DiarizationStatus::Unavailable,
+            speaker_segments: vec![crate::local_db::TranscriptSegment {
+                speaker: Some("历史残留标签".into()),
+                ..crate::local_db::TranscriptSegment::default()
+            }],
+            active_summary_run_id: Some("run-active".into()),
+            summary_runs: vec![run],
+            ..MeetingJob::default()
+        };
+
+        assert!(resolve_summary_source(&job, &[], None).is_ok());
+    }
+
+    #[test]
     fn completed_run_without_payload_reconstructs_and_marks_missing_ai_speakers() {
         let mut run = completed_run("run-active", "活动版本");
         run.minutes_payload = None;
@@ -409,7 +421,8 @@ mod tests {
         });
         let job = MeetingJob {
             enable_speaker: true,
-            transcript_segments: vec![
+            diarization_status: crate::domain::asr::DiarizationStatus::Completed,
+            speaker_segments: vec![
                 crate::local_db::TranscriptSegment {
                     speaker: Some("人员A".into()),
                     ..crate::local_db::TranscriptSegment::default()
@@ -457,7 +470,8 @@ mod tests {
         });
         let job = MeetingJob {
             enable_speaker: true,
-            transcript_segments: vec![crate::local_db::TranscriptSegment {
+            diarization_status: crate::domain::asr::DiarizationStatus::Completed,
+            speaker_segments: vec![crate::local_db::TranscriptSegment {
                 speaker: Some("人员A".into()),
                 ..crate::local_db::TranscriptSegment::default()
             }],

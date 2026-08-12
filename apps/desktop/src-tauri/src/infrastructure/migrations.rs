@@ -12,7 +12,7 @@ use crate::infrastructure::{
 };
 use crate::local_db::LocalResult;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 8;
+pub const CURRENT_SCHEMA_VERSION: i64 = 10;
 
 pub type MigrationFn = for<'transaction> fn(&Transaction<'transaction>) -> LocalResult<()>;
 

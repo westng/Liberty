@@ -4,9 +4,16 @@ mod manifest;
 mod paths;
 mod process;
 
-use crate::local_db::{
-    self, AppSettings, LocalResult, ManagedRuntimeState, RuntimeArtifactState,
-    RuntimeComponentState, RuntimeOperationState,
+use crate::{
+    application::switch_runtime_source::{self, RuntimeSourcePort},
+    domain::runtime::{
+        install_components, selected_source as selected_runtime_source, RuntimeComponent,
+        RuntimeSource,
+    },
+    local_db::{
+        self, AppSettings, LocalResult, ManagedRuntimeState, RuntimeArtifactState,
+        RuntimeComponentState, RuntimeOperationState,
+    },
 };
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -211,15 +218,10 @@ pub fn install_runtime(app: AppHandle) -> LocalResult<ManagedRuntimeState> {
 }
 
 fn runtime_install_components(settings: &AppSettings) -> Vec<&'static str> {
-    let mut components = Vec::with_capacity(3);
-    if settings.python_runtime_source == SOURCE_MANAGED {
-        components.push(COMPONENT_PYTHON);
-    }
-    components.push(COMPONENT_MODEL);
-    if settings.ffmpeg_runtime_source == SOURCE_MANAGED {
-        components.push(COMPONENT_FFMPEG);
-    }
-    components
+    install_components(settings)
+        .into_iter()
+        .map(RuntimeComponent::as_str)
+        .collect()
 }
 
 #[tauri::command]
@@ -249,16 +251,36 @@ pub fn set_runtime_component_source(
     component: String,
     source: String,
 ) -> LocalResult<ManagedRuntimeState> {
-    let component = normalize_selectable_component(&component)?;
-    let source = normalize_source(&source)?;
-    local_db::set_runtime_component_source(&app, component, source)?;
+    switch_runtime_source::switch_runtime_source(
+        &LocalRuntimeSourcePort { app: &app },
+        &component,
+        &source,
+    )
+}
 
-    if source == SOURCE_SYSTEM {
-        begin_component_detection(&app, component)?;
-    } else {
-        reconcile_managed_component(&app, component)?;
+struct LocalRuntimeSourcePort<'a> {
+    app: &'a AppHandle,
+}
+
+impl RuntimeSourcePort for LocalRuntimeSourcePort<'_> {
+    type State = ManagedRuntimeState;
+
+    fn set_source(&self, component: RuntimeComponent, source: RuntimeSource) -> LocalResult<()> {
+        local_db::set_runtime_component_source(self.app, component.as_str(), source.as_str())
+            .map(|_| ())
     }
-    detect_runtime_state(&app)
+
+    fn detect_system(&self, component: RuntimeComponent) -> LocalResult<()> {
+        begin_component_detection(self.app, component.as_str())
+    }
+
+    fn reconcile_managed(&self, component: RuntimeComponent) -> LocalResult<()> {
+        reconcile_managed_component(self.app, component.as_str())
+    }
+
+    fn load_state(&self) -> LocalResult<Self::State> {
+        detect_runtime_state(self.app)
+    }
 }
 
 #[tauri::command]
@@ -323,36 +345,17 @@ fn active_component_path(state: &RuntimeComponentState) -> LocalResult<String> {
 }
 
 fn normalize_component(component: &str) -> LocalResult<&'static str> {
-    match component.trim() {
-        COMPONENT_PYTHON => Ok(COMPONENT_PYTHON),
-        COMPONENT_FFMPEG => Ok(COMPONENT_FFMPEG),
-        COMPONENT_MODEL | "models" => Ok(COMPONENT_MODEL),
-        _ => Err("不支持的运行环境组件。".into()),
-    }
+    RuntimeComponent::parse(component).map(RuntimeComponent::as_str)
 }
 
 fn normalize_selectable_component(component: &str) -> LocalResult<&'static str> {
-    match normalize_component(component)? {
-        COMPONENT_PYTHON => Ok(COMPONENT_PYTHON),
-        COMPONENT_FFMPEG => Ok(COMPONENT_FFMPEG),
-        _ => Err("模型来源由 Liberty 托管，不能切换。".into()),
-    }
-}
-
-fn normalize_source(source: &str) -> LocalResult<&'static str> {
-    match source.trim() {
-        SOURCE_MANAGED => Ok(SOURCE_MANAGED),
-        SOURCE_SYSTEM => Ok(SOURCE_SYSTEM),
-        _ => Err("不支持的运行环境来源。".into()),
-    }
+    RuntimeComponent::parse_selectable(component).map(RuntimeComponent::as_str)
 }
 
 fn selected_source<'a>(settings: &'a AppSettings, component: &str) -> &'a str {
-    match component {
-        COMPONENT_PYTHON => &settings.python_runtime_source,
-        COMPONENT_FFMPEG => &settings.ffmpeg_runtime_source,
-        _ => SOURCE_MANAGED,
-    }
+    RuntimeComponent::parse(component)
+        .map(|component| selected_runtime_source(settings, component))
+        .unwrap_or(SOURCE_MANAGED)
 }
 
 fn component_busy_flag(component: &str) -> &'static AtomicBool {

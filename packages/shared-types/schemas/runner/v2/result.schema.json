@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/runner/v2/result.schema.json",
+  "title": "RunnerV2Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "asrBackend",
+    "diarizationRequested",
+    "diarizationStatus",
+    "warnings",
+    "durationMinutes",
+    "transcriptSegments",
+    "speakerSegments"
+  ],
+  "properties": {
+    "protocolVersion": { "const": 2 },
+    "asrBackend": { "enum": ["funasr", "sherpa-onnx"] },
+    "diarizationRequested": { "type": "boolean" },
+    "diarizationStatus": {
+      "enum": ["disabled", "completed", "unavailable", "failed"]
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/warning" }
+    },
+    "durationMinutes": { "type": "integer", "minimum": 0 },
+    "transcriptSegments": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/transcriptSegment" }
+    },
+    "speakerSegments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/speakerSegment" }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "diarizationRequested": { "const": false },
+        "diarizationStatus": { "const": "disabled" },
+        "speakerSegments": { "maxItems": 0 }
+      }
+    },
+    {
+      "properties": {
+        "diarizationRequested": { "const": true },
+        "diarizationStatus": { "const": "completed" },
+        "speakerSegments": { "minItems": 1 }
+      }
+    },
+    {
+      "properties": {
+        "diarizationRequested": { "const": true },
+        "diarizationStatus": { "enum": ["unavailable", "failed"] },
+        "speakerSegments": { "maxItems": 0 }
+      }
+    }
+  ],
+  "$defs": {
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4096 }
+      }
+    },
+    "transcriptSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startMs", "endMs", "text"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "startMs": { "type": "integer", "minimum": 0 },
+        "endMs": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "speakerSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startMs", "endMs", "text", "speaker"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "startMs": { "type": "integer", "minimum": 0 },
+        "endMs": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string", "minLength": 1 },
+        "speaker": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

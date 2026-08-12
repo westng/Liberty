@@ -1,16 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::asr::{AsrBackend, DiarizationStatus, RunnerWarning};
+use crate::domain::meeting_minutes::MeetingInfoSource;
+use crate::domain::transcript::TranscriptSegment;
 use crate::infrastructure::time::unix_timestamp_millis;
-
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct TranscriptSegment {
-    pub id: String,
-    pub start_ms: u64,
-    pub end_ms: u64,
-    pub speaker: Option<String>,
-    pub text: String,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
@@ -139,6 +132,8 @@ pub struct MeetingMinutesSpeakerReport {
 pub struct MeetingMinutesPayload {
     #[serde(default = "default_minutes_schema_version")]
     pub schema_version: u32,
+    #[serde(default)]
+    pub meeting_info_source: MeetingInfoSource,
     #[serde(default)]
     pub template_id: String,
     #[serde(default)]
@@ -831,6 +826,14 @@ pub struct MeetingJob {
     pub hotwords: Vec<String>,
     pub lang: String,
     pub enable_speaker: bool,
+    #[serde(default)]
+    pub runner_protocol_version: Option<u32>,
+    #[serde(default)]
+    pub asr_backend: AsrBackend,
+    #[serde(default)]
+    pub diarization_status: DiarizationStatus,
+    #[serde(default)]
+    pub warnings: Vec<RunnerWarning>,
     pub summary_template: String,
     pub upload_status: String,
     pub asr_status: String,
@@ -856,39 +859,6 @@ pub struct MeetingJob {
 
 fn default_local_processing_mode() -> String {
     "local".into()
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(default, rename_all = "camelCase")]
-pub struct AppSettings {
-    pub theme_mode: String,
-    pub liquid_glass_style: String,
-    pub accent_color: String,
-    pub locale: String,
-    pub backend_url: String,
-    pub api_token: String,
-    pub processing_mode: String,
-    pub default_hotwords: String,
-    pub summary_template: String,
-    pub concurrency: u32,
-    pub python_path: String,
-    pub ffmpeg_path: String,
-    pub python_runtime_source: String,
-    pub ffmpeg_runtime_source: String,
-    pub runner_script_path: String,
-    pub local_asr_device: String,
-    pub local_asr_threads: u32,
-    pub local_asr_batch_size_seconds: u32,
-    pub runtime_download_source: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AppSettingsSnapshot {
-    #[serde(flatten)]
-    pub settings: AppSettings,
-    #[serde(default)]
-    pub settings_revision: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -995,32 +965,6 @@ impl ManagedRuntimeState {
             ffmpeg: RuntimeComponentState::unavailable("ffmpeg", Some("managed")),
             models: RuntimeComponentState::unavailable("model", None),
             shell_ready: false,
-        }
-    }
-}
-
-impl Default for AppSettings {
-    fn default() -> Self {
-        Self {
-            theme_mode: "auto".into(),
-            liquid_glass_style: "transparent".into(),
-            accent_color: "#2f6dff".into(),
-            locale: "zh-CN".into(),
-            backend_url: String::new(),
-            api_token: String::new(),
-            processing_mode: "local".into(),
-            default_hotwords: "SeACo-Paraformer, FunASR, 会议纪要".into(),
-            summary_template: "表格版会议纪要".into(),
-            concurrency: 2,
-            python_path: String::new(),
-            ffmpeg_path: String::new(),
-            python_runtime_source: "managed".into(),
-            ffmpeg_runtime_source: "managed".into(),
-            runner_script_path: String::new(),
-            local_asr_device: "auto".into(),
-            local_asr_threads: 0,
-            local_asr_batch_size_seconds: 300,
-            runtime_download_source: String::new(),
         }
     }
 }

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liberty.local/schemas/runner/v2/progress.schema.json",
+  "title": "RunnerV2Progress",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "revision",
+    "stage",
+    "statusMessage",
+    "failureReason",
+    "progressPercent",
+    "updatedAt"
+  ],
+  "properties": {
+    "protocolVersion": { "const": 2 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "stage": {
+      "enum": ["transcribing", "speaker_processing", "completed", "failed"]
+    },
+    "statusMessage": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "failureReason": { "type": ["string", "null"], "maxLength": 4096 },
+    "progressPercent": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+    "updatedAt": { "type": "string", "minLength": 1 }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "stage": { "enum": ["transcribing", "speaker_processing"] }
+      }
+    },
+    {
+      "properties": {
+        "stage": { "const": "failed" },
+        "failureReason": { "type": "string", "minLength": 1 }
+      }
+    },
+    {
+      "properties": {
+        "stage": { "const": "completed" },
+        "failureReason": { "type": "null" },
+        "progressPercent": { "const": 100 }
+      }
+    }
+  ]
+}

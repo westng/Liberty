@@ -2109,6 +2109,12 @@
           "markdownDescription": "Enables the export_job_summary_docx command without any pre-configured scope."
         },
         {
+          "description": "Enables the export_job_text command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-export-job-text",
+          "markdownDescription": "Enables the export_job_text command without any pre-configured scope."
+        },
+        {
           "description": "Enables the export_meeting_members_excel command without any pre-configured scope.",
           "type": "string",
           "const": "allow-export-meeting-members-excel",
@@ -2635,6 +2641,12 @@
           "type": "string",
           "const": "deny-export-job-summary-docx",
           "markdownDescription": "Denies the export_job_summary_docx command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the export_job_text command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-export-job-text",
+          "markdownDescription": "Denies the export_job_text command without any pre-configured scope."
         },
         {
           "description": "Denies the export_meeting_members_excel command without any pre-configured scope.",

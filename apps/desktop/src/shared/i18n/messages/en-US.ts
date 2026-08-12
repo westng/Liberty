@@ -1,6 +1,16 @@
 import type { MessageTree } from "./types";
 
 export const enUSMessages: MessageTree = {
+    errors: {
+      remoteServiceUnavailable: "The remote meeting service is unavailable. Check its configuration and your network connection.",
+      aiCredentialOperationFailed: "The AI model credential operation did not complete. Check the system credential store.",
+      validationError: "The submitted data is invalid. Review it and try again.",
+      notFound: "The requested data does not exist or was deleted.",
+      conflict: "The data changed in another operation. Refresh and try again.",
+      infrastructureError: "The local service is temporarily unavailable.",
+      unexpected: "An unexpected error occurred.",
+      retryableHint: "You can try again later.",
+    },
     nav: {
       dashboard: "Dashboard",
       newJob: "New Job",
@@ -346,6 +356,10 @@ export const enUSMessages: MessageTree = {
       filesCount: "{count} file(s)",
       fileDuration: "Duration {duration}",
       diarizationEnabled: "With speaker diarization",
+      diarizationCompleted: "Speakers verified",
+      diarizationUnavailable: "Speakers unavailable; using transcript",
+      diarizationFailed: "Speaker processing failed; transcript preserved",
+      diarizationUnverified: "Legacy speakers unverified; using transcript",
       transcriptOnly: "Transcript only",
       processCompleted: "Completed",
       processFailed: "Failed",
@@ -375,6 +389,11 @@ export const enUSMessages: MessageTree = {
       settingsSection: "Job Settings",
       language: "Language",
       speakerDiarization: "Speaker Diarization",
+      diarizationCompleted: "Completed and verified",
+      diarizationUnavailable: "This backend returned no verified speaker labels. The result uses transcript only.",
+      diarizationFailed: "Speaker processing failed. The transcript remains available.",
+      diarizationUnverified: "This legacy speaker result is unverified and is excluded from summaries and exports by default.",
+      diarizationPending: "Waiting for speaker processing",
       logSection: "Processing Log",
       noLog: "No processing logs yet.",
       notFound: "This job could not be found.",
@@ -443,6 +462,7 @@ export const enUSMessages: MessageTree = {
       template: "Template",
       chooseTemplate: "Choose a template",
       includeSpeaker: "Include speaker",
+      speakerUnavailable: "This job has no verified speaker result. The summary will use transcript only without person attribution.",
       includeTimestamp: "Include timestamp",
       useMemberMapping: "Use member mapping",
       extraInstructions: "Extra Instructions",
