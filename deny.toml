@@ -1,8 +1,20 @@
 [graph]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "i686-pc-windows-msvc",
+  "x86_64-pc-windows-msvc",
+]
 all-features = true
 
 [advisories]
-ignore = []
+ignore = [
+  { id = "RUSTSEC-2025-0075", reason = "Tauri 2.11 pins urlpattern 0.3; this is an unmaintained-only advisory with no safe upstream upgrade" },
+  { id = "RUSTSEC-2025-0080", reason = "Tauri 2.11 pins urlpattern 0.3; this is an unmaintained-only advisory with no safe upstream upgrade" },
+  { id = "RUSTSEC-2025-0081", reason = "Tauri 2.11 pins urlpattern 0.3; this is an unmaintained-only advisory with no safe upstream upgrade" },
+  { id = "RUSTSEC-2025-0098", reason = "Tauri 2.11 pins urlpattern 0.3; this is an unmaintained-only advisory with no safe upstream upgrade" },
+  { id = "RUSTSEC-2025-0100", reason = "Tauri 2.11 pins urlpattern 0.3; this is an unmaintained-only advisory with no safe upstream upgrade" },
+]
 
 [licenses]
 confidence-threshold = 0.8

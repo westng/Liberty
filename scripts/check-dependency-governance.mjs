@@ -4,7 +4,11 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
+  CARGO_DENY_SECURITY_CHECKS,
+  OSV_EXCEPTION_CONFIG,
+  OSV_LOCK_FILES,
   assertNodeLockHasIntegrity,
+  assertOsvExceptionsAreGoverned,
   assertPythonLockHasHashes,
   readPolicy,
 } from "./lib/dependency-governance.mjs";
@@ -25,6 +29,9 @@ if (policy.requireHashesForPythonLocks) {
     assertPythonLockHasHashes(await readFile(path.join(repositoryRoot, lock), "utf8"), lock);
   }
 }
+assertOsvExceptionsAreGoverned(
+  await readFile(path.join(repositoryRoot, OSV_EXCEPTION_CONFIG), "utf8"),
+);
 
 if (mode === "locks") {
   console.log("Dependency lock integrity policy passed.");
@@ -43,7 +50,7 @@ for (const command of requiredCommands) {
 assertToolVersion("cargo-deny", policy.tools.cargoDeny);
 if (mode === "security") assertToolVersion("osv-scanner", policy.tools.osvScanner);
 
-const cargoDenyChecks = mode === "licenses" ? ["licenses"] : ["advisories", "bans", "sources"];
+const cargoDenyChecks = mode === "licenses" ? ["licenses"] : CARGO_DENY_SECURITY_CHECKS;
 const cargoDeny = spawnSync("cargo-deny", ["check", ...cargoDenyChecks], {
   cwd: repositoryRoot,
   stdio: "inherit",
@@ -53,14 +60,7 @@ if (cargoDeny.status !== 0) {
 }
 
 if (mode === "security") {
-  const lockFiles = [
-    "pnpm-lock.yaml",
-    "Cargo.lock",
-    "python/funasr-runner/requirements-lock-darwin-aarch64.txt",
-    "python/funasr-runner/requirements-lock-darwin-x64.txt",
-    "python/funasr-runner/requirements-lock-windows-x64.txt",
-  ];
-  for (const lockFile of lockFiles) {
+  for (const lockFile of OSV_LOCK_FILES) {
     await access(path.join(repositoryRoot, lockFile));
     const scan = spawnSync("osv-scanner", ["scan", "-L", lockFile], {
       cwd: repositoryRoot,

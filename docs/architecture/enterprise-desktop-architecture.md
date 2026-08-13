@@ -222,7 +222,7 @@ Every pull request and release build must run:
 
 Release workflows run after quality workflows pass.
 
-The supply-chain job installs checksum-pinned `cargo-deny 0.20.2` and OSV Scanner `2.5.0`, then enforces lock integrity, source, license and vulnerability policy. Scanner absence is a failure, not a skipped success. It generates a CycloneDX 1.5 SBOM from Cargo, pnpm and three supported Python runtime locks; Release assembly validates its application version, name, digest and absence of local paths or credential-like content before adding it to checksums and upload plans.
+The supply-chain job installs checksum-pinned `cargo-deny 0.20.2` and OSV Scanner `2.5.0`, then enforces lock integrity, source, license and vulnerability policy. Rust advisories are evaluated by `cargo-deny` against the four supported macOS and Windows target graphs; OSV Scanner evaluates the pnpm and supported Python runtime locks. Temporary Python exceptions must identify one vulnerability, document the mitigation and expire; package-wide ignores are rejected. Scanner absence is a failure, not a skipped success. It generates a CycloneDX 1.5 SBOM from Cargo, pnpm and three supported Python runtime locks; Release assembly validates its application version, name, digest and absence of local paths or credential-like content before adding it to checksums and upload plans.
 
 Local `pnpm security:check` and `pnpm licenses:check` require the same scanner prerequisites. Exit code `2` means the local toolchain is unavailable and must never be reported as a clean scan.
 

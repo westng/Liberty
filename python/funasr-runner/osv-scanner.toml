@@ -1,0 +1,163 @@
+# Temporary, vulnerability-specific exceptions for the local FunASR runtime.
+# PyTorch 2.2.2 is the newest compatible release that still publishes a
+# Python 3.10 macOS Intel wheel. Models are downloaded by the Rust runtime at
+# fixed 40-character revisions with per-file SHA-256 validation, and FunASR is
+# run with disable_update=True. Reassess all exceptions before their expiry.
+
+[[IgnoredVulns]]
+id = "PYSEC-2024-259"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-191"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-198"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-203"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-204"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-205"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-206"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-207"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-208"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-209"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-41"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-139"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-1970"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-2286"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "GHSA-c678-jfcj-6jmf"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "GHSA-f4hp-rmr7-r7v8"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "GHSA-qfhq-4f3w-5fph"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "GHSA-rrmf-rvhw-rf47"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "GHSA-vgrw-7cvw-pwgx"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+[[IgnoredVulns]]
+id = "GHSA-x3gm-94wq-g975"
+ignoreUntil = 2026-11-30
+reason = "Temporary PyTorch 2.2.2 compatibility exception; fixed-revision, SHA-256-verified local models reduce exposure."
+
+# FunASR 1.3.9 resolves Transformers 4.53.3. Liberty does not expose Trainer
+# or accept arbitrary model repositories; the same fixed-model controls apply.
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-211"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-212"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-213"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-214"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-215"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-216"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-217"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2025-218"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-2288"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-2289"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-2290"
+ignoreUntil = 2026-11-30
+reason = "Temporary FunASR Transformers compatibility exception; Liberty accepts only fixed-revision, SHA-256-verified models."

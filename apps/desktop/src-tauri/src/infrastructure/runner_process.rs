@@ -370,16 +370,20 @@ pub fn build_runner_command(input: RunnerCommandInput<'_>) -> Command {
     }
 
     if let Some(models_root) = input.runtime.models_root.as_deref() {
-        command
-            .env(
-                "MODELSCOPE_CACHE",
-                Path::new(models_root).join("modelscope"),
-            )
-            .env("HF_HOME", Path::new(models_root).join("huggingface"))
-            .env("TORCH_HOME", Path::new(models_root).join("torch"));
+        configure_offline_model_environment(&mut command, Path::new(models_root));
     }
 
     command
+}
+
+fn configure_offline_model_environment(command: &mut Command, models_root: &Path) {
+    command
+        .env("MODELSCOPE_CACHE", models_root.join("modelscope"))
+        .env("HF_HOME", models_root.join("huggingface"))
+        .env("TORCH_HOME", models_root.join("torch"))
+        .env("MODELSCOPE_OFFLINE", "1")
+        .env("HF_HUB_OFFLINE", "1")
+        .env("TRANSFORMERS_OFFLINE", "1");
 }
 
 pub fn configure_runner_process(command: &mut Command) {
@@ -548,7 +552,15 @@ fn sanitize_stderr_line(line: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
+
+    fn command_env<'a>(command: &'a Command, key: &str) -> Option<&'a OsStr> {
+        command
+            .get_envs()
+            .find_map(|(name, value)| (name == OsStr::new(key)).then_some(value).flatten())
+    }
 
     fn identity() -> RunnerProcessIdentity {
         RunnerProcessIdentity {
@@ -588,6 +600,36 @@ mod tests {
             &current,
         )
         .unwrap());
+    }
+
+    #[test]
+    fn runner_uses_only_managed_model_caches_offline() {
+        let models_root = Path::new("runtime-models");
+        let mut command = Command::new("python");
+        configure_offline_model_environment(&mut command, models_root);
+
+        let modelscope_cache = models_root.join("modelscope");
+        let huggingface_cache = models_root.join("huggingface");
+        let torch_cache = models_root.join("torch");
+        assert_eq!(
+            command_env(&command, "MODELSCOPE_CACHE"),
+            Some(modelscope_cache.as_os_str())
+        );
+        assert_eq!(
+            command_env(&command, "HF_HOME"),
+            Some(huggingface_cache.as_os_str())
+        );
+        assert_eq!(
+            command_env(&command, "TORCH_HOME"),
+            Some(torch_cache.as_os_str())
+        );
+        for key in [
+            "MODELSCOPE_OFFLINE",
+            "HF_HUB_OFFLINE",
+            "TRANSFORMERS_OFFLINE",
+        ] {
+            assert_eq!(command_env(&command, key), Some(OsStr::new("1")));
+        }
     }
 
     #[test]
