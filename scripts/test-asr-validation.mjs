@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   characterErrorRate,
+  detectPlatformId,
   diarizationErrorRate,
   evaluateBenchmarkPair,
   REQUIRED_SMOKE_CHECKS,
@@ -116,7 +117,7 @@ await writeFile(path.join(jobDir, "result.json"), JSON.stringify({
   warnings: [],
   durationMinutes: 1,
   transcriptSegments: [{ id: "1", startMs: 0, endMs: 1000, text: "脱敏基准内容" }],
-  speakerSegments: [{ id: "1", startMs: 0, endMs: 1000, text: "脱敏基准内容", speaker: "person-a" }],
+  speakerSegments: [{ id: "1", startMs: 0, endMs: 1000, text: "脱敏基准内容", speaker: process.env.LIBERTY_TEST_SPEAKER }],
 }));
 `);
 const validManifest = {
@@ -134,8 +135,8 @@ const validManifest = {
     annotation: { path: "annotation.json", sha256: await sha256File(workflowAnnotation), version: "workflow-fixture-1" },
   }],
   engines: [
-    { role: "baseline", id: "baseline-funasr", backend: "funasr", runtimeVersion: "1", modelSetVersion: "1", command: [process.execPath, fakeRunner], installRoot: "baseline-install" },
-    { role: "candidate", id: "candidate-funasr", backend: "funasr", runtimeVersion: "2", modelSetVersion: "2", command: [process.execPath, fakeRunner], installRoot: "candidate-install" },
+    { role: "baseline", id: "baseline-funasr", backend: "funasr", runtimeVersion: "1", modelSetVersion: "1", command: [process.execPath, fakeRunner], installRoot: "baseline-install", environment: { LIBERTY_TEST_SPEAKER: "person-a" } },
+    { role: "candidate", id: "candidate-funasr", backend: "funasr", runtimeVersion: "2", modelSetVersion: "2", command: [process.execPath, fakeRunner], installRoot: "candidate-install", environment: { LIBERTY_TEST_SPEAKER: "speaker 1" } },
   ],
 };
 const validManifestPath = path.join(workflowRoot, "manifest.local.json");
@@ -148,12 +149,17 @@ const benchmarkRun = runScript("scripts/run-asr-benchmark.mjs", [
   "--output", benchmarkOutput,
   "--allow-dirty",
 ]);
-assert.notEqual(benchmarkRun.status, 0, "exploratory dirty/16 GiB evidence must not pass acceptance");
-const benchmarkEvidence = JSON.parse(await readFile(benchmarkOutput, "utf8"));
-assert.equal(benchmarkEvidence.engines.length, 2);
-assert.equal(benchmarkEvidence.engines.every((engine) => engine.samples[0].success), true);
-assert.equal(benchmarkEvidence.engines.every((engine) => engine.samples[0].cer === 0), true);
-assert.match(benchmarkEvidence.violations.join("\n"), /dirty worktree|performance tier/);
+assert.notEqual(benchmarkRun.status, 0, "synthetic speaker labels must not pass acceptance");
+const localAsrRequired = ["darwin-aarch64", "darwin-x64", "windows-x64"].includes(detectPlatformId());
+if (!localAsrRequired) {
+  assert.match(benchmarkRun.stderr, /current platform .* is not a required local ASR benchmark target/);
+} else {
+  const benchmarkEvidence = JSON.parse(await readFile(benchmarkOutput, "utf8"));
+  assert.equal(benchmarkEvidence.engines.length, 2);
+  assert.equal(benchmarkEvidence.engines.every((engine) => engine.samples[0].success), true);
+  assert.equal(benchmarkEvidence.engines.every((engine) => engine.samples[0].cer === 0), true);
+  assert.match(benchmarkEvidence.violations.join("\n"), /synthetic-looking speaker labels/);
+}
 
 const acceptedEvidenceRoot = path.join(workflowRoot, "accepted");
 await mkdir(acceptedEvidenceRoot);

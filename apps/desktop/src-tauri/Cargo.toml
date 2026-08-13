@@ -4,6 +4,8 @@ version = "1.1.24"
 description = "Liberty desktop client"
 authors = ["west"]
 edition = "2021"
+license = "MIT"
+publish = false
 
 [lib]
 name = "liberty_lib"
