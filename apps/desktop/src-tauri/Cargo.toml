@@ -36,7 +36,7 @@ tauri = { version = "2.0.0", features = ["macos-private-api", "unstable"] }
 tauri-plugin-dialog = "2.0.0"
 tauri-plugin-fs = "2.0.0"
 typify = "0.7.0"
-xmltree = "0.11"
+xmltree = "0.12"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
