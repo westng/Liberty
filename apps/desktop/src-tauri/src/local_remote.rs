@@ -88,7 +88,7 @@ pub fn get_remote_capabilities(
     app: AppHandle,
     window: WebviewWindow,
 ) -> Result<RemoteMeetingCapabilities, AppErrorDto> {
-    require_main_window(window.label()).map_err(remote_command_error)?;
+    require_remote_capability_window(window.label()).map_err(remote_command_error)?;
     let context = remote_context(&app).map_err(remote_command_error)?;
     fetch_capabilities(&context).map_err(remote_command_error)
 }
@@ -124,9 +124,17 @@ pub fn remote_get_job_result(
     app: AppHandle,
     window: WebviewWindow,
     id: String,
+    window_scope_token: Option<String>,
 ) -> Result<MeetingJob, AppErrorDto> {
-    require_main_window(window.label()).map_err(remote_command_error)?;
     let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    crate::window_scope::authorize_job_window(
+        &window,
+        &[crate::window_scope::job_workbench_window()],
+        "remote",
+        id,
+        window_scope_token.as_deref(),
+    )
+    .map_err(job_window_scope_error)?;
     let context = remote_context(&app).map_err(remote_command_error)?;
     let capabilities = fetch_capabilities(&context).map_err(remote_command_error)?;
     require_operation(&capabilities, "jobs.result.read").map_err(remote_command_error)?;
@@ -184,9 +192,17 @@ pub fn remote_rename_job_speaker(
     id: String,
     from_speaker: String,
     to_speaker: String,
+    window_scope_token: Option<String>,
 ) -> Result<MeetingJob, AppErrorDto> {
-    require_main_window(window.label()).map_err(remote_command_error)?;
     let id = normalize_job_id(&id).map_err(remote_command_error)?;
+    crate::window_scope::authorize_job_window(
+        &window,
+        &[crate::window_scope::job_workbench_window()],
+        "remote",
+        id,
+        window_scope_token.as_deref(),
+    )
+    .map_err(job_window_scope_error)?;
     let from_speaker =
         normalize_speaker(&from_speaker, "原讲话人").map_err(remote_command_error)?;
     let to_speaker = normalize_speaker(&to_speaker, "新讲话人").map_err(remote_command_error)?;
@@ -210,11 +226,27 @@ fn remote_command_error(_source: String) -> AppErrorDto {
     AppErrorDto::new("remote_service_unavailable", ErrorCategory::Network, true)
 }
 
+fn job_window_scope_error(_source: String) -> AppErrorDto {
+    AppErrorDto::new(
+        "job_window_scope_invalid",
+        ErrorCategory::Authorization,
+        false,
+    )
+}
+
 fn require_main_window(window_label: &str) -> LocalResult<()> {
     if window_label == "main" {
         Ok(())
     } else {
         Err("当前窗口无权访问远端会议服务。".into())
+    }
+}
+
+fn require_remote_capability_window(window_label: &str) -> LocalResult<()> {
+    if ["main", crate::window_scope::job_workbench_window()].contains(&window_label) {
+        Ok(())
+    } else {
+        Err("当前窗口无权读取远端会议能力。".into())
     }
 }
 
@@ -534,8 +566,8 @@ fn normalize_speaker<'a>(value: &'a str, label: &str) -> LocalResult<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_api_token, require_matching_job_id, validate_capabilities, MeetingJob,
-        RemoteMeetingCapabilities,
+        normalize_api_token, require_matching_job_id, require_remote_capability_window,
+        validate_capabilities, MeetingJob, RemoteMeetingCapabilities,
     };
 
     #[test]
@@ -560,6 +592,24 @@ mod tests {
             normalize_api_token("  secret-token  ").unwrap(),
             "secret-token"
         );
+    }
+
+    #[test]
+    fn remote_capabilities_are_limited_to_main_and_job_workbench_windows() {
+        assert!(require_remote_capability_window("main").is_ok());
+        assert!(
+            require_remote_capability_window(crate::window_scope::job_workbench_window()).is_ok()
+        );
+
+        for label in [
+            "ai-summary",
+            "meeting-notes",
+            "model-editor",
+            "desktop-pet",
+            "",
+        ] {
+            assert!(require_remote_capability_window(label).is_err());
+        }
     }
 
     #[test]

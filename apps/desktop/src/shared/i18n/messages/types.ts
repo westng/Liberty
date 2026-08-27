@@ -7,6 +7,7 @@ export type MessageTree = {
     validationError: string;
     notFound: string;
     conflict: string;
+    jobWindowScopeInvalid: string;
     infrastructureError: string;
     unexpected: string;
     retryableHint: string;
@@ -15,7 +16,6 @@ export type MessageTree = {
     dashboard: string;
     newJob: string;
     jobs: string;
-    results: string;
     workMarket: string;
     models: string;
     templates: string;
@@ -108,8 +108,16 @@ export type MessageTree = {
   };
   settings: {
     pageTitle: string;
+    backToApp: string;
+    navigationLabel: string;
+    searchPlaceholder: string;
+    searchEmpty: string;
+    personalizationGroup: string;
+    processingGroup: string;
+    systemGroup: string;
     appearance: string;
     appearanceHint: string;
+    themeSectionHint: string;
     themeSection: string;
     themeMode: string;
     glassStyle: string;
@@ -127,11 +135,13 @@ export type MessageTree = {
     transparentHint: string;
     tintedHint: string;
     runtimeOverview: string;
+    runtimeOverviewHint: string;
     runtimeMode: string;
     runtimeModeHint: string;
     localDatabaseReady: string;
     waitingLocalConfig: string;
     localRuntime: string;
+    localRuntimeHint: string;
     managedRuntime: string;
     managedRuntimeHint: string;
     runtimeStatus: string;
@@ -201,6 +211,7 @@ export type MessageTree = {
     localAsrDeviceMps: string;
     localAsrDeviceCuda: string;
     processingDefaults: string;
+    processingDefaultsHint: string;
     defaultHotwords: string;
     defaultHotwordsHint: string;
     defaultHotwordsPlaceholder: string;
@@ -214,6 +225,9 @@ export type MessageTree = {
     localAsrBatchSizeSeconds: string;
     localAsrBatchSizeSecondsHint: string;
     remoteCompatibility: string;
+    remoteCompatibilityHint: string;
+    diagnostics: string;
+    diagnosticsHint: string;
     remoteStatus: string;
     remoteStatusIdle: string;
     remoteStatusChecking: string;
@@ -257,6 +271,7 @@ export type MessageTree = {
     addFiles: string;
     desktopFilePicker: string;
     mediaSupported: string;
+    supportedFormats: string;
     selectedFiles: string;
     reselect: string;
     continueAdding: string;
@@ -287,12 +302,32 @@ export type MessageTree = {
     localFileRule: string;
     remoteFileRule: string;
     fileCount: string;
+    selectMediaFirst: string;
+    enterTitle: string;
+    readyToCreate: string;
+    removeFile: string;
     modelDownloadRequiredTitle: string;
     modelDownloadRequiredMessage: string;
     remoteUploadUnavailable: string;
   };
   jobs: {
     deleteConfirm: string;
+    deleteTitle: string;
+    searchPlaceholder: string;
+    filterLabel: string;
+    filterAll: string;
+    filterProcessing: string;
+    filterCompleted: string;
+    filterFailed: string;
+    newJob: string;
+    moreActions: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    visibleCount: string;
+    paginationLabel: string;
+    paginationSummary: string;
+    previousPage: string;
+    nextPage: string;
     pending: string;
     minutes: string;
     hours: string;
@@ -308,8 +343,12 @@ export type MessageTree = {
     queueTitle: string;
     queueCopy: string;
     colTask: string;
-    colFileInfo: string;
-    colProcessingTime: string;
+    colFiles: string;
+    colFileCount: string;
+    colDuration: string;
+    colDiarization: string;
+    colProcessingDuration: string;
+    colProgress: string;
     colCreatedAt: string;
     colStatus: string;
     colActions: string;
@@ -326,6 +365,7 @@ export type MessageTree = {
     processRunning: string;
     details: string;
     workbench: string;
+    viewResult: string;
     selectedTask: string;
     doubleClickHint: string;
     deleteDisabled: string;
@@ -385,9 +425,13 @@ export type MessageTree = {
     activeResultReady: string;
     summaryEmpty: string;
     transcript: string;
+    legacySpeakerNotice: string;
     searchPlaceholder: string;
     speakerInputPlaceholder: string;
     emptyFilteredTranscript: string;
+    loading: string;
+    loadFailed: string;
+    invalidReference: string;
     notFound: string;
     remoteOperationUnavailable: string;
   };
@@ -451,6 +495,9 @@ export type MessageTree = {
     defaultTag: string;
     enabledTag: string;
     disabledTag: string;
+    status: string;
+    updatedAt: string;
+    actions: string;
     empty: string;
     deleteConfirm: string;
     deleteTitle: string;
@@ -489,7 +536,11 @@ export type MessageTree = {
     total: string;
     builtin: string;
     custom: string;
+    latest: string;
     listTitle: string;
+    type: string;
+    updatedAt: string;
+    actions: string;
     emptyDescription: string;
     empty: string;
     deleteConfirm: string;
@@ -515,7 +566,13 @@ export type MessageTree = {
     add: string;
     total: string;
     recorder: string;
+    latest: string;
     listTitle: string;
+    role: string;
+    departmentCount: string;
+    updatedAt: string;
+    actions: string;
+    loading: string;
     empty: string;
     emptyDepartment: string;
     deleteConfirm: string;
@@ -567,6 +624,7 @@ export type MessageTree = {
   windows: {
     aiSummaryTitle: string;
     meetingNotesTitle: string;
+    workbenchTitle: string;
     editModel: string;
     newModel: string;
     editTemplate: string;

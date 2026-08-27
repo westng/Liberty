@@ -4,7 +4,7 @@ use crate::{
     local_db::{self, LocalResult, MeetingJob, MeetingSummary, TranscriptSegment},
 };
 use serde::Deserialize;
-use tauri::{AppHandle, Webview};
+use tauri::{AppHandle, WebviewWindow};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +13,8 @@ pub(crate) struct TextExportInput {
     source: String,
     kind: String,
     file_path: String,
+    #[serde(default)]
+    window_scope_token: Option<String>,
     labels: TextExportLabels,
     remote_job: Option<TextExportJobSnapshot>,
 }
@@ -78,10 +80,17 @@ struct TextExportLabels {
 
 pub(crate) fn export_job_text(
     app: AppHandle,
-    webview: Webview,
+    window: WebviewWindow,
     mut input: TextExportInput,
 ) -> LocalResult<()> {
-    let output_path = authorized_output_path(&webview, &input.file_path)?;
+    crate::window_scope::authorize_job_window(
+        &window,
+        &[crate::window_scope::job_workbench_window()],
+        &input.source,
+        input.job_id.trim(),
+        input.window_scope_token.as_deref(),
+    )?;
+    let output_path = authorized_output_path(window.as_ref(), &input.file_path)?;
     let kind = TextExportKind::parse(&input.kind)?;
     let job = resolve_export_job(&app, &mut input)?;
     let content = render_text_export(&job, kind, &input.labels);

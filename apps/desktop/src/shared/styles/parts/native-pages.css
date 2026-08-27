@@ -49,30 +49,6 @@
   padding: 12px;
 }
 
-.content-shell:not(.settings-content-shell) .jobs-table-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.content-shell:not(.settings-content-shell) .jobs-table {
-  min-width: 920px;
-}
-
-.content-shell:not(.settings-content-shell) .jobs-table-head,
-.content-shell:not(.settings-content-shell) .jobs-row {
-  grid-template-columns: minmax(190px, 1.4fr) minmax(140px, 0.9fr) 116px 104px 96px 180px;
-}
-
-.content-shell:not(.settings-content-shell) .jobs-row {
-  min-height: 48px;
-}
-
-.content-shell:not(.settings-content-shell) .jobs-primary strong,
-.content-shell:not(.settings-content-shell) .jobs-cell strong {
-  font-size: 13px;
-  font-weight: 600;
-}
-
 .content-shell:not(.settings-content-shell) .detail-grid {
   grid-template-columns: minmax(0, 1fr) 312px;
 }

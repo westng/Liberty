@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "job-workbench-capability",
+  "description": "Result workbench can operate one explicitly scoped local or remote job without listing or mutating other jobs.",
+  "windows": ["job-workbench"],
+  "permissions": [
+    "core:event:allow-emit",
+    "core:event:allow-emit-to",
+    "dialog:allow-confirm",
+    "dialog:allow-save",
+    "allow-close-current-window",
+    "allow-set-current-window-theme",
+    "allow-get-ui-preferences",
+    "allow-get-job-result",
+    "allow-rename-job-speaker",
+    "allow-get-remote-capabilities",
+    "allow-remote-get-job-result",
+    "allow-remote-rename-job-speaker",
+    "allow-export-job-text",
+    "allow-export-job-summary-docx",
+    "allow-list-ai-templates",
+    "allow-issue-job-window-scope"
+  ]
+}

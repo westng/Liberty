@@ -8,7 +8,7 @@ import process from "node:process";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const desktopRoot = path.join(repoRoot, "apps", "desktop");
 const host = process.env.TAURI_DEV_HOST || "127.0.0.1";
-const port = 5173;
+const port = 1420;
 
 if (await isPortOpen(host, port)) {
   console.log(`[start-dev-server] reuse existing Vite server at http://${host}:${port}`);

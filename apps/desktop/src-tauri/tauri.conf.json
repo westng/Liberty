@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "node ../../scripts/start-dev-server.mjs",
     "beforeBuildCommand": "npm run build",
-    "devUrl": "http://127.0.0.1:5173",
+    "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../dist"
   },
   "bundle": {

@@ -2127,6 +2127,12 @@
           "markdownDescription": "Enables the get_ai_summary_options command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_dashboard_overview command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-dashboard-overview",
+          "markdownDescription": "Enables the get_dashboard_overview command without any pre-configured scope."
+        },
+        {
           "description": "Enables the get_desktop_pet_status command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-desktop-pet-status",
@@ -2659,6 +2665,12 @@
           "type": "string",
           "const": "deny-get-ai-summary-options",
           "markdownDescription": "Denies the get_ai_summary_options command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_dashboard_overview command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-dashboard-overview",
+          "markdownDescription": "Denies the get_dashboard_overview command without any pre-configured scope."
         },
         {
           "description": "Denies the get_desktop_pet_status command without any pre-configured scope.",

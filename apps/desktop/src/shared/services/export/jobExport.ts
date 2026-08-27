@@ -39,7 +39,7 @@ export function buildExportPayload(job: MeetingJob, kind: ExportKind) {
   };
 }
 
-export async function exportJob(job: MeetingJob, kind: ExportKind) {
+export async function exportJob(job: MeetingJob, kind: ExportKind, windowScopeToken?: string) {
   if (kind === "word" && job.source !== "local") {
     publishAppStatus(getCurrentMessages().export.remoteWordUnavailable, {
       tone: "error",
@@ -66,12 +66,18 @@ export async function exportJob(job: MeetingJob, kind: ExportKind) {
 
   return runAppStatusAction("exportFile", async () => {
     if (kind === "word") {
-      await exportJobSummaryDocx(job, filePath);
+      await exportJobSummaryDocx(job, filePath, windowScopeToken);
       void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
       return true;
     }
 
-    await exportJobText(job, kind satisfies TextExportKind, getCurrentMessages(), filePath);
+    await exportJobText(
+      job,
+      kind satisfies TextExportKind,
+      getCurrentMessages(),
+      filePath,
+      windowScopeToken,
+    );
 
     void applyLocalPetWorkflowEvent({ eventType: "export_completed", metadata: job.id }).catch(() => undefined);
     return true;

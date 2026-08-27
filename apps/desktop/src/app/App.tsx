@@ -4,6 +4,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Link, RouterProvider, useRouter } from "@/app/router/RouterContext";
 import sidebarMascotUrl from "@/assets/sidebar-mascot.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import {
+  getActiveSettingsSection,
+  getSettingsNavigationGroups,
+  setActiveSettingsSection,
+  subscribeActiveSettingsSection,
+} from "@/features/settings/application/settingsNavigation";
 import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { usePetStore } from "@/features/pet/stores/usePetStore";
 import { formatMessage, getMessages } from "@/shared/i18n";
@@ -11,7 +17,11 @@ import { applyDesktopPetState } from "@/shared/services/tauri/pet";
 import { getProcessMetrics, openExternalUrl } from "@/shared/services/tauri/system";
 import { applyAppearance, watchSystemThemeChange } from "@/shared/services/ui/appearance";
 import { navIconSvg, type NavIconKey } from "@/shared/services/ui/navIcons";
-import { listenForEntityChanges } from "@/shared/services/ui/windows";
+import {
+  fulfillJobWindowOpenRequest,
+  listenForEntityChanges,
+  listenForJobWindowOpenRequests,
+} from "@/shared/services/ui/windows";
 import {
   getAppStatusNotification,
   clearAppStatusNotification,
@@ -40,12 +50,14 @@ function AppContent() {
   const [graphicsMemoryMb, setGraphicsMemoryMb] = useState(0);
   const [appVersion, setAppVersion] = useState("");
   const [isWindowsTitlebar, setIsWindowsTitlebar] = useState(false);
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState("");
   const statusNotification = useSyncExternalStore(
     subscribeAppStatus,
     getAppStatusNotification,
     getAppStatusNotification,
   );
   const knownJobStatuses = useRef(new Map<string, string>());
+  const lastAppPath = useRef("/");
   const didHydrateJobStatuses = useRef(false);
   const metricsPollingId = useRef<number | null>(null);
   const didRecordPetDailyOpen = useRef(false);
@@ -58,6 +70,26 @@ function AppContent() {
   const CurrentView = router.route.component;
   const isStandaloneRoute = Boolean(router.route.standalone);
   const isSettingsRoute = router.path === "/settings";
+  const activeSettingsSection = useSyncExternalStore(
+    subscribeActiveSettingsSection,
+    getActiveSettingsSection,
+    getActiveSettingsSection,
+  );
+  const settingsNavigationGroups = getSettingsNavigationGroups(messages.settings);
+  const normalizedSettingsSearchQuery = settingsSearchQuery
+    .trim()
+    .toLocaleLowerCase(store.settings.locale);
+  const filteredSettingsNavigationGroups = settingsNavigationGroups
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => (
+        !normalizedSettingsSearchQuery
+        || `${item.label} ${item.description}`
+          .toLocaleLowerCase(store.settings.locale)
+          .includes(normalizedSettingsSearchQuery)
+      )),
+    }))
+    .filter((section) => section.items.length > 0);
   const navSections = useMemo(
     () => [
       {
@@ -67,7 +99,6 @@ function AppContent() {
           { label: messages.nav.dashboard, to: "/", icon: "dashboard" },
           { label: messages.nav.newJob, to: "/jobs/new", icon: "plus" },
           { label: messages.nav.jobs, to: "/jobs", icon: "tray" },
-          { label: messages.nav.results, to: "/results", icon: "results" },
         ] satisfies NavItem[],
       },
       {
@@ -156,6 +187,13 @@ function AppContent() {
   }, [isStandaloneRoute]);
 
   useEffect(() => {
+    if (!isSettingsRoute) {
+      lastAppPath.current = router.path;
+      setSettingsSearchQuery("");
+    }
+  }, [isSettingsRoute, router.path]);
+
+  useEffect(() => {
     void store.ensureSettingsLoaded().catch(() => undefined);
   }, []);
 
@@ -207,6 +245,7 @@ function AppContent() {
 
     store.setGlobalEffectsEnabled(true);
     let stopEntityChanges: (() => void) | null = null;
+    let stopJobWindowRequests: (() => void) | null = null;
     let stopForwardedStatus: (() => void) | null = null;
     void listenForEntityChanges((event) => {
       const revisionKey = `${event.entity}:${event.id}`;
@@ -224,6 +263,11 @@ function AppContent() {
       }
     }).then((unlisten) => {
       stopEntityChanges = unlisten;
+    });
+    void listenForJobWindowOpenRequests((request) => {
+      void fulfillJobWindowOpenRequest(request).catch(() => undefined);
+    }).then((unlisten) => {
+      stopJobWindowRequests = unlisten;
     });
     void listenForForwardedAppStatus((event) => {
       const key = `${event.source}:${event.notificationId}`;
@@ -262,6 +306,7 @@ function AppContent() {
     return () => {
       store.setGlobalEffectsEnabled(false);
       stopEntityChanges?.();
+      stopJobWindowRequests?.();
       stopForwardedStatus?.();
       window.removeEventListener("focus", syncToolbarMetricsPolling);
       window.removeEventListener("blur", syncToolbarMetricsPolling);
@@ -281,13 +326,15 @@ function AppContent() {
   }, [store.settings]);
 
   function isActive(itemTo: string) {
-    if (itemTo === "/results") {
-      return router.path === "/results" || router.path.endsWith("/workbench");
-    }
-
     if (itemTo === "/jobs") {
       return router.path === "/jobs"
-        || (router.path !== "/jobs/new" && /^\/jobs\/[^/]+$/.test(router.path));
+        || (router.path !== "/jobs/new" && /^\/jobs\/[^/]+(?:\/workbench)?$/.test(router.path));
+    }
+
+    if (itemTo === "/work-market") {
+      return router.path === "/work-market"
+        || router.path === "/farm"
+        || router.path.startsWith("/work-game/");
     }
 
     return router.path === itemTo;
@@ -515,6 +562,63 @@ function AppContent() {
       </div>
 
       <aside className="sidebar">
+        {isSettingsRoute ? (
+          <div className="nav-wrap settings-sidebar">
+            <header className="settings-sidebar-header">
+              <Link className="settings-sidebar-back" to={lastAppPath.current}>
+                <span
+                  className="nav-link-icon"
+                  aria-hidden="true"
+                  dangerouslySetInnerHTML={{ __html: navIconSvg.back }}
+                />
+                <span>{messages.settings.backToApp}</span>
+              </Link>
+              <div className="settings-sidebar-search">
+                <span
+                  className="settings-sidebar-search-icon"
+                  aria-hidden="true"
+                  dangerouslySetInnerHTML={{ __html: navIconSvg.search }}
+                />
+                <input
+                  type="search"
+                  value={settingsSearchQuery}
+                  placeholder={messages.settings.searchPlaceholder}
+                  aria-label={messages.settings.searchPlaceholder}
+                  onChange={(event) => setSettingsSearchQuery(event.target.value)}
+                />
+              </div>
+            </header>
+
+            <nav className="settings-sidebar-groups" aria-label={messages.settings.navigationLabel}>
+              {filteredSettingsNavigationGroups.map((section) => (
+                <section key={section.label} className="settings-sidebar-group">
+                  <p className="nav-section-title">{section.label}</p>
+                  {section.items.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`nav-link settings-sidebar-item${activeSettingsSection === item.id ? " active" : ""}`}
+                      type="button"
+                      aria-current={activeSettingsSection === item.id ? "page" : undefined}
+                      onClick={() => setActiveSettingsSection(item.id)}
+                    >
+                      <span
+                        className="nav-link-icon"
+                        aria-hidden="true"
+                        dangerouslySetInnerHTML={{ __html: navIconSvg[item.icon] }}
+                      />
+                      <span className="nav-link-label">{item.label}</span>
+                    </button>
+                  ))}
+                </section>
+              ))}
+              {filteredSettingsNavigationGroups.length === 0 && (
+                <p className="settings-sidebar-empty" role="status">
+                  {messages.settings.searchEmpty}
+                </p>
+              )}
+            </nav>
+          </div>
+        ) : (
         <div className="nav-wrap">
           <header className="nav-header">
             <div className="nav-brand">
@@ -559,6 +663,7 @@ function AppContent() {
             </div>
           </div>
         </div>
+        )}
       </aside>
 
       <main className="content">

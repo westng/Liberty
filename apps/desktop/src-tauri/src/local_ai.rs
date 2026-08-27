@@ -262,6 +262,7 @@ fn authorize_ai_summary_job(
     crate::window_scope::authorize_job_window(
         window,
         &[crate::window_scope::ai_summary_window()],
+        "local",
         job_id,
         scope_token,
     )

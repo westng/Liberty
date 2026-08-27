@@ -1,6 +1,7 @@
 use crate::process_utils::configure_background_process;
 use serde::Serialize;
 use std::{
+    collections::{HashMap, HashSet},
     process::Command,
     sync::{Mutex, OnceLock},
 };
@@ -22,7 +23,7 @@ pub struct ProcessMetrics {
 
 struct ProcessMetricsSampler {
     system: System,
-    pid: Pid,
+    root_pid: Pid,
 }
 
 static PROCESS_METRICS_SAMPLER: OnceLock<Mutex<ProcessMetricsSampler>> = OnceLock::new();
@@ -172,29 +173,66 @@ return text returned of dialogResult"#,
 #[tauri::command]
 pub fn get_process_metrics() -> LocalResult<ProcessMetrics> {
     let sampler = PROCESS_METRICS_SAMPLER.get_or_init(|| {
-        let pid = Pid::from_u32(std::process::id());
+        let root_pid = Pid::from_u32(std::process::id());
         let mut system = System::new_with_specifics(
             RefreshKind::new().with_processes(ProcessRefreshKind::new().with_cpu().with_memory()),
         );
-        system.refresh_process_specifics(pid, ProcessRefreshKind::new().with_cpu().with_memory());
-        Mutex::new(ProcessMetricsSampler { system, pid })
+        system.refresh_processes_specifics(ProcessRefreshKind::new().with_cpu().with_memory());
+        Mutex::new(ProcessMetricsSampler { system, root_pid })
     });
 
     let mut sampler = sampler.lock().map_err(|err| err.to_string())?;
-    let pid = sampler.pid;
     sampler
         .system
-        .refresh_process_specifics(pid, ProcessRefreshKind::new().with_cpu().with_memory());
-
-    let process = sampler
-        .system
-        .process(pid)
-        .ok_or_else(|| "无法读取当前进程指标。".to_string())?;
+        .refresh_processes_specifics(ProcessRefreshKind::new().with_cpu().with_memory());
+    let descendants = process_tree_members(&sampler.system, sampler.root_pid);
+    if !descendants.contains(&sampler.root_pid) {
+        return Err("无法读取当前进程指标。".to_string());
+    }
+    let (cpu_percent, memory_bytes) = descendants
+        .iter()
+        .filter_map(|pid| sampler.system.process(*pid))
+        .fold((0.0_f32, 0_u64), |(cpu, memory), process| {
+            (
+                cpu + process.cpu_usage(),
+                memory.saturating_add(process.memory()),
+            )
+        });
 
     Ok(ProcessMetrics {
-        cpu_percent: (process.cpu_usage() * 10.0).round() / 10.0,
-        memory_mb: ((process.memory() as f64) / (1024.0 * 1024.0)).round() as u64,
+        cpu_percent: (cpu_percent * 10.0).round() / 10.0,
+        memory_mb: ((memory_bytes as f64) / (1024.0 * 1024.0)).round() as u64,
     })
+}
+
+fn process_tree_members(system: &System, root_pid: Pid) -> HashSet<Pid> {
+    let parents = system
+        .processes()
+        .iter()
+        .map(|(pid, process)| (*pid, process.parent()))
+        .collect::<HashMap<_, _>>();
+    process_tree_members_from_parents(root_pid, &parents)
+}
+
+fn process_tree_members_from_parents(
+    root_pid: Pid,
+    parents: &HashMap<Pid, Option<Pid>>,
+) -> HashSet<Pid> {
+    if !parents.contains_key(&root_pid) {
+        return HashSet::new();
+    }
+    let mut members = HashSet::from([root_pid]);
+    loop {
+        let previous_len = members.len();
+        for (pid, parent) in parents {
+            if parent.is_some_and(|parent| members.contains(&parent)) {
+                members.insert(*pid);
+            }
+        }
+        if members.len() == previous_len {
+            return members;
+        }
+    }
 }
 
 fn normalize_dialog_text(value: &str) -> String {
@@ -213,7 +251,9 @@ fn escape_powershell_single_quoted(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_external_url;
+    use super::{process_tree_members_from_parents, validate_external_url};
+    use std::collections::{HashMap, HashSet};
+    use sysinfo::Pid;
 
     #[test]
     fn external_urls_are_limited_to_http_and_https() {
@@ -226,5 +266,33 @@ mod tests {
     fn external_urls_reject_shell_control_whitespace() {
         assert!(validate_external_url("https://example.com & calc.exe").is_err());
         assert!(validate_external_url("https://example.com\n--flag").is_err());
+    }
+
+    #[test]
+    fn process_tree_includes_all_descendant_generations() {
+        let root = Pid::from_u32(10);
+        let child = Pid::from_u32(11);
+        let grandchild = Pid::from_u32(12);
+        let unrelated = Pid::from_u32(20);
+        let parents = HashMap::from([
+            (root, None),
+            (child, Some(root)),
+            (grandchild, Some(child)),
+            (unrelated, None),
+        ]);
+
+        assert_eq!(
+            process_tree_members_from_parents(root, &parents),
+            HashSet::from([root, child, grandchild])
+        );
+    }
+
+    #[test]
+    fn process_tree_is_empty_when_root_is_missing() {
+        let root = Pid::from_u32(10);
+        let child = Pid::from_u32(11);
+        let parents = HashMap::from([(child, Some(root))]);
+
+        assert!(process_tree_members_from_parents(root, &parents).is_empty());
     }
 }

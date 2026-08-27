@@ -28,6 +28,7 @@ const COMMANDS: &[&str] = &[
     "delete_job",
     "get_job",
     "get_job_result",
+    "get_dashboard_overview",
     "list_jobs",
     "rename_job_speaker",
     "retry_job",

@@ -9,12 +9,14 @@ export function buildTextExportRequest(
   kind: TextExportKind,
   messages: MessageTree,
   filePath: string,
+  windowScopeToken?: string,
 ) {
   return {
     jobId: job.id,
     source: job.source,
     kind,
     filePath,
+    windowScopeToken,
     labels: {
       unknownSpeaker: messages.common.unknownSpeaker,
       transcriptHeading: messages.export.transcriptHeading,
@@ -45,16 +47,22 @@ export function exportJobText(
   kind: TextExportKind,
   messages: MessageTree,
   filePath: string,
+  windowScopeToken?: string,
 ) {
   return invoke<void>("export_job_text", {
-    input: buildTextExportRequest(job, kind, messages, filePath),
+    input: buildTextExportRequest(job, kind, messages, filePath, windowScopeToken),
   });
 }
 
-export function exportJobSummaryDocx(job: MeetingJob, filePath: string) {
+export function exportJobSummaryDocx(
+  job: MeetingJob,
+  filePath: string,
+  windowScopeToken?: string,
+) {
   return invoke<void>("export_job_summary_docx", {
     jobId: job.id,
     summaryRunId: job.activeSummaryRunId ?? null,
     filePath,
+    windowScopeToken,
   });
 }

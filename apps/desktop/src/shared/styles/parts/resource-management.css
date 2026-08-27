@@ -1,0 +1,354 @@
+.resource-management-page {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  width: 100%;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 12px 8px 32px;
+}
+
+.resource-management-header,
+.resource-management-actions,
+.resource-management-table-actions {
+  display: flex;
+  align-items: center;
+}
+
+.resource-management-header {
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.resource-management-header > div:first-child {
+  min-width: 0;
+}
+
+.resource-management-header h2,
+.resource-management-header p {
+  margin: 0;
+}
+
+.resource-management-header h2 {
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.resource-management-header p {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.resource-management-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.resource-management-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(28px, 5vw, 72px);
+  width: 100%;
+  padding-inline: 2px;
+}
+
+.resource-management-metric {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.resource-management-metric span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-management-metric strong {
+  overflow: hidden;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-management-divider.semi-divider {
+  margin: 8px 0;
+  border-bottom-color: var(--native-separator, var(--divider-soft));
+}
+
+.resource-management-workspace {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.resource-management-notice,
+.resource-management-error {
+  padding: 10px 12px;
+  border-radius: var(--native-radius-control, var(--radius-sm));
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.resource-management-notice {
+  background: var(--native-row-active, var(--accent-soft));
+  color: var(--text-muted);
+}
+
+.resource-management-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.resource-management-table {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--native-radius-panel, 10px);
+}
+
+.resource-management-table .semi-table {
+  table-layout: fixed;
+}
+
+.resource-management-table .semi-table-thead > .semi-table-row > .semi-table-row-head {
+  padding-block: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.resource-management-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  padding-block: 11px;
+}
+
+.resource-management-primary,
+.resource-management-text,
+.resource-management-time,
+.resource-management-table-actions {
+  min-width: 0;
+}
+
+.resource-management-primary.semi-space,
+.resource-management-table-actions.semi-space {
+  width: 100%;
+}
+
+.resource-management-primary-text.semi-typography,
+.resource-management-text.semi-typography {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.resource-management-primary-text.semi-typography {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.resource-management-text.semi-typography,
+.resource-management-time .semi-typography {
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.resource-management-avatar.semi-avatar {
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--native-row-active);
+  color: var(--native-nav-accent);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.resource-management-avatar--circle.semi-avatar {
+  border-radius: 50%;
+}
+
+.resource-management-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.resource-management-tag-row.semi-space {
+  max-width: 100%;
+}
+
+.resource-management-table .semi-table-thead > .semi-table-row >
+  .semi-table-row-head.semi-table-cell-fixed-right-first,
+.resource-management-table .semi-table-tbody > .semi-table-row >
+  .semi-table-row-cell.semi-table-cell-fixed-right-first {
+  border-left: 0;
+  box-shadow: none;
+}
+
+.resource-management-table-actions.semi-space {
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.resource-management-table-actions .semi-button {
+  flex: 0 0 auto;
+}
+
+.resource-management-empty.semi-empty {
+  min-height: 180px;
+  padding: 40px 16px;
+}
+
+.resource-management-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resource-management-card-item,
+.resource-management-model-card-item {
+  min-width: 0;
+}
+
+.resource-management-card.semi-card,
+.resource-management-model-card.semi-card {
+  display: flex;
+  min-width: 0;
+  min-height: 226px;
+  flex-direction: column;
+  border-radius: var(--native-radius-panel, 10px);
+  background: var(--native-subpanel-bg, var(--bg-card));
+  box-shadow: var(--native-shadow-panel);
+  height: 100%;
+}
+
+.resource-management-card .semi-card-header,
+.resource-management-model-card .semi-card-header {
+  padding: 18px 18px 0;
+}
+
+.resource-management-card .semi-card-body,
+.resource-management-model-card .semi-card-body {
+  display: flex;
+  padding: 18px;
+  flex: 1 1 auto;
+}
+
+.resource-management-card .semi-card-footer,
+.resource-management-model-card .semi-card-footer {
+  padding: 0 14px 14px;
+}
+
+.resource-management-card-header {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.resource-management-card-title.semi-typography {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  font-size: 17px;
+  line-height: 24px;
+}
+
+.resource-management-model-avatar.semi-avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.resource-management-card-details {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  width: 100%;
+  margin: 0;
+}
+
+.resource-management-card-details > div {
+  display: grid;
+  grid-template-columns: minmax(76px, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 16px;
+}
+
+.resource-management-card-details dt,
+.resource-management-card-details dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.resource-management-card-details dt {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.resource-management-card-details dd,
+.resource-management-card-details dd .semi-typography,
+.resource-management-card-details dd time {
+  display: block;
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 14px;
+  line-height: 21px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-management-card-details > .resource-management-template-description-row {
+  align-items: start;
+}
+
+.resource-management-card-details dd .resource-management-template-description.semi-typography {
+  display: -webkit-box;
+  min-height: 42px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+}
+
+.resource-management-card-actions.semi-space {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.resource-management-card.semi-card:hover,
+.resource-management-model-card.semi-card:hover {
+  background: color-mix(in srgb, var(--native-subpanel-bg, var(--bg-card)) 94%, var(--accent) 6%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .resource-management-card.semi-card,
+  .resource-management-model-card.semi-card {
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+  }
+}
+
+@media (max-width: 720px) {
+  .resource-management-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .resource-management-actions {
+    justify-content: flex-start;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .resource-management-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 20px;
+  }
+}

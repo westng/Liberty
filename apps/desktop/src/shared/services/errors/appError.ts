@@ -79,6 +79,8 @@ export function localizeAppError(error: unknown): string {
         return messages.notFound;
       case "conflict":
         return messages.conflict;
+      case "job_window_scope_invalid":
+        return messages.jobWindowScopeInvalid;
       case "infrastructure_error":
         return messages.infrastructureError;
       default:

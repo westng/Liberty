@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use std::collections::{HashMap, HashSet};
-use tauri::{AppHandle, Webview};
+use tauri::{AppHandle, WebviewWindow};
 
 use model::{ExportDocData, SpeechBlock};
 use output::authorized_output_path;
@@ -32,21 +32,29 @@ use text::TextExportInput;
 #[tauri::command]
 pub fn export_job_text(
     app: AppHandle,
-    webview: Webview,
+    window: WebviewWindow,
     input: TextExportInput,
 ) -> LocalResult<()> {
-    text::export_job_text(app, webview, input)
+    text::export_job_text(app, window, input)
 }
 
 #[tauri::command]
 pub fn export_job_summary_docx(
     app: AppHandle,
-    webview: Webview,
+    window: WebviewWindow,
     job_id: String,
     summary_run_id: Option<String>,
     file_path: String,
+    window_scope_token: Option<String>,
 ) -> LocalResult<()> {
-    let output_path = authorized_output_path(&webview, &file_path)?;
+    crate::window_scope::authorize_job_window(
+        &window,
+        &[crate::window_scope::job_workbench_window()],
+        "local",
+        &job_id,
+        window_scope_token.as_deref(),
+    )?;
+    let output_path = authorized_output_path(window.as_ref(), &file_path)?;
 
     let members = local_db::list_meeting_members(&app)?;
     let mut job = local_db::get_job(&app, &job_id)?;

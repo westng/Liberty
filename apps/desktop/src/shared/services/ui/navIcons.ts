@@ -5,7 +5,6 @@ const iconNames = {
   dashboard: "house",
   plus: "plus-circle",
   tray: "tray",
-  results: "doc-chart",
   market: "rectangle-grid-2x2",
   chip: "cube-box",
   doc: "doc-text",
@@ -18,6 +17,12 @@ const iconNames = {
   gear: "gear",
   mode: "speedometer",
   processing: "timer",
+  search: "search",
+  appearance: "paintbrush",
+  accent: "slider-horizontal-3",
+  remote: "cloud",
+  diagnostics: "checkmark-shield",
+  back: "chevron-left",
 } as const;
 
 export type NavIconKey = keyof typeof iconNames;

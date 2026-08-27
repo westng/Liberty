@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 
 const tauriHost = process.env.TAURI_DEV_HOST;
 const devHost = tauriHost || "127.0.0.1";
+const devPort = 1420;
 
 export default defineConfig({
   clearScreen: false,
@@ -19,13 +20,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: devPort,
     strictPort: true,
     host: tauriHost || "127.0.0.1",
     hmr: {
       protocol: "ws",
       host: devHost,
-      port: 5173,
+      port: devPort,
     },
     watch: {
       ignored: [

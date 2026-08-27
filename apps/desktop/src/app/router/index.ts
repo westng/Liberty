@@ -37,15 +37,21 @@ export const routes: RouteConfig[] = [
   },
   {
     path: "/jobs/:id/workbench",
+    title: "任务队列",
+    titleKey: "jobs",
+    component: lazy(() => import("@/features/jobs/views/ResultsRedirectView")),
+  },
+  {
+    path: "/job-workbench",
     title: "结果工作台",
-    titleKey: "workbench",
+    standalone: true,
     component: lazy(() => import("@/features/jobs/views/WorkbenchView")),
   },
   {
     path: "/results",
-    title: "结果中心",
-    titleKey: "results",
-    component: lazy(() => import("@/features/jobs/views/ResultsCenterView")),
+    title: "任务队列",
+    titleKey: "jobs",
+    component: lazy(() => import("@/features/jobs/views/ResultsRedirectView")),
   },
   {
     path: "/work-market",

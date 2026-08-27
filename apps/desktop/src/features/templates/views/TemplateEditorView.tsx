@@ -3,9 +3,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import { Button, Switch, TextInput } from "@/shared/components/ui";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { publishEntityChanged } from "@/shared/services/ui/windows";
-import { destroyCurrentWindow, setCurrentWindowTitle } from "@/shared/services/tauri/window";
+import { handleEditorWindowCloseRequested, setCurrentWindowTitle } from "@/shared/services/tauri/window";
 import type { AiSummaryTemplate } from "@/shared/types/meeting";
 
 export default function TemplateEditorView() {
@@ -29,15 +30,14 @@ export default function TemplateEditorView() {
     let active = true;
     let unlisten: (() => void) | null = null;
     void getCurrentWindow().onCloseRequested(async (event) => {
-      if (!dirty) return;
-      event.preventDefault();
-      const shouldClose = await confirm(messages.reset, {
-        title: commonMessages.closeWindow,
-        kind: "warning",
-        okLabel: commonMessages.closeWindow,
-        cancelLabel: commonMessages.cancel,
-      });
-      if (shouldClose) await destroyCurrentWindow();
+      await handleEditorWindowCloseRequested(event, dirty, () =>
+        confirm(messages.reset, {
+          title: commonMessages.closeWindow,
+          kind: "warning",
+          okLabel: commonMessages.closeWindow,
+          cancelLabel: commonMessages.cancel,
+        }),
+      );
     }).then((stop) => {
       if (active) unlisten = stop;
       else stop();
@@ -189,44 +189,25 @@ export default function TemplateEditorView() {
 
   return (
     <section className="editor-window-shell native-editor-window">
-      <article className="surface editor-window-card native-editor-card">
-        <div className="section-heading">
-          <h3>{selectedId ? messages.editorEditTitle : messages.editorNewTitle}</h3>
-          {selectedTemplate && (
-            <button className="secondary-button" type="button" onClick={duplicateTemplate}>
-              {messages.duplicate}
-            </button>
-          )}
-        </div>
-
-        <div className="native-editor-layout">
-          <aside className="native-editor-aside">
-            <strong>{messages.title}</strong>
-            <p>{messages.copy}</p>
-            <span>{draft.builtin ? messages.builtin : messages.custom}</span>
-          </aside>
-
+      <article
+        className="editor-window-card native-editor-card"
+        aria-label={selectedId ? messages.editorEditTitle : messages.editorNewTitle}
+      >
+        <div className="native-editor-body">
+          {errorMessage && <div className="note-block error-block" role="alert">{errorMessage}</div>}
           <div className="field-grid native-editor-form">
-            <div className="field-grid two-col">
-              <div className="field">
-                <label htmlFor="template-name">{messages.name}</label>
-                <input id="template-name" value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} readOnly={draft.builtin} />
-              </div>
-              <div className="field">
-                <label htmlFor="template-description">{messages.description}</label>
-                <input id="template-description" value={draft.description} onChange={(event) => patchDraft({ description: event.target.value })} readOnly={draft.builtin} />
-              </div>
+            <div className="field">
+              <label htmlFor="template-name">{messages.name}</label>
+              <TextInput id="template-name" value={draft.name} onChange={(value) => patchDraft({ name: value })} readOnly={draft.builtin} />
+            </div>
+            <div className="field">
+              <label htmlFor="template-description">{messages.description}</label>
+              <TextInput id="template-description" value={draft.description} onChange={(value) => patchDraft({ description: value })} readOnly={draft.builtin} />
             </div>
 
-            <div className="field-grid two-col">
-              <label className="toggle-field">
-                <input checked={draft.includeSpeakerByDefault} onChange={(event) => patchDraft({ includeSpeakerByDefault: event.target.checked })} type="checkbox" disabled={draft.builtin} />
-                <span>{messages.includeSpeakerDefault}</span>
-              </label>
-              <label className="toggle-field">
-                <input checked={draft.includeTimestampByDefault} onChange={(event) => patchDraft({ includeTimestampByDefault: event.target.checked })} type="checkbox" disabled={draft.builtin} />
-                <span>{messages.includeTimestampDefault}</span>
-              </label>
+            <div className="native-editor-switches">
+              <Switch checked={draft.includeSpeakerByDefault} disabled={draft.builtin} id="template-include-speaker" label={messages.includeSpeakerDefault} onChange={(checked) => patchDraft({ includeSpeakerByDefault: checked })} wrapperClassName="native-editor-switch" />
+              <Switch checked={draft.includeTimestampByDefault} disabled={draft.builtin} id="template-include-timestamp" label={messages.includeTimestampDefault} onChange={(checked) => patchDraft({ includeTimestampByDefault: checked })} wrapperClassName="native-editor-switch" />
             </div>
 
             <div className="field">
@@ -236,21 +217,28 @@ export default function TemplateEditorView() {
           </div>
         </div>
 
-        {errorMessage && <div className="note-block error-block">{errorMessage}</div>}
-
-        <div className="button-row">
-          <button className="primary-button" type="button" disabled={draft.builtin} onClick={save}>
-            {messages.save}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => void resetDraft()}>
-            {messages.reset}
-          </button>
-          {selectedTemplate && !selectedTemplate.builtin && (
-            <button className="text-button danger-text" type="button" onClick={removeTemplate}>
-              {commonMessages.delete}
-            </button>
-          )}
-        </div>
+        <footer className="native-editor-actions">
+          <div className="native-editor-leading-actions">
+            {selectedTemplate && (
+              <Button type="button" variant="secondary" onClick={duplicateTemplate}>
+                {messages.duplicate}
+              </Button>
+            )}
+            {selectedTemplate && !selectedTemplate.builtin && (
+              <Button type="button" variant="danger" onClick={removeTemplate}>
+                {commonMessages.delete}
+              </Button>
+            )}
+          </div>
+          <div className="native-editor-primary-actions">
+            <Button type="button" variant="secondary" onClick={() => void resetDraft()}>
+              {messages.reset}
+            </Button>
+            <Button type="button" variant="primary" disabled={draft.builtin} onClick={save}>
+              {messages.save}
+            </Button>
+          </div>
+        </footer>
       </article>
     </section>
   );

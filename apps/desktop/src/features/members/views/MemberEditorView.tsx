@@ -2,10 +2,11 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import { Button, Switch, TextInput } from "@/shared/components/ui";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { createLocalMembersService } from "@/shared/services/tauri/members";
 import { publishEntityChanged } from "@/shared/services/ui/windows";
-import { destroyCurrentWindow, setCurrentWindowTitle } from "@/shared/services/tauri/window";
+import { handleEditorWindowCloseRequested, setCurrentWindowTitle } from "@/shared/services/tauri/window";
 import type { MeetingMember } from "@/shared/types/meeting";
 
 const membersService = createLocalMembersService();
@@ -41,15 +42,14 @@ export default function MemberEditorView() {
     let active = true;
     let unlisten: (() => void) | null = null;
     void getCurrentWindow().onCloseRequested(async (event) => {
-      if (!dirty) return;
-      event.preventDefault();
-      const shouldClose = await confirm(messages.reset, {
-        title: commonMessages.closeWindow,
-        kind: "warning",
-        okLabel: commonMessages.closeWindow,
-        cancelLabel: commonMessages.cancel,
-      });
-      if (shouldClose) await destroyCurrentWindow();
+      await handleEditorWindowCloseRequested(event, dirty, () =>
+        confirm(messages.reset, {
+          title: commonMessages.closeWindow,
+          kind: "warning",
+          okLabel: commonMessages.closeWindow,
+          cancelLabel: commonMessages.cancel,
+        }),
+      );
     }).then((stop) => {
       if (active) unlisten = stop;
       else stop();
@@ -176,55 +176,48 @@ export default function MemberEditorView() {
 
   return (
     <section className="editor-window-shell native-editor-window">
-      <article className="surface editor-window-card native-editor-card">
-        <div className="section-heading">
-          <h3>{selectedId ? messages.editorEditTitle : messages.editorNewTitle}</h3>
-        </div>
-
-        <div className="native-editor-layout">
-          <aside className="native-editor-aside">
-            <strong>{messages.title}</strong>
-            <p>{messages.copy}</p>
-            <span>{selectedId ? messages.editorEditTitle : messages.editorNewTitle}</span>
-          </aside>
-
+      <article
+        className="editor-window-card native-editor-card"
+        aria-label={selectedId ? messages.editorEditTitle : messages.editorNewTitle}
+      >
+        <div className="native-editor-body">
+          {errorMessage && <div className="note-block error-block" role="alert">{errorMessage}</div>}
           <div className="field-grid native-editor-form">
             <div className="field">
               <label htmlFor="member-name">{messages.name}</label>
-              <input id="member-name" value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} placeholder={messages.namePlaceholder} />
+              <TextInput id="member-name" value={draft.name} onChange={(value) => patchDraft({ name: value })} placeholder={messages.namePlaceholder} />
             </div>
             <div className="field">
               <label htmlFor="member-department">{messages.department}</label>
-              <input id="member-department" value={draft.department} onChange={(event) => patchDraft({ department: event.target.value })} placeholder={messages.departmentPlaceholder} />
+              <TextInput id="member-department" value={draft.department} onChange={(value) => patchDraft({ department: value })} placeholder={messages.departmentPlaceholder} />
             </div>
             <div className="field">
               <label htmlFor="member-sort-order">{messages.sortOrder}</label>
-              <input id="member-sort-order" value={draft.sortOrder} onChange={(event) => patchDraft({ sortOrder: Number(event.target.value) })} type="number" step="1" placeholder={messages.sortOrderPlaceholder} />
+              <TextInput id="member-sort-order" value={draft.sortOrder} onChange={(value) => patchDraft({ sortOrder: Number(value) })} type="number" step="1" placeholder={messages.sortOrderPlaceholder} />
             </div>
-            <div className="field-grid two-col">
-              <label className="toggle-field">
-                <input checked={draft.isRecorder} onChange={(event) => patchDraft({ isRecorder: event.target.checked })} type="checkbox" />
-                <span>{messages.recorderSwitch}</span>
-              </label>
+            <div className="native-editor-switches">
+              <Switch checked={draft.isRecorder} id="member-recorder" label={messages.recorderSwitch} onChange={(checked) => patchDraft({ isRecorder: checked })} wrapperClassName="native-editor-switch" />
             </div>
           </div>
         </div>
 
-        {errorMessage && <div className="note-block error-block">{errorMessage}</div>}
-
-        <div className="button-row">
-          <button className="primary-button" type="button" onClick={saveMember}>
-            {messages.save}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => void resetDraft()}>
-            {messages.reset}
-          </button>
-          {selectedId && (
-            <button className="text-button danger-text" type="button" onClick={removeMember}>
-              {commonMessages.delete}
-            </button>
-          )}
-        </div>
+        <footer className="native-editor-actions">
+          <div className="native-editor-leading-actions">
+            {selectedId && (
+              <Button type="button" variant="danger" onClick={removeMember}>
+                {commonMessages.delete}
+              </Button>
+            )}
+          </div>
+          <div className="native-editor-primary-actions">
+            <Button type="button" variant="secondary" onClick={() => void resetDraft()}>
+              {messages.reset}
+            </Button>
+            <Button type="button" variant="primary" onClick={saveMember}>
+              {messages.save}
+            </Button>
+          </div>
+        </footer>
       </article>
     </section>
   );

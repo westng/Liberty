@@ -1,6 +1,15 @@
 import { confirm, message, open, save } from "@tauri-apps/plugin-dialog";
+import SemiAvatar from "@douyinfe/semi-ui/lib/es/avatar";
+import SemiDivider from "@douyinfe/semi-ui/lib/es/divider";
+import SemiEmpty from "@douyinfe/semi-ui/lib/es/empty";
+import SemiSpace from "@douyinfe/semi-ui/lib/es/space";
+import SemiTable from "@douyinfe/semi-ui/lib/es/table";
+import type { ColumnProps } from "@douyinfe/semi-ui/lib/es/table";
+import SemiTag from "@douyinfe/semi-ui/lib/es/tag";
+import SemiTypography from "@douyinfe/semi-ui/lib/es/typography";
 import { useEffect, useMemo, useState } from "react";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import { Button } from "@/shared/components/ui";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { createLocalMembersService } from "@/shared/services/tauri/members";
 import { openMemberEditorWindow } from "@/shared/services/ui/windows";
@@ -30,7 +39,7 @@ export default function MemberManagementView() {
   );
   const recorderMember = members.find((item) => item.isRecorder) ?? null;
   const departmentCount = new Set(members.map((item) => item.department.trim()).filter(Boolean)).size;
-  const latestMember = sortedMembers[0] ?? null;
+  const latestMember = [...members].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
 
   useEffect(() => {
     void loadMembers();
@@ -116,106 +125,173 @@ export default function MemberManagementView() {
     }
   }
 
+  function formatUpdatedAt(value: string) {
+    return new Date(value).toLocaleString(meetingStore.settings.locale, {
+      year: "2-digit",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const columns: ColumnProps<MeetingMember>[] = [
+    {
+      title: messages.name,
+      dataIndex: "name",
+      width: 260,
+      render: (_value, member) => (
+        <SemiSpace align="center" className="resource-management-primary" spacing={12}>
+          <SemiAvatar
+            className="resource-management-avatar resource-management-avatar--circle"
+            color="blue"
+            shape="circle"
+            size="36px"
+          >
+            {member.name.trim().slice(0, 1).toLocaleUpperCase(meetingStore.settings.locale) || "?"}
+          </SemiAvatar>
+          <SemiTypography.Text
+            className="resource-management-primary-text"
+            ellipsis={{ showTooltip: true }}
+            strong
+          >
+            {member.name}
+          </SemiTypography.Text>
+        </SemiSpace>
+      ),
+    },
+    {
+      title: messages.department,
+      dataIndex: "department",
+      width: 240,
+      render: (_value, member) => (
+        <SemiTypography.Text className="resource-management-text" ellipsis={{ showTooltip: true }}>
+          {member.department || messages.emptyDepartment}
+        </SemiTypography.Text>
+      ),
+    },
+    {
+      title: messages.sortOrder,
+      dataIndex: "sortOrder",
+      width: 110,
+      render: (_value, member) => (
+        <SemiTypography.Text className="resource-management-text" type="secondary">
+          {member.sortOrder}
+        </SemiTypography.Text>
+      ),
+    },
+    {
+      title: messages.role,
+      width: 150,
+      render: (_value, member) => (
+        <SemiTag color={member.isRecorder ? "blue" : "grey"} shape="circle" type="light">
+          {member.isRecorder ? messages.recorderTag : messages.normalTag}
+        </SemiTag>
+      ),
+    },
+    {
+      title: messages.updatedAt,
+      dataIndex: "updatedAt",
+      width: 170,
+      render: (_value, member) => (
+        <time className="resource-management-time" dateTime={member.updatedAt}>
+          <SemiTypography.Text type="secondary">{formatUpdatedAt(member.updatedAt)}</SemiTypography.Text>
+        </time>
+      ),
+    },
+    {
+      title: messages.actions,
+      align: "right",
+      fixed: "right",
+      width: 160,
+      render: (_value, member) => (
+        <SemiSpace align="center" className="resource-management-table-actions" spacing={4}>
+          <Button
+            onClick={(event) => {
+              event.stopPropagation();
+              void openMemberEditorWindow(member.id);
+            }}
+            size="small"
+            variant="text"
+          >
+            {commonMessages.edit}
+          </Button>
+          <Button
+            onClick={(event) => {
+              event.stopPropagation();
+              void removeMember(member);
+            }}
+            size="small"
+            variant="danger"
+          >
+            {commonMessages.delete}
+          </Button>
+        </SemiSpace>
+      ),
+    },
+  ];
+
   return (
-    <section className="view-stack native-page native-split-page resource-native-page model-page-stack">
-      <article className="surface native-page-hero resource-native-hero">
-        <div className="section-heading">
-          <div>
-            <h3>{messages.title}</h3>
-            <p className="section-copy">{messages.copy}</p>
-          </div>
-          <div className="button-row">
-            <button className="secondary-button" type="button" onClick={importMembers}>
-              {commonMessages.import}
-            </button>
-            <button className="secondary-button" type="button" onClick={exportMembers}>
-              {commonMessages.export}
-            </button>
-            <button className="primary-button" type="button" onClick={() => openMemberEditorWindow()}>
-              {messages.add}
-            </button>
-          </div>
+    <section className="native-page resource-management-page">
+      <header className="resource-management-header">
+        <div>
+          <h2>{messages.title}</h2>
+          <p>{messages.copy}</p>
         </div>
-        <div className="summary-inline">
-          <span>{messages.total} {members.length}</span>
-          <span>{messages.recorder} {recorderMember?.name ?? commonMessages.notSet}</span>
+        <div className="resource-management-actions">
+          <Button onClick={() => void importMembers()} variant="secondary">{commonMessages.import}</Button>
+          <Button onClick={() => void exportMembers()} variant="secondary">{commonMessages.export}</Button>
+          <Button onClick={() => void openMemberEditorWindow()} variant="primary">{messages.add}</Button>
         </div>
-        <p className="section-copy">{messages.importHint}</p>
-        {errorMessage && <div className="note-block error-block">{errorMessage}</div>}
-      </article>
+      </header>
 
-      <div className="native-split-layout">
-        <article className="surface native-list-panel model-list-card">
-          <div className="section-heading model-management-header">
-            <h3>{messages.listTitle}</h3>
-          </div>
-          {sortedMembers.length ? (
-            <div className="model-list-rows">
-              {sortedMembers.map((member) => (
-                <article key={member.id} className="model-list-row" onClick={() => openMemberEditorWindow(member.id)}>
-                  <div className="model-row-main member-row-main">
-                    <strong>{member.name}</strong>
-                    <span>{member.department || messages.emptyDepartment}</span>
-                  </div>
-                  <div className="model-row-side">
-                    <span className="record-meta">#{member.sortOrder}</span>
-                    <span className={`record-tag ${member.isRecorder ? "active" : ""}`}>
-                      {member.isRecorder ? messages.recorderTag : messages.normalTag}
-                    </span>
-                    <button
-                      className="text-button"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void openMemberEditorWindow(member.id);
-                      }}
-                    >
-                      {commonMessages.edit}
-                    </button>
-                    <button
-                      className="text-button danger-text"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void removeMember(member);
-                      }}
-                    >
-                      {commonMessages.delete}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">{loading ? commonMessages.noData : messages.empty}</div>
+      <section className="resource-management-metrics" aria-label={messages.listTitle}>
+        <ManagementMetric label={messages.total} value={members.length} />
+        <ManagementMetric label={messages.departmentCount} value={departmentCount} />
+        <ManagementMetric label={messages.recorder} value={recorderMember?.name ?? commonMessages.notSet} />
+        <ManagementMetric label={messages.latest} value={latestMember?.name ?? commonMessages.noData} />
+      </section>
+
+      <SemiDivider className="resource-management-divider" />
+
+      <section className="resource-management-workspace">
+        <div className="resource-management-notice">{messages.importHint}</div>
+        {errorMessage && <div className="resource-management-error" role="alert">{errorMessage}</div>}
+        <SemiTable<MeetingMember>
+          aria-busy={loading}
+          aria-label={messages.listTitle}
+          className="resource-management-table"
+          columns={columns}
+          dataSource={sortedMembers}
+          empty={(
+            <SemiEmpty
+              className="resource-management-empty"
+              description={loading ? messages.loading : messages.copy}
+              title={loading ? messages.loading : messages.empty}
+            />
           )}
-        </article>
-
-        <aside className="surface native-inspector-panel">
-          <div className="section-heading">
-            <h3>{messages.recorder}</h3>
-          </div>
-          <div className="native-stat-list">
-            <div>
-              <span>{messages.total}</span>
-              <strong>{members.length}</strong>
-            </div>
-            <div>
-              <span>{messages.department}</span>
-              <strong>{departmentCount}</strong>
-            </div>
-            <div>
-              <span>{messages.recorder}</span>
-              <strong>{recorderMember?.name ?? commonMessages.dash}</strong>
-            </div>
-          </div>
-          <div className="native-inspector-note">
-            <span>{messages.listTitle}</span>
-            <strong>{latestMember?.name ?? commonMessages.noData}</strong>
-            <p>{latestMember?.department || messages.emptyDepartment}</p>
-          </div>
-        </aside>
-      </div>
+          loading={loading}
+          onRow={(member) => ({
+            onDoubleClick: () => {
+              if (member) {
+                void openMemberEditorWindow(member.id);
+              }
+            },
+          })}
+          pagination={false}
+          rowKey={(member) => member ? member.id : ""}
+          scroll={{ x: 1090 }}
+        />
+      </section>
     </section>
+  );
+}
+
+function ManagementMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="resource-management-metric">
+      <span>{label}</span>
+      <strong title={String(value)}>{value}</strong>
+    </div>
   );
 }

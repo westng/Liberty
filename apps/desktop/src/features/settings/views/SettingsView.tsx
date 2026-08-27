@@ -1,8 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { confirm, message, save as saveFile } from "@tauri-apps/plugin-dialog";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { accentColors, useSettingsForm } from "@/features/settings/application/useSettingsForm";
+import {
+  getActiveSettingsSection,
+  getSettingsNavigationGroups,
+  subscribeActiveSettingsSection,
+} from "@/features/settings/application/settingsNavigation";
 import {
   useRuntimePanel,
   type RuntimeResourceId,
@@ -19,6 +24,11 @@ export default function SettingsView() {
   const store = useMeetingStore();
   const messages = getMessages(store.settings.locale).settings;
   const shellMessages = getMessages(store.settings.locale).shell;
+  const activeSection = useSyncExternalStore(
+    subscribeActiveSettingsSection,
+    getActiveSettingsSection,
+    getActiveSettingsSection,
+  );
   const {
     form,
     patchForm,
@@ -61,6 +71,9 @@ export default function SettingsView() {
       : store.remoteStatus === "unavailable"
         ? messages.remoteStatusUnavailable
         : messages.remoteStatusIdle;
+  const activeNavigationItem = getSettingsNavigationGroups(messages)
+    .flatMap((group) => group.items)
+    .find((item) => item.id === activeSection);
 
   useEffect(() => {
     void refreshRuntimePanel();
@@ -161,7 +174,14 @@ export default function SettingsView() {
 
   return (
     <section className="settings-page">
-      <div className="settings-group">
+        <div className="settings-detail" aria-labelledby="settings-detail-title">
+          <header className="settings-detail-header">
+            <h2 id="settings-detail-title">{activeNavigationItem?.label}</h2>
+          </header>
+
+          <div className="settings-detail-content">
+      {activeSection === "appearance" && (
+        <div className="settings-group">
         <h3 className="settings-group-title">{messages.appearance}</h3>
         <article className="surface settings-block">
           <div className="setting-row">
@@ -223,9 +243,11 @@ export default function SettingsView() {
           </div>
 
         </article>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-group settings-group-accent">
+      {activeSection === "theme" && (
+        <div className="settings-group settings-group-accent">
         <h3 className="settings-group-title">{messages.themeSection}</h3>
         <article className="surface settings-block">
           <div className="setting-row setting-row-color">
@@ -252,9 +274,11 @@ export default function SettingsView() {
             </div>
           </div>
         </article>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-group">
+      {activeSection === "runtime-overview" && (
+        <div className="settings-group">
         <h3 className="settings-group-title">{messages.runtimeOverview}</h3>
         <article className="surface settings-block">
           <div className="setting-row">
@@ -262,7 +286,11 @@ export default function SettingsView() {
               <span className="settings-label">{messages.runtimeMode}</span>
               <p className="settings-hint">{messages.runtimeModeHint}</p>
             </div>
-            <div className="setting-control">
+            <div className="setting-control setting-control-copy-first">
+              <div className="summary-inline">
+                <span>{runtimeModeLabel}</span>
+                <span>{runtimeStatus.shellReady ? messages.localDatabaseReady : messages.waitingLocalConfig}</span>
+              </div>
               <select
                 value={form.processingMode}
                 onChange={(event) => {
@@ -274,17 +302,15 @@ export default function SettingsView() {
                 <option value="local">{shellMessages.localMode}</option>
                 <option value="remote">{shellMessages.remoteMode}</option>
               </select>
-              <div className="summary-inline">
-                <span>{runtimeModeLabel}</span>
-                <span>{runtimeStatus.shellReady ? messages.localDatabaseReady : messages.waitingLocalConfig}</span>
-              </div>
             </div>
           </div>
         </article>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-group">
-        <h3 className="settings-group-title">工程诊断</h3>
+      {activeSection === "diagnostics" && (
+        <div className="settings-group">
+        <h3 className="settings-group-title">{messages.diagnostics}</h3>
         <article className="surface settings-block diagnostics-card">
           <div className="setting-row diagnostics-row">
             <div className="settings-meta">
@@ -310,7 +336,7 @@ export default function SettingsView() {
           </div>
 
           {diagnosticsRows.map(([label, value]) => (
-            <div key={label} className="setting-row diagnostics-row">
+            <div key={label} className="setting-row diagnostics-row diagnostics-row-single-line">
               <div className="settings-meta">
                 <span className="settings-label">{label}</span>
               </div>
@@ -321,7 +347,7 @@ export default function SettingsView() {
           ))}
 
           {supportedPlatformTags.length > 0 && (
-            <div className="setting-row diagnostics-row">
+            <div className="setting-row diagnostics-row diagnostics-row-single-line">
               <div className="settings-meta">
                 <span className="settings-label">发布平台矩阵</span>
               </div>
@@ -336,7 +362,7 @@ export default function SettingsView() {
           )}
 
           {diagnostics && (
-            <div className="setting-row diagnostics-row">
+            <div className="setting-row diagnostics-row diagnostics-row-single-line">
               <div className="settings-meta">
                 <span className="settings-label">桌宠拖拽诊断日志</span>
               </div>
@@ -355,9 +381,11 @@ export default function SettingsView() {
 
           {diagnosticsError && <p className="settings-error">{diagnosticsError}</p>}
         </article>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-group">
+      {activeSection === "local-runtime" && (
+        <div className="settings-group">
         <h3 className="settings-group-title">{messages.localRuntime}</h3>
         <article className="surface settings-block runtime-settings-block">
           <div className="setting-row runtime-setting-row">
@@ -470,9 +498,11 @@ export default function SettingsView() {
             </div>
           </div>
         </article>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-group">
+      {activeSection === "processing-defaults" && (
+        <div className="settings-group">
         <h3 className="settings-group-title">{messages.processingDefaults}</h3>
         <article className="surface settings-block">
           <div className="setting-row">
@@ -544,9 +574,11 @@ export default function SettingsView() {
             </div>
           </div>
         </article>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-group">
+      {activeSection === "remote-compatibility" && (
+        <div className="settings-group">
         <h3 className="settings-group-title">{messages.remoteCompatibility}</h3>
         <article className="surface settings-block">
           <div className="setting-row">
@@ -564,8 +596,11 @@ export default function SettingsView() {
               <span className="settings-label">{messages.apiToken}</span>
               <p className="settings-hint">{messages.apiTokenHint}</p>
             </div>
-            <div className="setting-control">
-              <div className="setting-control-inline">
+            <div className="setting-control setting-control-copy-first remote-token-control">
+              <p className="settings-hint remote-token-status">
+                {store.settings.apiTokenConfigured ? messages.apiTokenConfigured : messages.apiTokenNotConfigured}
+              </p>
+              <div className="setting-control-inline remote-token-input-group">
                 <input
                   id="api-token"
                   value={form.apiToken}
@@ -581,9 +616,6 @@ export default function SettingsView() {
                   </button>
                 )}
               </div>
-              <p className="settings-hint">
-                {store.settings.apiTokenConfigured ? messages.apiTokenConfigured : messages.apiTokenNotConfigured}
-              </p>
             </div>
           </div>
 
@@ -596,7 +628,7 @@ export default function SettingsView() {
                   : store.remoteError || messages.backendUrlHint}
               </p>
             </div>
-            <div className="setting-control setting-control-inline">
+            <div className="setting-control setting-control-inline setting-control-copy-first remote-check-control">
               <span className={`diagnostics-state diagnostics-state-${store.remoteStatus === "ready" ? "ready" : store.remoteStatus === "unavailable" ? "error" : "pending"}`}>
                 {remoteStatusLabel}
               </span>
@@ -611,7 +643,8 @@ export default function SettingsView() {
             </div>
           </div>
         </article>
-      </div>
+        </div>
+      )}
 
       {saveError && <p className="settings-error">{saveError}</p>}
 
@@ -622,6 +655,8 @@ export default function SettingsView() {
           <a href="https://github.com/westng/Liberty" target="_blank" rel="noreferrer">github.com/westng/Liberty</a>
         </p>
       </footer>
+          </div>
+        </div>
     </section>
   );
 }

@@ -4,11 +4,11 @@ import { Link, useRouter } from "@/app/router/RouterContext";
 import StatusBadge from "@/shared/components/StatusBadge";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { getMessages } from "@/shared/i18n";
+import { openJobWorkbenchWindow } from "@/shared/services/ui/windows";
 import progressBarUrl from "@/assets/progress-bar.webp";
 import type { DiarizationStatus, JobStage } from "@/shared/types/meeting";
 import {
   jobRef,
-  jobWorkbenchPath,
   useBoundJobRouteRef,
 } from "./jobRoutes";
 
@@ -272,9 +272,13 @@ export default function JobDetailView() {
               <div className="button-row">
                 {job.overallStatus === "completed" && (
                   canOpenWorkbench ? (
-                    <Link className="primary-button" to={jobWorkbenchPath(jobRef(job))}>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void openJobWorkbenchWindow(job.id, job.title, job.source)}
+                    >
                       {messages.viewWorkbench}
-                    </Link>
+                    </button>
                   ) : (
                     <button className="primary-button" type="button" disabled title={store.remoteError ?? operationUnavailable}>
                       {messages.viewWorkbench}

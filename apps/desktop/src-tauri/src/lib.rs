@@ -141,6 +141,7 @@ pub fn run() {
             local_jobs::delete_job,
             local_jobs::get_job,
             local_jobs::get_job_result,
+            local_jobs::get_dashboard_overview,
             local_jobs::list_jobs,
             local_jobs::rename_job_speaker,
             local_jobs::retry_job,

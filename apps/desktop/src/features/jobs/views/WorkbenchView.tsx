@@ -1,4 +1,5 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useRouter } from "@/app/router/RouterContext";
 import StatusBadge from "@/shared/components/StatusBadge";
@@ -7,8 +8,14 @@ import TranscriptTimeline from "@/shared/components/TranscriptTimeline";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
 import { exportJob } from "@/shared/services/export/jobExport";
 import { formatMessage, getMessages } from "@/shared/i18n";
-import { getPrimaryTranscriptSegments } from "@/shared/services/meeting/transcript";
+import { localizeAppError } from "@/shared/services/errors/appError";
+import {
+  getDisplayTranscriptSegments,
+  hasDisplayableLegacySpeakerSegments,
+  hasVerifiedSpeakerSegments,
+} from "@/shared/services/meeting/transcript";
 import { openAiSummaryWindow, openMeetingNotesWindow } from "@/shared/services/ui/windows";
+import { closeCurrentWindow } from "@/shared/services/tauri/window";
 import {
   jobDetailPath,
   jobRef,
@@ -21,7 +28,9 @@ export default function WorkbenchView() {
   const router = useRouter();
   const store = useMeetingStore();
   const aiStore = useAiStore();
-  const jobId = router.params.id ?? "";
+  const isStandaloneWindow = getCurrentWindow().label === "job-workbench";
+  const queryParams = new URLSearchParams(window.location.search);
+  const jobId = router.params.id ?? queryParams.get("jobId")?.trim() ?? "";
   const routeJobRef = useBoundJobRouteRef(
     jobId,
     store.settingsLoaded,
@@ -34,6 +43,7 @@ export default function WorkbenchView() {
     candidateJob
     && (
       candidateJob.source === "local"
+      || isStandaloneWindow
       || (
         store.canRemoteOperation("jobs.read")
         && store.canRemoteOperation("jobs.result.read")
@@ -45,12 +55,24 @@ export default function WorkbenchView() {
   const [selectedSpeaker, setSelectedSpeaker] = useState(ALL_SPEAKERS);
   const [isExporting, setIsExporting] = useState(false);
   const [isRenamingSpeaker, setIsRenamingSpeaker] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">(
+    jobId ? "loading" : "idle",
+  );
+  const [loadError, setLoadError] = useState("");
   const messages = getMessages(store.settings.locale).workbench;
   const commonMessages = getMessages(store.settings.locale).common;
   const remoteOperationUnavailable = messages.remoteOperationUnavailable;
-  const transcriptSegments = useMemo(() => (job ? getPrimaryTranscriptSegments(job) : []), [job]);
+  const transcriptSegments = useMemo(() => (job ? getDisplayTranscriptSegments(job) : []), [job]);
+  const isDisplayingLegacySpeakers = Boolean(job && hasDisplayableLegacySpeakerSegments(job));
+  const hasEditableSpeakerSegments = Boolean(
+    job && (hasVerifiedSpeakerSegments(job) || isDisplayingLegacySpeakers),
+  );
   const canRenameSpeaker = Boolean(
-    job && (job.source === "local" || store.canRemoteOperation("transcript.speakers.rename")),
+    job && hasEditableSpeakerSegments && (
+      job.source === "local"
+      || store.canRemoteOperation("transcript.speakers.rename")
+    ),
   );
   const canOpenNotes = job?.source === "local";
   const canExportWord = job?.source === "local";
@@ -87,10 +109,41 @@ export default function WorkbenchView() {
   const activeTemplateName = activeSummaryRun ? aiStore.getTemplateById(activeSummaryRun.templateId)?.name : "";
 
   useEffect(() => {
-    if (routeJobRef) {
-      void store.refreshJobResult(routeJobRef).catch(() => undefined);
+    void aiStore.ensureTemplatesLoaded().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!routeJobRef) {
+      setLoadState("idle");
+      setLoadError("");
+      return;
     }
-  }, [routeJobRef?.jobId, routeJobRef?.source]);
+
+    let active = true;
+    setLoadState("loading");
+    setLoadError("");
+    void store.refreshJobResult(routeJobRef)
+      .then(() => {
+        if (active) {
+          setLoadState("loaded");
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setLoadError(localizeAppError(error));
+          setLoadState("error");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    loadAttempt,
+    routeJobRef?.jobId,
+    routeJobRef?.source,
+    routeJobRef?.windowScopeToken,
+  ]);
 
   async function doExport(kind: "transcript" | "notes" | "bundle" | "word") {
     if (!job) {
@@ -103,9 +156,9 @@ export default function WorkbenchView() {
     setIsExporting(true);
 
     try {
-      const exportSnapshot = kind === "word" ? await store.refreshJobResult(jobRef(job)) : job;
+      const exportSnapshot = kind === "word" ? await store.refreshJobResult(routeJobRef ?? jobRef(job)) : job;
       if (exportSnapshot) {
-        await exportJob(exportSnapshot, kind);
+        await exportJob(exportSnapshot, kind, routeJobRef?.windowScopeToken);
       }
     } finally {
       setIsExporting(false);
@@ -160,7 +213,7 @@ export default function WorkbenchView() {
     setIsRenamingSpeaker(true);
 
     try {
-      await store.renameSpeaker(jobRef(job), fromSpeaker, targetLabel);
+      await store.renameSpeaker(routeJobRef ?? jobRef(job), fromSpeaker, targetLabel);
       if (selectedSpeaker === sourceLabel) {
         setSelectedSpeaker(targetLabel);
       }
@@ -170,15 +223,45 @@ export default function WorkbenchView() {
   }
 
   return (
-    <section className="view-stack native-page workbench-native-page">
-      {job ? (
+    <section className={`view-stack native-page workbench-native-page${isStandaloneWindow ? " standalone-workbench" : ""}`}>
+      {loadState === "error" ? (
+        <div className="empty-state error-block workbench-load-state" role="alert">
+          <strong>{messages.loadFailed}</strong>
+          <p>{loadError}</p>
+          <div className="workbench-state-actions">
+            <button className="secondary-button" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
+              {commonMessages.retry}
+            </button>
+            {isStandaloneWindow && (
+              <button className="text-button" type="button" onClick={() => void closeCurrentWindow()}>
+                {commonMessages.closeWindow}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : job ? (
         <div className="workbench-grid">
+          {loadState === "loading" && (
+            <div className="workbench-refresh-state" role="status" aria-live="polite">
+              {messages.loading}
+            </div>
+          )}
           <article className="surface native-page-hero full-span workbench-hero">
             <div className="job-title-line workbench-hero-head">
               <div className="native-title-stack">
-                <Link className="text-button small-button native-back-link" to={jobDetailPath(jobRef(job))}>
-                  {messages.backToDetail}
-                </Link>
+                {isStandaloneWindow ? (
+                  <button
+                    className="text-button small-button native-back-link"
+                    type="button"
+                    onClick={() => void closeCurrentWindow()}
+                  >
+                    {commonMessages.closeWindow}
+                  </button>
+                ) : (
+                  <Link className="text-button small-button native-back-link" to={jobDetailPath(jobRef(job))}>
+                    {messages.backToDetail}
+                  </Link>
+                )}
                 <div>
                   <h3>{job.title}</h3>
                   <p className="section-copy">{messages.heroCopy}</p>
@@ -250,6 +333,11 @@ export default function WorkbenchView() {
                 />
               </div>
             </div>
+            {isDisplayingLegacySpeakers && (
+              <p className="workbench-speaker-notice" role="note">
+                {messages.legacySpeakerNotice}
+              </p>
+            )}
             <div className="speaker-filter-row">
               {speakerOptions.map((speaker) => (
                 <button
@@ -271,8 +359,14 @@ export default function WorkbenchView() {
             />
           </article>
         </div>
+      ) : loadState === "loading" || (jobId && !routeJobRef && !store.settingsLoaded) ? (
+        <div className="empty-state workbench-load-state" role="status" aria-live="polite">
+          {messages.loading}
+        </div>
       ) : (
-        <div className="empty-state">{messages.notFound}</div>
+        <div className="empty-state workbench-load-state" role="status">
+          {!jobId || !routeJobRef ? messages.invalidReference : messages.notFound}
+        </div>
       )}
     </section>
   );

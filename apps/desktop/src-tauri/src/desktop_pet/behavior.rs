@@ -350,6 +350,9 @@ fn sorted_png_frames(group_dir: PathBuf) -> LocalResult<Vec<PathBuf>> {
 }
 
 fn pet_frame_number(path: &Path) -> Option<u32> {
+    if path.file_name()?.to_str()?.starts_with("._") {
+        return None;
+    }
     let stem = path.file_stem()?.to_str()?;
     stem.parse::<u32>()
         .ok()
@@ -502,4 +505,16 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pet_frame_number;
+    use std::path::Path;
+
+    #[test]
+    fn ignores_apple_double_metadata_files() {
+        assert_eq!(pet_frame_number(Path::new("._pants_03.png")), None);
+        assert_eq!(pet_frame_number(Path::new("pants_03.png")), Some(3));
+    }
 }

@@ -45,12 +45,13 @@ Liberty 已经越过“原型项目”阶段，具备较强的本地数据可靠
 | `LBT-R02` AI HTTP 目标 | 已关闭 | `infrastructure/network/trusted_http.rs` 统一公网 HTTPS、loopback、DNS/IP、userinfo/query/fragment 策略 | 在线 provider 真请求未执行 |
 | `LBT-R03` 固定会议字段 | 已关闭 | `domain/meeting_minutes.rs`、projection 与导出测试统一权威顺序 | 用户编辑入口仍是未来产品功能 |
 | `LBT-R04` 凭据补偿 | 已关闭 | save/delete application use case、staged credential 与失败恢复测试 | Windows Credential Manager 实机仍随平台 smoke 验收 |
-| `LBT-R05/R06` 契约与测试 | 已关闭 | 5 份 schema 生成物；前端 24、Python 11、Rust 179 项测试进入门禁 | 真实媒体不进入普通 CI |
+| `LBT-R05/R06` 契约与测试 | 已关闭 | 5 份 schema 生成物；前端 26、Python 11、Rust 193 项测试进入门禁 | 真实媒体不进入普通 CI |
 | `LBT-R07/R08/R09` 分层与巨型模块 | 已关闭本轮范围 | application/domain/infrastructure 切片、前端 Controller、热点职责拆分 | 非热点模块只在实际变化时继续拆分，不追求一次性搬家 |
 | `LBT-R10/R13` 错误与 i18n | 已关闭本轮高风险路径 | 类型化 `AppError`、transport 映射及中英文状态/错误消息 | 新增 command 仍需持续遵守门禁 |
 | `LBT-R11/R12` 日志与原子文件 | 已关闭 | 脱敏轮转日志、JSON Lines 校验、原子 progress/result 与 revision 测试 | 真实长时运行日志容量随平台 smoke 观察 |
 | `LBT-R14` 供应链 | 代码与 CI 已关闭；本机实扫阻塞 | `deny.toml`、固定扫描器及校验和、阻断夹具、Dependabot、894 组件 SBOM、Release 资产校验 | 当前 Mac 未安装扫描器；不能宣称本机漏洞/许可证实扫通过 |
 | 低配 ASR/平台验收 | 阻塞 | manifest、阈值、benchmark、smoke、证据聚合和篡改阻断均可执行 | 缺 Apple Silicon/Intel/Windows x64 三类 8 GiB 实机、受控媒体与人工标注 |
+| Rust 性能资源治理 | 仓库内整改完成，实机证据阻塞 | 内存感知并发、CPU 线程总预算、完整进程树指标及相邻测试 | 常驻模型 Runner 必须等待 8 GiB 冷启动/峰值 RSS 对照与恢复协议设计 |
 
 FunASR 继续作为默认本地引擎。当前没有证据支持切换到 VibeVoice 或其他候选；基准框架不会自动修改默认配置。
 
@@ -73,13 +74,13 @@ FunASR 继续作为默认本地引擎。当前没有证据支持切换到 VibeVo
 
 ### 2.2 已实际执行的验证
 
-下表记录 2026-08-13 整改后的当前工作树复核结果；原始评审时的 149 项 Rust 测试已增长为 179 项。
+下表记录 2026-08-13 整改后的当前工作树复核结果；原始评审时的 149 项 Rust 测试已增长为 193 项。
 
 | 检查 | 结果 | 能证明什么 |
 | --- | --- | --- |
-| `pnpm check:fast` | 通过 | 5 个契约生成物无漂移；TypeScript、Rust fmt、前端 9 文件/24 测试、Python Ruff/11 测试和 Rust 179 测试通过 |
-| `CARGO_TARGET_DIR=<临时目录> cargo test --workspace --locked` | 通过，179 passed | 隔离外置磁盘 Cargo 缓存影响后的 Rust workspace 测试通过 |
-| `pnpm desktop:build:web` | 通过 | 486 个模块完成生产构建；仅有既有 chunk-size warning |
+| `pnpm check:fast` | 通过 | 5 个契约生成物无漂移；TypeScript、Rust fmt、前端 10 文件/26 测试、Python Ruff/11 测试和 Rust 193 测试通过 |
+| `CARGO_TARGET_DIR=<临时目录> cargo test --workspace --locked` | 通过，193 passed | 隔离外置磁盘 Cargo 缓存影响后的 Rust workspace 测试通过 |
+| `pnpm desktop:build:web` | 通过 | 480 个模块完成生产构建；仅有既有 chunk-size warning |
 | `pnpm rust:clippy` | 通过 | 当前平台 workspace/all-targets 在 warnings-as-errors 下通过 |
 | `pnpm release:check` | 通过 | 版本、平台矩阵、安全基线、3 平台运行时哈希锁及 W11/W12 阻断夹具通过 |
 | `node scripts/test-release-checks.mjs` | 通过 | 发布检查脚本自测通过；256 MiB 流式哈希峰值 RSS 126.2 MiB |
@@ -88,6 +89,8 @@ FunASR 继续作为默认本地引擎。当前没有证据支持切换到 VibeVo
 | `pnpm asr:fixtures:check` / `pnpm asr:evidence:check` | 阻塞，退出码 1 | 缺本地媒体清单和三平台正式证据时门禁会明确拒绝 |
 
 未执行完整 Tauri 桌面打包、安装器、签名、公证、Windows x64 实机、macOS Intel 实机、三平台 8 GiB 真实 ASR 基准、在线 AI 请求或安全渗透测试。当前本机也没有完成漏洞/许可证实际扫描。上述项目均不能据本文宣称“已验证”。
+
+2026-08-13 的性能专项整改新增以下仓库内约束：并发配置仅作为上限；Rust 为系统和桌面层预留 2 GiB、按每个 ASR Runner 4 GiB 计算实际并发，8 GiB 设备限制为单任务；逻辑 CPU 按实际并发均分，手动线程数仍受总预算限制；工具栏指标统计 Liberty 主进程、Python、ffmpeg 及其全部后代。上述策略解决资源超配与指标漏算，但不证明 FunASR 推理速度或内存门禁已经通过，结论仍以三平台 accepted evidence 为准。
 
 ## 3. 成熟度评分
 

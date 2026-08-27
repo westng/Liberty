@@ -6,6 +6,7 @@ type RouterState = {
   params: Record<string, string>;
   route: RouteConfig;
   push: (to: string) => Promise<void>;
+  replace: (to: string) => Promise<void>;
 };
 
 const ROUTER_CONTEXT_KEY = "__libertyRouterContext";
@@ -32,6 +33,11 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
     setPath(window.location.pathname || "/");
   }, []);
 
+  const replace = useCallback(async (to: string) => {
+    window.history.replaceState({}, "", to);
+    setPath(window.location.pathname || "/");
+  }, []);
+
   const value = useMemo(() => {
     const matched = matchRoute(path);
     return {
@@ -39,8 +45,9 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
       params: matched.params,
       route: matched.route,
       push,
+      replace,
     };
-  }, [path, push]);
+  }, [path, push, replace]);
 
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }

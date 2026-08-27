@@ -4,7 +4,10 @@ use crate::{
     local_db::{jobs_root, LocalResult},
 };
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use tauri::AppHandle;
 
 use super::{model::*, progress};
@@ -143,56 +146,7 @@ pub(crate) fn load_job(
     conn: &Connection,
     job_id: &str,
 ) -> LocalResult<MeetingJob> {
-    let base = conn
-        .query_row(
-            "SELECT id, title, created_at, duration_minutes, lang, enable_speaker,
-                    runner_protocol_version, asr_backend, diarization_status, warnings_json,
-                    summary_template, upload_status, asr_status, summary_status,
-                    overall_status, processing_started_at_ms, processing_finished_at_ms,
-                    processing_duration_seconds, failure_reason, process_log, python_path,
-                    runner_script_path, active_summary_run_id, last_exported_at, hotwords_json, export_formats_json
-             FROM jobs WHERE id = ?1",
-            params![job_id],
-            |row| {
-                Ok(MeetingJob {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    duration_minutes: row.get::<_, i64>(3)? as u32,
-                    created_at: row.get(2)?,
-                    processing_started_at_ms: row.get::<_, Option<i64>>(15)?.map(|value| value as u64),
-                    processing_finished_at_ms: row.get::<_, Option<i64>>(16)?.map(|value| value as u64),
-                    processing_duration_seconds: row.get::<_, Option<i64>>(17)?.map(|value| value as u32),
-                    progress_percent: None,
-                    progress_message: None,
-                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(24)?)
-                        .unwrap_or_default(),
-                    lang: row.get(4)?,
-                    enable_speaker: row.get::<_, i64>(5)? != 0,
-                    runner_protocol_version: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
-                    asr_backend: serde_json::from_value(serde_json::Value::String(row.get(7)?))
-                        .unwrap_or_default(),
-                    diarization_status: serde_json::from_value(serde_json::Value::String(row.get(8)?))
-                        .unwrap_or_default(),
-                    warnings: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
-                    summary_template: row.get(10)?,
-                    upload_status: row.get(11)?,
-                    asr_status: row.get(12)?,
-                    summary_status: row.get(13)?,
-                    overall_status: row.get(14)?,
-                    failure_reason: row.get(18)?,
-                    process_log: row.get(19)?,
-                    python_path: row.get(20)?,
-                    runner_script_path: row.get(21)?,
-                    active_summary_run_id: row.get(22)?,
-                    last_exported_at: row.get(23)?,
-                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(25)?)
-                        .unwrap_or_else(|_| vec!["txt".into(), "md".into(), "srt".into(), "docx".into()]),
-                    ..MeetingJob::default()
-                })
-            },
-        )
-        .optional()
-        .map_err(|err| err.to_string())?;
+    let base = load_job_base(conn, job_id)?;
 
     let mut job = base.ok_or_else(|| "没有找到这个任务。".to_string())?;
     job.source_files = load_source_files(conn, &job.id)?;
@@ -246,55 +200,38 @@ pub(crate) fn load_job(
     Ok(job)
 }
 
-fn should_apply_progress_snapshot(job: &MeetingJob) -> bool {
-    !matches!(job.overall_status.as_str(), "completed" | "failed")
-}
-
-pub(crate) fn load_job_summary(
-    app: &AppHandle,
-    conn: &Connection,
-    job_id: &str,
-) -> LocalResult<MeetingJob> {
-    let mut job = conn
+fn load_job_base(conn: &Connection, job_id: &str) -> LocalResult<Option<MeetingJob>> {
+    conn
         .query_row(
             "SELECT id, title, created_at, duration_minutes, lang, enable_speaker,
                     runner_protocol_version, asr_backend, diarization_status, warnings_json,
                     summary_template, upload_status, asr_status, summary_status,
                     overall_status, processing_started_at_ms, processing_finished_at_ms,
-                    processing_duration_seconds, failure_reason, active_summary_run_id,
-                    last_exported_at, hotwords_json, export_formats_json
+                    processing_duration_seconds, failure_reason, process_log, python_path,
+                    runner_script_path, active_summary_run_id, last_exported_at, hotwords_json, export_formats_json
              FROM jobs WHERE id = ?1",
             params![job_id],
             |row| {
                 Ok(MeetingJob {
                     id: row.get(0)?,
+                    source: "local".into(),
                     title: row.get(1)?,
                     duration_minutes: row.get::<_, i64>(3)? as u32,
                     created_at: row.get(2)?,
-                    processing_started_at_ms: row
-                        .get::<_, Option<i64>>(15)?
-                        .map(|value| value as u64),
-                    processing_finished_at_ms: row
-                        .get::<_, Option<i64>>(16)?
-                        .map(|value| value as u64),
-                    processing_duration_seconds: row
-                        .get::<_, Option<i64>>(17)?
-                        .map(|value| value as u32),
+                    processing_started_at_ms: row.get::<_, Option<i64>>(15)?.map(|value| value as u64),
+                    processing_finished_at_ms: row.get::<_, Option<i64>>(16)?.map(|value| value as u64),
+                    processing_duration_seconds: row.get::<_, Option<i64>>(17)?.map(|value| value as u32),
                     progress_percent: None,
                     progress_message: None,
-                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(21)?)
+                    hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(24)?)
                         .unwrap_or_default(),
                     lang: row.get(4)?,
                     enable_speaker: row.get::<_, i64>(5)? != 0,
-                    runner_protocol_version: row
-                        .get::<_, Option<i64>>(6)?
-                        .map(|value| value as u32),
+                    runner_protocol_version: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
                     asr_backend: serde_json::from_value(serde_json::Value::String(row.get(7)?))
                         .unwrap_or_default(),
-                    diarization_status: serde_json::from_value(serde_json::Value::String(
-                        row.get(8)?,
-                    ))
-                    .unwrap_or_default(),
+                    diarization_status: serde_json::from_value(serde_json::Value::String(row.get(8)?))
+                        .unwrap_or_default(),
                     warnings: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
                     summary_template: row.get(10)?,
                     upload_status: row.get(11)?,
@@ -302,30 +239,203 @@ pub(crate) fn load_job_summary(
                     summary_status: row.get(13)?,
                     overall_status: row.get(14)?,
                     failure_reason: row.get(18)?,
-                    active_summary_run_id: row.get(19)?,
-                    last_exported_at: row.get(20)?,
-                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(22)?)
-                        .unwrap_or_else(|_| {
-                            vec!["txt".into(), "md".into(), "srt".into(), "docx".into()]
-                        }),
+                    process_log: row.get(19)?,
+                    python_path: row.get(20)?,
+                    runner_script_path: row.get(21)?,
+                    active_summary_run_id: row.get(22)?,
+                    last_exported_at: row.get(23)?,
+                    export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(25)?)
+                        .unwrap_or_else(|_| vec!["txt".into(), "md".into(), "srt".into(), "docx".into()]),
                     ..MeetingJob::default()
                 })
             },
         )
         .optional()
-        .map_err(|err| err.to_string())?
-        .ok_or_else(|| "没有找到这个任务。".to_string())?;
+        .map_err(|err| err.to_string())
+}
 
-    job.source_files = load_source_files(conn, &job.id)?;
-    if should_apply_progress_snapshot(&job) {
-        if let Some(dir) = active_attempt_dir(app, conn, &job.id)? {
-            if let Ok(progress) = progress::read_runner_progress(&dir.join("progress.json")) {
-                progress::apply_progress_snapshot(&mut job, &progress);
+fn should_apply_progress_snapshot(job: &MeetingJob) -> bool {
+    !matches!(job.overall_status.as_str(), "completed" | "failed")
+}
+
+pub(crate) fn list_job_summaries(
+    app: &AppHandle,
+    conn: &Connection,
+) -> LocalResult<Vec<MeetingJob>> {
+    let mut jobs = query_job_summaries(conn)?;
+    if jobs.is_empty() {
+        return Ok(jobs);
+    }
+
+    attach_source_files(conn, &mut jobs)?;
+    let attempt_dirs = active_attempt_dirs(app, conn)?;
+    apply_active_progress_snapshots(&mut jobs, &attempt_dirs, progress::read_runner_progress);
+    Ok(jobs)
+}
+
+fn query_job_summaries(conn: &Connection) -> LocalResult<Vec<MeetingJob>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT id, title, created_at, duration_minutes, lang, enable_speaker,
+                    runner_protocol_version, asr_backend, diarization_status, warnings_json,
+                    summary_template, upload_status, asr_status, summary_status,
+                    overall_status, processing_started_at_ms, processing_finished_at_ms,
+                    processing_duration_seconds, failure_reason, active_summary_run_id,
+                    last_exported_at, hotwords_json, export_formats_json
+             FROM jobs
+             WHERE NOT EXISTS (
+               SELECT 1 FROM job_deletion_ops WHERE job_deletion_ops.job_id = jobs.id
+             )
+             ORDER BY created_at DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], map_job_summary_row)
+        .map_err(|error| error.to_string())?;
+    let jobs = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(jobs)
+}
+
+fn attach_source_files(conn: &Connection, jobs: &mut [MeetingJob]) -> LocalResult<()> {
+    let job_indexes = jobs
+        .iter()
+        .enumerate()
+        .map(|(index, job)| (job.id.clone(), index))
+        .collect::<HashMap<_, _>>();
+    let mut source_statement = conn
+        .prepare(
+            "SELECT source.job_id, source.id, source.name, source.path,
+                    source.size_label, source.kind
+             FROM job_source_files source
+             INNER JOIN jobs ON jobs.id = source.job_id
+             WHERE NOT EXISTS (
+               SELECT 1 FROM job_deletion_ops WHERE job_deletion_ops.job_id = jobs.id
+             )
+             ORDER BY source.rowid ASC",
+        )
+        .map_err(|error| error.to_string())?;
+    let source_rows = source_statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                MeetingSourceFile {
+                    id: row.get(1)?,
+                    name: row.get(2)?,
+                    path: row.get(3)?,
+                    size_label: row.get(4)?,
+                    kind: row.get(5)?,
+                },
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+    for source in source_rows {
+        let (job_id, source) = source.map_err(|error| error.to_string())?;
+        if let Some(index) = job_indexes.get(&job_id) {
+            jobs[*index].source_files.push(source);
+        }
+    }
+    Ok(())
+}
+
+fn apply_active_progress_snapshots(
+    jobs: &mut [MeetingJob],
+    attempt_dirs: &HashMap<String, PathBuf>,
+    mut read_progress: impl FnMut(&Path) -> LocalResult<ProgressSnapshot>,
+) {
+    for job in jobs {
+        if should_apply_progress_snapshot(job) {
+            if let Some(dir) = attempt_dirs.get(&job.id) {
+                if let Ok(progress) = read_progress(&dir.join("progress.json")) {
+                    progress::apply_progress_snapshot(job, &progress);
+                }
             }
         }
     }
+}
 
-    Ok(job)
+fn map_job_summary_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MeetingJob> {
+    Ok(MeetingJob {
+        id: row.get(0)?,
+        source: "local".into(),
+        title: row.get(1)?,
+        duration_minutes: row.get::<_, i64>(3)? as u32,
+        created_at: row.get(2)?,
+        processing_started_at_ms: row.get::<_, Option<i64>>(15)?.map(|value| value as u64),
+        processing_finished_at_ms: row.get::<_, Option<i64>>(16)?.map(|value| value as u64),
+        processing_duration_seconds: row.get::<_, Option<i64>>(17)?.map(|value| value as u32),
+        progress_percent: None,
+        progress_message: None,
+        hotwords: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(21)?)
+            .unwrap_or_default(),
+        lang: row.get(4)?,
+        enable_speaker: row.get::<_, i64>(5)? != 0,
+        runner_protocol_version: row.get::<_, Option<i64>>(6)?.map(|value| value as u32),
+        asr_backend: serde_json::from_value(serde_json::Value::String(row.get(7)?))
+            .unwrap_or_default(),
+        diarization_status: serde_json::from_value(serde_json::Value::String(row.get(8)?))
+            .unwrap_or_default(),
+        warnings: serde_json::from_str(&row.get::<_, String>(9)?).unwrap_or_default(),
+        summary_template: row.get(10)?,
+        upload_status: row.get(11)?,
+        asr_status: row.get(12)?,
+        summary_status: row.get(13)?,
+        overall_status: row.get(14)?,
+        failure_reason: row.get(18)?,
+        active_summary_run_id: row.get(19)?,
+        last_exported_at: row.get(20)?,
+        export_formats: serde_json::from_str::<Vec<String>>(&row.get::<_, String>(22)?)
+            .unwrap_or_else(|_| vec!["txt".into(), "md".into(), "srt".into(), "docx".into()]),
+        ..MeetingJob::default()
+    })
+}
+
+fn active_attempt_dirs(
+    app: &AppHandle,
+    conn: &Connection,
+) -> LocalResult<HashMap<String, PathBuf>> {
+    let root = jobs_root(app)?;
+    let mut statement = conn
+        .prepare(
+            "SELECT runs.job_id, runs.attempt_id, runs.lease_token, runs.output_dir
+             FROM job_runs runs
+             INNER JOIN jobs ON jobs.id = runs.job_id
+             WHERE runs.status = 'running'
+               AND NOT EXISTS (
+                 SELECT 1 FROM job_deletion_ops WHERE job_deletion_ops.job_id = jobs.id
+               )",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+    let mut dirs = HashMap::new();
+    for row in rows {
+        let (job_id, attempt_id, lease_token, output_dir) =
+            row.map_err(|error| error.to_string())?;
+        if attempt_id < 0 || lease_token < 0 {
+            return Err("任务运行记录包含无效的 attempt 或 lease。".into());
+        }
+        let expected_output_dir = format!("attempts/attempt-{attempt_id}-{lease_token}");
+        if output_dir.as_deref() != Some(expected_output_dir.as_str()) {
+            return Err("任务运行记录的输出目录与当前 lease 不一致。".into());
+        }
+        let job_dir = runner_files::resolve_job_dir(&root, &job_id)?;
+        if let Some(dir) =
+            runner_files::resolve_attempt_dir(&job_dir, attempt_id as u64, lease_token as u64)?
+        {
+            dirs.insert(job_id, dir);
+        }
+    }
+    Ok(dirs)
 }
 
 fn active_attempt_dir(
@@ -468,4 +578,142 @@ fn summary_result_to_meeting_summary(result: AiSummaryResult) -> MeetingSummary 
 
 fn segment_row_id(job_id: &str, segment_type: &str, segment_id: &str) -> String {
     format!("{job_id}:{segment_type}:{segment_id}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_connection() -> Connection {
+        let connection = Connection::open_in_memory().expect("database");
+        crate::local_db::schema::apply_test_schema(&connection).expect("schema");
+        connection
+    }
+
+    fn job(id: &str, status: &str, source_files: Vec<MeetingSourceFile>) -> MeetingJob {
+        MeetingJob {
+            id: id.into(),
+            source: "local".into(),
+            title: id.into(),
+            source_files,
+            created_at: format!("2026-08-13T0{}:00:00.000Z", id.len()),
+            lang: "zh".into(),
+            summary_template: String::new(),
+            upload_status: "uploaded".into(),
+            asr_status: status.into(),
+            summary_status: "idle".into(),
+            overall_status: status.into(),
+            export_formats: vec!["txt".into()],
+            ..MeetingJob::default()
+        }
+    }
+
+    #[test]
+    fn full_job_query_preserves_local_source() {
+        let mut connection = test_connection();
+        let transaction = connection.transaction().expect("transaction");
+        save_job_snapshot_tx(&transaction, &job("job-local", "completed", Vec::new()))
+            .expect("job");
+        transaction.commit().expect("commit");
+
+        let loaded = load_job_base(&connection, "job-local")
+            .expect("load job")
+            .expect("stored job");
+
+        assert_eq!(loaded.source, "local");
+    }
+
+    #[test]
+    fn summary_query_attaches_all_sources_without_loading_details() {
+        let mut connection = test_connection();
+        let transaction = connection.transaction().expect("transaction");
+        save_job_snapshot_tx(
+            &transaction,
+            &job(
+                "job-a",
+                "completed",
+                vec![
+                    MeetingSourceFile {
+                        id: "source-a1".into(),
+                        name: "first.wav".into(),
+                        kind: "audio".into(),
+                        ..MeetingSourceFile::default()
+                    },
+                    MeetingSourceFile {
+                        id: "source-a2".into(),
+                        name: "second.wav".into(),
+                        kind: "audio".into(),
+                        ..MeetingSourceFile::default()
+                    },
+                ],
+            ),
+        )
+        .expect("first job");
+        save_job_snapshot_tx(
+            &transaction,
+            &job(
+                "job-b",
+                "queued",
+                vec![MeetingSourceFile {
+                    id: "source-b1".into(),
+                    name: "third.mp4".into(),
+                    kind: "video".into(),
+                    ..MeetingSourceFile::default()
+                }],
+            ),
+        )
+        .expect("second job");
+        transaction.commit().expect("commit");
+
+        let mut jobs = query_job_summaries(&connection).expect("summaries");
+        attach_source_files(&connection, &mut jobs).expect("sources");
+
+        let sources_by_job = jobs
+            .iter()
+            .map(|job| {
+                (
+                    job.id.as_str(),
+                    job.source_files
+                        .iter()
+                        .map(|source| source.name.as_str())
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        assert_eq!(sources_by_job["job-a"], vec!["first.wav", "second.wav"]);
+        assert_eq!(sources_by_job["job-b"], vec!["third.mp4"]);
+        assert!(jobs.iter().all(|job| job.source == "local"));
+        assert!(jobs.iter().all(|job| job.transcript_segments.is_empty()));
+        assert!(jobs.iter().all(|job| job.summary_runs.is_empty()));
+    }
+
+    #[test]
+    fn progress_snapshots_are_read_only_for_active_jobs() {
+        let mut jobs = vec![
+            job("active", "queued", Vec::new()),
+            job("complete", "completed", Vec::new()),
+            job("failed", "failed", Vec::new()),
+        ];
+        let attempt_dirs = jobs
+            .iter()
+            .map(|job| (job.id.clone(), PathBuf::from(&job.id)))
+            .collect::<HashMap<_, _>>();
+        let mut requested_paths = Vec::new();
+
+        apply_active_progress_snapshots(&mut jobs, &attempt_dirs, |path| {
+            requested_paths.push(path.to_path_buf());
+            Ok(ProgressSnapshot {
+                stage: "transcribing".into(),
+                status_message: Some("working".into()),
+                failure_reason: None,
+                progress_percent: Some(40),
+            })
+        });
+
+        assert_eq!(requested_paths, vec![PathBuf::from("active/progress.json")]);
+        assert_eq!(jobs[0].overall_status, "transcribing");
+        assert_eq!(jobs[0].progress_percent, Some(40));
+        assert_eq!(jobs[1].overall_status, "completed");
+        assert_eq!(jobs[2].overall_status, "failed");
+    }
 }

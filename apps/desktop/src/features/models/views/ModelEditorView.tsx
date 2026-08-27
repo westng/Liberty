@@ -3,9 +3,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import { Button, PasswordInput, Switch, TextInput } from "@/shared/components/ui";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { publishEntityChanged } from "@/shared/services/ui/windows";
-import { destroyCurrentWindow, setCurrentWindowTitle } from "@/shared/services/tauri/window";
+import { handleEditorWindowCloseRequested, setCurrentWindowTitle } from "@/shared/services/tauri/window";
 import type { AiModelConfig, AiModelCredentialUpdate } from "@/shared/types/meeting";
 
 type StoredCredentialAction = "keep" | "clear";
@@ -33,19 +34,14 @@ export default function ModelEditorView() {
     let active = true;
     let unlisten: (() => void) | null = null;
     void getCurrentWindow().onCloseRequested(async (event) => {
-      if (!dirty) {
-        return;
-      }
-      event.preventDefault();
-      const shouldClose = await confirm(messages.reset, {
-        title: commonMessages.closeWindow,
-        kind: "warning",
-        okLabel: commonMessages.closeWindow,
-        cancelLabel: commonMessages.cancel,
-      });
-      if (shouldClose) {
-        await destroyCurrentWindow();
-      }
+      await handleEditorWindowCloseRequested(event, dirty, () =>
+        confirm(messages.reset, {
+          title: commonMessages.closeWindow,
+          kind: "warning",
+          okLabel: commonMessages.closeWindow,
+          cancelLabel: commonMessages.cancel,
+        }),
+      );
     }).then((stop) => {
       if (active) unlisten = stop;
       else stop();
@@ -218,34 +214,27 @@ export default function ModelEditorView() {
 
   return (
     <section className="editor-window-shell native-editor-window">
-      <article className="surface editor-window-card native-editor-card">
-        <div className="section-heading">
-          <h3>{selectedId ? messages.editorEditTitle : messages.editorNewTitle}</h3>
-        </div>
-
-        <div className="native-editor-layout">
-          <aside className="native-editor-aside">
-            <strong>{messages.title}</strong>
-            <p>{messages.copy}</p>
-            <span>{selectedId ? messages.editorEditTitle : messages.editorNewTitle}</span>
-          </aside>
-
+      <article
+        className="editor-window-card native-editor-card"
+        aria-label={selectedId ? messages.editorEditTitle : messages.editorNewTitle}
+      >
+        <div className="native-editor-body">
+          {errorMessage && <div className="note-block error-block" role="alert">{errorMessage}</div>}
           <div className="field-grid native-editor-form">
             <div className="field">
               <label htmlFor="model-name">{messages.name}</label>
-              <input id="model-name" value={draft.name} onChange={(event) => patchDraft({ name: event.target.value })} placeholder={messages.namePlaceholder} />
+              <TextInput id="model-name" value={draft.name} onChange={(value) => patchDraft({ name: value })} placeholder={messages.namePlaceholder} />
             </div>
             <div className="field">
               <label htmlFor="model-base-url">{messages.baseUrl}</label>
-              <input id="model-base-url" value={draft.baseUrl} onChange={(event) => patchDraft({ baseUrl: event.target.value })} placeholder={messages.baseUrlPlaceholder} />
+              <TextInput id="model-base-url" value={draft.baseUrl} onChange={(value) => patchDraft({ baseUrl: value })} placeholder={messages.baseUrlPlaceholder} />
             </div>
             <div className="field">
               <label htmlFor="model-api-key">{messages.apiKey}</label>
-              <input
+              <PasswordInput
                 id="model-api-key"
                 value={apiKey}
-                onChange={(event) => updateApiKey(event.target.value)}
-                type="password"
+                onChange={(value) => updateApiKey(value)}
                 placeholder={selectedId ? messages.apiKeyKeepPlaceholder : messages.apiKeyPlaceholder}
                 autoComplete="new-password"
               />
@@ -257,48 +246,50 @@ export default function ModelEditorView() {
                 <p className="field-copy">{messages.credentialMissing}</p>
               ) : null}
               {selectedId && draft.credentialPresent && !apiKey.trim() && (
-                <button
-                  className={storedCredentialAction === "clear" ? "text-button" : "text-button danger-text"}
+                <Button
                   type="button"
+                  variant={storedCredentialAction === "clear" ? "text" : "danger"}
                   onClick={storedCredentialAction === "clear" ? keepCredential : clearCredential}
                 >
                   {storedCredentialAction === "clear" ? messages.keepCredential : messages.clearCredential}
-                </button>
+                </Button>
               )}
             </div>
             <div className="field">
               <label htmlFor="model-id">{messages.model}</label>
-              <input id="model-id" value={draft.model} onChange={(event) => patchDraft({ model: event.target.value })} placeholder={messages.modelPlaceholder} />
-              <p className="field-copy">{messages.modelHelp}</p>
+              <TextInput
+                aria-describedby="model-id-help"
+                id="model-id"
+                value={draft.model}
+                onChange={(value) => patchDraft({ model: value })}
+                placeholder={messages.modelPlaceholder}
+              />
+              <p className="field-copy" id="model-id-help">{messages.modelHelp}</p>
             </div>
-            <div className="field-grid two-col">
-              <label className="toggle-field">
-                <input checked={draft.enabled} onChange={(event) => patchDraft({ enabled: event.target.checked })} type="checkbox" />
-                <span>{messages.enabledSwitch}</span>
-              </label>
-              <label className="toggle-field">
-                <input checked={draft.isDefault} onChange={(event) => patchDraft({ isDefault: event.target.checked })} type="checkbox" />
-                <span>{messages.defaultSwitch}</span>
-              </label>
+            <div className="native-editor-switches">
+              <Switch checked={draft.enabled} id="model-enabled" label={messages.enabledSwitch} onChange={(checked) => patchDraft({ enabled: checked })} wrapperClassName="native-editor-switch" />
+              <Switch checked={draft.isDefault} id="model-default" label={messages.defaultSwitch} onChange={(checked) => patchDraft({ isDefault: checked })} wrapperClassName="native-editor-switch" />
             </div>
           </div>
         </div>
 
-        {errorMessage && <div className="note-block error-block">{errorMessage}</div>}
-
-        <div className="button-row">
-          <button className="primary-button" type="button" onClick={save}>
-            {messages.save}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => void resetDraft()}>
-            {messages.reset}
-          </button>
-          {selectedId && (
-            <button className="text-button danger-text" type="button" onClick={removeModel}>
-              {commonMessages.delete}
-            </button>
-          )}
-        </div>
+        <footer className="native-editor-actions">
+          <div className="native-editor-leading-actions">
+            {selectedId && (
+              <Button type="button" variant="danger" onClick={removeModel}>
+                {commonMessages.delete}
+              </Button>
+            )}
+          </div>
+          <div className="native-editor-primary-actions">
+            <Button type="button" variant="secondary" onClick={() => void resetDraft()}>
+              {messages.reset}
+            </Button>
+            <Button type="button" variant="primary" onClick={save}>
+              {messages.save}
+            </Button>
+          </div>
+        </footer>
       </article>
     </section>
   );

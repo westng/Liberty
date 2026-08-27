@@ -17,6 +17,8 @@
     "tauri": "node ../../scripts/run-tauri.mjs"
   },
   "dependencies": {
+    "@douyinfe/semi-icons": "2.102.0",
+    "@douyinfe/semi-ui": "2.102.0",
     "@tauri-apps/api": "2.11.0",
     "@tauri-apps/plugin-dialog": "2.7.1",
     "react": "^19.2.6",

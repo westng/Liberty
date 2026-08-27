@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { MeetingJobV1 } from "@liberty-contracts/meeting-job-v1";
-import type { MeetingJob, NewMeetingJobInput } from "@/shared/types/meeting";
+import type {
+  DashboardOverview,
+  DashboardRange,
+  MeetingJob,
+  NewMeetingJobInput,
+} from "@/shared/types/meeting";
 
 interface LocalCreateJobInput extends NewMeetingJobInput {
   createdAt: string;
@@ -38,15 +43,23 @@ export function createLocalMeetingService() {
         } satisfies LocalCreateJobInput,
       }).then(asLocalJob),
     listJobs: () => invoke<MeetingJobTransport[]>("list_jobs").then((jobs) => jobs.map(asLocalJob)),
+    getDashboardOverview: (range: DashboardRange) =>
+      invoke<DashboardOverview>("get_dashboard_overview", { range }),
     deleteJob: (id: string) => invoke<void>("delete_job", { id }),
     getJob: (id: string) => invoke<MeetingJobTransport>("get_job", { id }).then(asLocalJob),
     getJobResult: (id: string, windowScopeToken?: string) =>
       invoke<MeetingJobTransport>("get_job_result", { id, windowScopeToken }).then(asLocalJob),
-    renameSpeaker: (id: string, fromSpeaker: string, toSpeaker: string) =>
+    renameSpeaker: (
+      id: string,
+      fromSpeaker: string,
+      toSpeaker: string,
+      windowScopeToken?: string,
+    ) =>
       invoke<MeetingJobTransport>("rename_job_speaker", {
         id,
         fromSpeaker,
         toSpeaker,
+        windowScopeToken,
       }).then(asLocalJob),
     retryJob: (id: string) => invoke<MeetingJobTransport>("retry_job", { id }).then(asLocalJob),
   };

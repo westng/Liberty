@@ -1,7 +1,15 @@
 import { confirm } from "@tauri-apps/plugin-dialog";
+import SemiAvatar from "@douyinfe/semi-ui/lib/es/avatar";
+import SemiCard from "@douyinfe/semi-ui/lib/es/card";
+import SemiDivider from "@douyinfe/semi-ui/lib/es/divider";
+import SemiEmpty from "@douyinfe/semi-ui/lib/es/empty";
+import SemiSpace from "@douyinfe/semi-ui/lib/es/space";
+import SemiTag from "@douyinfe/semi-ui/lib/es/tag";
+import SemiTypography from "@douyinfe/semi-ui/lib/es/typography";
 import { useEffect, useMemo } from "react";
 import { useAiStore } from "@/features/ai/stores/useAiStore";
 import { useMeetingStore } from "@/features/meeting/stores/useMeetingStore";
+import { Button } from "@/shared/components/ui";
 import { formatMessage, getMessages } from "@/shared/i18n";
 import { openTemplateEditorWindow } from "@/shared/services/ui/windows";
 import type { AiSummaryTemplate } from "@/shared/types/meeting";
@@ -22,7 +30,7 @@ export default function TemplateManagementView() {
   );
   const builtinCount = templates.filter((item) => item.builtin).length;
   const customCount = templates.filter((item) => !item.builtin).length;
-  const latestTemplate = templates[0] ?? null;
+  const latestTemplate = [...templates].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
 
   useEffect(() => {
     void aiStore.ensureTemplatesLoaded();
@@ -64,96 +72,124 @@ export default function TemplateManagementView() {
   }
 
   return (
-    <section className="view-stack native-page native-split-page resource-native-page model-page-stack">
-      <article className="surface native-page-hero resource-native-hero">
-        <div className="section-heading">
-          <div>
-            <h3>{messages.title}</h3>
-            <p className="section-copy">{messages.copy}</p>
-          </div>
-          <button className="primary-button" type="button" onClick={() => openTemplateEditorWindow()}>
-            {messages.add}
-          </button>
+    <section className="native-page resource-management-page">
+      <header className="resource-management-header">
+        <div>
+          <h2>{messages.title}</h2>
+          <p>{messages.copy}</p>
         </div>
-        <div className="summary-inline">
-          <span>{messages.total} {templates.length}</span>
-          <span>{messages.builtin} {builtinCount}</span>
-          <span>{messages.custom} {customCount}</span>
-        </div>
-      </article>
+        <Button onClick={() => void openTemplateEditorWindow()} variant="primary">{messages.add}</Button>
+      </header>
 
-      <div className="native-split-layout">
-        <article className="surface native-list-panel model-list-card">
-          <div className="section-heading model-management-header">
-            <h3>{messages.listTitle}</h3>
-          </div>
-          {templates.length ? (
-            <div className="model-list-rows">
-              {templates.map((template) => (
-                <article key={template.id} className="model-list-row" onClick={() => openTemplateEditorWindow(template.id)}>
-                  <div className="model-row-main">
-                    <strong>{template.name}</strong>
-                    <span>{template.description || messages.emptyDescription}</span>
-                  </div>
-                  <div className="model-row-side">
-                    <span className="record-meta">{template.builtin ? messages.builtin : messages.custom}</span>
-                    <span className="record-meta">{formatUpdatedAt(template.updatedAt)}</span>
-                    <button
-                      className="text-button"
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void openTemplateEditorWindow(template.id);
-                      }}
-                    >
-                      {commonMessages.edit}
-                    </button>
-                    {!template.builtin && (
-                      <button
-                        className="text-button danger-text"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void removeTemplate(template);
-                        }}
+      <section className="resource-management-metrics" aria-label={messages.listTitle}>
+        <ManagementMetric label={messages.total} value={templates.length} />
+        <ManagementMetric label={messages.builtin} value={builtinCount} />
+        <ManagementMetric label={messages.custom} value={customCount} />
+        <ManagementMetric label={messages.latest} value={latestTemplate?.name ?? commonMessages.noData} />
+      </section>
+
+      <SemiDivider className="resource-management-divider" />
+
+      <section className="resource-management-workspace">
+        {templates.length > 0 ? (
+          <ul className="resource-management-card-grid" aria-label={messages.listTitle}>
+            {templates.map((template) => (
+              <li
+                key={template.id}
+                className="resource-management-card-item"
+                onDoubleClick={(event) => {
+                  if (!(event.target instanceof Element) || !event.target.closest("button")) {
+                    void openTemplateEditorWindow(template.id);
+                  }
+                }}
+              >
+                <SemiCard
+                  bordered={false}
+                  className="resource-management-card resource-management-template-card"
+                  footer={(
+                    <SemiSpace align="center" className="resource-management-card-actions" spacing={4}>
+                      <Button
+                        aria-label={`${commonMessages.edit}: ${template.name}`}
+                        onClick={() => void openTemplateEditorWindow(template.id)}
+                        size="small"
+                        variant="text"
                       >
-                        {commonMessages.delete}
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">{messages.empty}</div>
-          )}
-        </article>
-
-        <aside className="surface native-inspector-panel">
-          <div className="section-heading">
-            <h3>{messages.listTitle}</h3>
-          </div>
-          <div className="native-stat-list">
-            <div>
-              <span>{messages.total}</span>
-              <strong>{templates.length}</strong>
-            </div>
-            <div>
-              <span>{messages.builtin}</span>
-              <strong>{builtinCount}</strong>
-            </div>
-            <div>
-              <span>{messages.custom}</span>
-              <strong>{customCount}</strong>
-            </div>
-          </div>
-          <div className="native-inspector-note">
-            <span>{messages.listTitle}</span>
-            <strong>{latestTemplate?.name ?? commonMessages.noData}</strong>
-            <p>{latestTemplate ? formatUpdatedAt(latestTemplate.updatedAt) : commonMessages.noData}</p>
-          </div>
-        </aside>
-      </div>
+                        {commonMessages.edit}
+                      </Button>
+                      {!template.builtin && (
+                        <Button
+                          aria-label={`${commonMessages.delete}: ${template.name}`}
+                          onClick={() => void removeTemplate(template)}
+                          size="small"
+                          variant="danger"
+                        >
+                          {commonMessages.delete}
+                        </Button>
+                      )}
+                    </SemiSpace>
+                  )}
+                  header={(
+                    <div className="resource-management-card-header">
+                      <SemiSpace align="center" className="resource-management-primary" spacing={12}>
+                        <SemiAvatar className="resource-management-avatar" color="blue" shape="square" size="40px">
+                          T
+                        </SemiAvatar>
+                        <SemiTypography.Text
+                          className="resource-management-card-title"
+                          component="h3"
+                          ellipsis={{ showTooltip: true }}
+                          strong
+                        >
+                          {template.name}
+                        </SemiTypography.Text>
+                      </SemiSpace>
+                      <SemiSpace className="resource-management-tag-row" spacing={6} wrap>
+                        <SemiTag color={template.builtin ? "blue" : "grey"} shape="circle" type="light">
+                          {template.builtin ? messages.builtin : messages.custom}
+                        </SemiTag>
+                      </SemiSpace>
+                    </div>
+                  )}
+                  headerLine={false}
+                >
+                  <dl className="resource-management-card-details">
+                    <div className="resource-management-template-description-row">
+                      <dt>{messages.description}</dt>
+                      <dd>
+                        <SemiTypography.Text
+                          className="resource-management-template-description"
+                          ellipsis={{ rows: 2, showTooltip: true }}
+                        >
+                          {template.description || messages.emptyDescription}
+                        </SemiTypography.Text>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{messages.updatedAt}</dt>
+                      <dd>
+                        <time className="resource-management-time" dateTime={template.updatedAt}>
+                          {formatUpdatedAt(template.updatedAt)}
+                        </time>
+                      </dd>
+                    </div>
+                  </dl>
+                </SemiCard>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <SemiEmpty className="resource-management-empty" description={messages.copy} title={messages.empty} />
+        )}
+      </section>
     </section>
+  );
+}
+
+function ManagementMetric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="resource-management-metric">
+      <span>{label}</span>
+      <strong title={String(value)}>{value}</strong>
+    </div>
   );
 }

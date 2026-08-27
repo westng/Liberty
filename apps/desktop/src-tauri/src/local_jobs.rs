@@ -219,8 +219,21 @@ pub struct CreateJobInput {
 }
 
 #[tauri::command]
-pub fn list_jobs(app: AppHandle) -> LocalResult<Vec<MeetingJob>> {
-    local_db::list_jobs(&app)
+pub async fn list_jobs(app: AppHandle) -> LocalResult<Vec<MeetingJob>> {
+    tauri::async_runtime::spawn_blocking(move || local_db::list_jobs(&app))
+        .await
+        .map_err(|error| format!("任务列表读取失败: {error}"))?
+}
+
+#[tauri::command]
+pub async fn get_dashboard_overview(
+    app: AppHandle,
+    range: String,
+) -> LocalResult<crate::domain::dashboard::DashboardOverview> {
+    let range = crate::infrastructure::repositories::dashboard::DashboardRange::parse(&range)?;
+    tauri::async_runtime::spawn_blocking(move || local_db::get_dashboard_overview(&app, range))
+        .await
+        .map_err(|error| format!("工作台聚合任务执行失败: {error}"))?
 }
 
 #[tauri::command]
@@ -242,7 +255,9 @@ pub fn get_job_result(
         &[
             crate::window_scope::ai_summary_window(),
             crate::window_scope::meeting_notes_window(),
+            crate::window_scope::job_workbench_window(),
         ],
+        "local",
         &id,
         window_scope_token.as_deref(),
     )?;
@@ -252,11 +267,20 @@ pub fn get_job_result(
 #[tauri::command]
 pub fn rename_job_speaker(
     app: AppHandle,
+    window: WebviewWindow,
     id: String,
     from_speaker: String,
     to_speaker: String,
+    window_scope_token: Option<String>,
 ) -> LocalResult<MeetingJob> {
     runner_files::validate_job_id(&id)?;
+    crate::window_scope::authorize_job_window(
+        &window,
+        &[crate::window_scope::job_workbench_window()],
+        "local",
+        &id,
+        window_scope_token.as_deref(),
+    )?;
     local_db::rename_job_speaker(&app, &id, &from_speaker, &to_speaker)?;
     local_db::get_job(&app, &id)
 }
@@ -363,14 +387,16 @@ fn execute_local_job(
     let runner_script_path = resolve_runner_script_path(app)?;
 
     let processing_started_at_ms = unix_timestamp_millis() as u64;
-    let runtime_threads = runner_process::resolve_local_asr_threads(&settings);
+    let resource_budget = runner_process::resolve_local_asr_resource_budget(&settings);
+    let runtime_threads = resource_budget.threads_per_runner;
     append_process_log_line(
         &dir,
         &format!(
-            "[runner] source={}, backend={}, device={}, threads={}, batch_size_s={}, speaker={}, ffmpeg={}",
+            "[runner] source={}, backend={}, device={}, concurrency={}, threads={}, batch_size_s={}, speaker={}, ffmpeg={}",
             resolved_runtime.source_label,
             resolved_runtime.asr_backend,
             runner_process::normalize_local_asr_device(&settings),
+            resource_budget.max_concurrency,
             runtime_threads,
             settings.local_asr_batch_size_seconds,
             if job.enable_speaker { "true" } else { "false" },
@@ -627,9 +653,10 @@ fn mark_failed(app: &AppHandle, execution: &JobExecution, reason: &str) -> Local
 
 fn job_scheduler(app: &AppHandle) -> LocalResult<&'static JobScheduler> {
     let settings = local_db::get_settings(app)?;
+    let resource_budget = runner_process::resolve_local_asr_resource_budget(&settings);
     let scheduler = JOB_SCHEDULER.get_or_init(|| {
         JobScheduler::new(
-            settings.concurrency as usize,
+            resource_budget.max_concurrency,
             Arc::new(LocalJobRunStore { app: app.clone() }),
             Arc::new(LocalJobExecutor { app: app.clone() }),
             Arc::new(|job: &RecoverableJob| {
@@ -637,7 +664,7 @@ fn job_scheduler(app: &AppHandle) -> LocalResult<&'static JobScheduler> {
             }),
         )
     });
-    scheduler.set_max_concurrency(settings.concurrency as usize)?;
+    scheduler.set_max_concurrency(resource_budget.max_concurrency)?;
     scheduler.start_recovery()?;
     Ok(scheduler)
 }

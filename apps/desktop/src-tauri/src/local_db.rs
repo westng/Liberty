@@ -3,7 +3,7 @@ use crate::{
     infrastructure::{
         ids, migrations,
         repositories::{
-            ai_models, ai_summary_runs, ai_templates, farm, job_events, members, pet,
+            ai_models, ai_summary_runs, ai_templates, dashboard, farm, job_events, members, pet,
             pet_blind_box, pet_check_in, pet_redeem_key, pet_store, runtime_state, settings,
             work_game,
         },
@@ -74,6 +74,8 @@ pub fn init_database(app: &AppHandle) -> LocalResult<()> {
     }
 
     let mut conn = open_connection_at_path(&path)?;
+    conn.execute_batch("PRAGMA journal_mode = WAL;")
+        .map_err(|err| format!("无法启用本地数据库 WAL 模式 {}: {err}", path.display()))?;
     schema::apply_schema(&conn)?;
     migrations::ensure_schema_version(&conn)?;
     schema::seed_builtin_templates(&conn)?;
@@ -94,7 +96,6 @@ fn open_connection_at_path(path: &Path) -> LocalResult<Connection> {
         .map_err(|err| format!("无法设置本地数据库等待超时 {}: {err}", path.display()))?;
     conn.execute_batch(
         "
-        PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
         PRAGMA busy_timeout = 5000;
         PRAGMA synchronous = NORMAL;
@@ -127,25 +128,16 @@ pub fn jobs_root(app: &AppHandle) -> LocalResult<PathBuf> {
 pub fn list_jobs(app: &AppHandle) -> LocalResult<Vec<MeetingJob>> {
     init_database(app)?;
     let conn = open_connection(app)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id FROM jobs
-             WHERE NOT EXISTS (
-               SELECT 1 FROM job_deletion_ops WHERE job_deletion_ops.job_id = jobs.id
-             )
-             ORDER BY datetime(created_at) DESC, created_at DESC",
-        )
-        .map_err(|err| err.to_string())?;
+    jobs::list_job_summaries(app, &conn)
+}
 
-    let ids = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|err| err.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|err| err.to_string())?;
-
-    ids.into_iter()
-        .map(|id| jobs::load_job_summary(app, &conn, &id))
-        .collect::<LocalResult<Vec<_>>>()
+pub fn get_dashboard_overview(
+    app: &AppHandle,
+    range: dashboard::DashboardRange,
+) -> LocalResult<crate::domain::dashboard::DashboardOverview> {
+    init_database(app)?;
+    let conn = open_connection(app)?;
+    dashboard::get_overview(&conn, range)
 }
 
 pub fn get_job(app: &AppHandle, job_id: &str) -> LocalResult<MeetingJob> {

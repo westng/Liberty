@@ -239,6 +239,21 @@ An ASR engine change needs all of the following from the same commit and runtime
 
 Missing media, annotations, smoke input, accepted evidence, required checks or exact 8 GiB performance-tier devices is `blocked`, not `passed`. Higher-memory machines may provide compatibility smoke only. Windows x86 remains compile-only for local ASR. FunASR remains the default until a separately reviewed candidate satisfies every threshold; the evidence scripts do not mutate product configuration.
 
+Local ASR scheduling treats the configured concurrency as an upper bound. The
+Rust resource policy reserves 2 GiB for the desktop and operating system,
+budgets 4 GiB for each active ASR runner, limits an 8 GiB device to one local
+job, and divides logical CPU threads across the resulting worker count. A
+manually configured thread count remains a per-runner upper bound and cannot
+oversubscribe this CPU budget. The title-bar CPU and memory figures aggregate
+the Liberty process tree, including managed Python, ffmpeg and their
+descendants; they are operational indicators rather than benchmark evidence.
+
+Each ASR job currently owns one recoverable runner process. A persistent model
+worker is not part of the current contract: it may be introduced only after the
+8 GiB benchmark demonstrates a material cold-start benefit and its protocol
+covers readiness, per-job cancellation, fence isolation, crash recovery,
+idle-memory reclamation and runtime/model generation changes.
+
 ## Release Matrix
 
 Each supported platform gets:

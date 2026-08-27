@@ -15,6 +15,7 @@ export type LocaleCode = "zh-CN" | "en-US";
 export type LocalAsrDevice = "auto" | "cpu" | "mps" | "cuda";
 export type RuntimeSource = "managed" | "system";
 export type ProcessingMode = "local" | "remote";
+export type DashboardRange = "today" | "7d" | "30d" | "all";
 export type RuntimeComponentId = "python" | "ffmpeg" | "model";
 export type RuntimeComponentAvailability = "unavailable" | "ready" | "unsupported";
 export type RuntimeOperationKind =
@@ -696,6 +697,71 @@ export interface MeetingJob {
   exportFormats: string[];
   lastExportedAt?: string;
   processLog?: string;
+}
+
+export interface DashboardMetrics {
+  totalJobs: number;
+  mediaDurationMinutes: number;
+  processingDurationSeconds: number;
+  activeJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  transcriptReadyJobs: number;
+  speakerEligibleJobs: number;
+  speakerReadyJobs: number;
+  summaryReadyJobs: number;
+  exportedJobs: number;
+  warningJobs: number;
+}
+
+export interface DashboardTrendPoint {
+  period: string;
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  mediaDurationMinutes: number;
+  processingDurationSeconds: number;
+}
+
+export interface DashboardJobSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  durationMinutes: number;
+  overallStatus: JobStage;
+  diarizationStatus: DiarizationStatus;
+  warningCount: number;
+  hasSummary: boolean;
+  lastExportedAt?: string;
+}
+
+export interface DashboardResourceSummary {
+  aiModels: number;
+  enabledAiModels: number;
+  templates: number;
+  members: number;
+}
+
+export interface DashboardCompanionSummary {
+  name: string;
+  level: number;
+  currentLevelExperience: number;
+  nextLevelExperience: number;
+  levelProgressPercent: number;
+  lpBalance: number;
+  checkedInToday: boolean;
+  claimableActivities: number;
+}
+
+export interface DashboardOverview {
+  range: DashboardRange;
+  trendGranularity: "hour" | "day" | "month";
+  metrics: DashboardMetrics;
+  trend: DashboardTrendPoint[];
+  attentionJobs: DashboardJobSummary[];
+  recentResults: DashboardJobSummary[];
+  resources: DashboardResourceSummary;
+  companion?: DashboardCompanionSummary;
 }
 
 export interface MeetingJobRef {

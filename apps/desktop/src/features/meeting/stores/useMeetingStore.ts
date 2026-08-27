@@ -183,13 +183,10 @@ function remoteErrorMessage(error: unknown) {
 
 async function requestRemoteCapabilities(force = false, resetRetryBudget = false) {
   await ensureSettingsLoaded();
-  if (!isMainWindow()) {
-    throw capabilityUnavailable("独立窗口不允许连接远端会议服务。");
-  }
   if (resetRetryBudget) {
     remoteCapabilities.reset();
   }
-  if (!state.settings.backendUrl.trim()) {
+  if (isMainWindow() && !state.settings.backendUrl.trim()) {
     remoteCapabilities.reset();
     const message = "capability_unavailable: 远端模式未配置在线后端地址。";
     setState({
@@ -615,9 +612,6 @@ async function refreshJobFromSource(reference: string | MeetingJobRef, resultOnl
     source: explicitSource,
     windowScopeToken,
   } = resolveJobRef(reference);
-  if (!isMainWindow() && explicitSource === "remote") {
-    throw capabilityUnavailable("远端任务尚无安全的独立窗口后端代理。");
-  }
   const source = explicitSource;
   const fence = jobQueries.beginRequest({ jobId: id, source });
   const applyRefreshedJob = (refreshed: MeetingJob) => {
@@ -645,7 +639,7 @@ async function refreshJobFromSource(reference: string | MeetingJobRef, resultOnl
   const refreshed = resultOnly
     ? await runRemoteOperation(
         "jobs.result.read",
-        (capabilities) => remoteMeetingApi.getResult(capabilities, id),
+        (capabilities) => remoteMeetingApi.getResult(capabilities, id, windowScopeToken),
         () => jobQueries.isRequestCurrent(fence),
       )
     : await runRemoteOperation(
@@ -810,7 +804,12 @@ async function renameSpeakerOperation(
   }
 
   if (source === "local") {
-    const updated = await localMeetingService.renameSpeaker(id, fromSpeaker, normalizedTarget);
+    const updated = await localMeetingService.renameSpeaker(
+      id,
+      fromSpeaker,
+      normalizedTarget,
+      jobRef.windowScopeToken,
+    );
     if (!jobQueries.commitMutation(fence)) {
       return;
     }
@@ -825,6 +824,7 @@ async function renameSpeakerOperation(
       id,
       fromSpeaker,
       normalizedTarget,
+      jobRef.windowScopeToken,
     ),
     () => jobQueries.isMutationCurrent(fence),
   );

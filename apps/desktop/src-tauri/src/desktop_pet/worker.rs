@@ -233,6 +233,7 @@ fn run_pet_worker(context: PetWorkerContext) {
     let mut last_action = PetAction::Slack;
     let mut last_refresh = SystemTime::now();
     let mut last_proactive_bubble = SystemTime::now();
+    let mut bubble_theme = resolve_bubble_theme(&app, &window);
     #[cfg(any(windows, target_os = "macos"))]
     let mut first_frame_logged = false;
     let mut handled_interactions = interaction_signal.load(Ordering::Relaxed);
@@ -304,22 +305,22 @@ fn run_pet_worker(context: PetWorkerContext) {
                         }
                     }
                 }
-            }
-            last_refresh = SystemTime::now();
-        }
 
-        if let Ok(settings) = local_db::get_pet_settings(&app) {
-            if behavior::should_show_proactive_bubble(&settings, last_proactive_bubble) {
-                let line = behavior::select_proactive_dialogue(&app);
-                if let Ok(mut guard) = bubble_state.lock() {
-                    *guard = Some(PetBubble {
-                        text: line.clone(),
-                        expires_at: SystemTime::now() + Duration::from_millis(BUBBLE_VISIBLE_MS),
-                    });
+                if behavior::should_show_proactive_bubble(&settings, last_proactive_bubble) {
+                    let line = behavior::select_proactive_dialogue(&app);
+                    if let Ok(mut guard) = bubble_state.lock() {
+                        *guard = Some(PetBubble {
+                            text: line.clone(),
+                            expires_at: SystemTime::now()
+                                + Duration::from_millis(BUBBLE_VISIBLE_MS),
+                        });
+                    }
+                    last_proactive_bubble = SystemTime::now();
+                    eprintln!("[desktop-pet] proactive bubble text={line}");
                 }
-                last_proactive_bubble = SystemTime::now();
-                eprintln!("[desktop-pet] proactive bubble text={line}");
             }
+            bubble_theme = resolve_bubble_theme(&app, &window);
+            last_refresh = SystemTime::now();
         }
 
         let action = action_state
@@ -328,7 +329,6 @@ fn run_pet_worker(context: PetWorkerContext) {
             .unwrap_or(PetAction::Slack);
         let bubble_text = behavior::current_bubble_text(&bubble_state);
         let growth_float = behavior::current_growth_float(&growth_float_state);
-        let bubble_theme = resolve_bubble_theme(&app, &window);
         if action != last_action {
             frame_index = 0;
             last_action = action;

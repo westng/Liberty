@@ -13,9 +13,7 @@
   min-width: 0;
 }
 
-.job-title-line h4,
-.jobs-primary strong,
-.jobs-cell strong {
+.job-title-line h4 {
   margin: 0;
   font-size: 15px;
 }
@@ -49,73 +47,10 @@
   align-self: center;
 }
 
-.jobs-table {
-  display: grid;
-  gap: 0;
-  min-width: 1060px;
-  border: 1px solid var(--divider-soft);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.jobs-table-scroll {
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.jobs-table-head,
-.jobs-row {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.45fr) minmax(180px, 1fr) 140px 130px 120px 220px;
-  gap: 16px;
-  align-items: center;
-  padding: 12px 14px;
-}
-
-.jobs-table-head {
-  background: var(--native-subpanel-bg, var(--bg-card));
-  color: var(--text-soft);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.jobs-row {
-  background: var(--native-panel-bg, var(--bg-panel));
-  border-top: 1px solid var(--divider-soft);
-}
-
-.jobs-primary,
-.jobs-cell {
-  min-width: 0;
-  gap: 4px;
-}
-
-.jobs-primary strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.jobs-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .compact-job .text-button {
   flex-shrink: 0;
 }
 
-.jobs-delete-button {
-  color: var(--danger);
-}
-
-.jobs-delete-button:disabled {
-  color: var(--text-soft);
-}
 
 .status-badge {
   display: inline-flex;

@@ -43,6 +43,7 @@
     "allow-delete-job",
     "allow-get-job",
     "allow-get-job-result",
+    "allow-get-dashboard-overview",
     "allow-list-jobs",
     "allow-rename-job-speaker",
     "allow-retry-job",

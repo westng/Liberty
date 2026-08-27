@@ -1,0 +1,225 @@
+:root,
+body,
+body[theme-mode="dark"] {
+  --semi-white: 255, 255, 255;
+  --semi-color-white: #ffffff;
+  --semi-border-radius-small: var(--native-radius-control, var(--radius-sm));
+  --semi-color-primary: var(--accent);
+  --semi-color-primary-hover: var(--accent-strong);
+  --semi-color-primary-active: color-mix(in srgb, var(--accent) 72%, #000000);
+  --semi-color-primary-disabled: color-mix(in srgb, var(--accent) 38%, transparent);
+  --semi-color-primary-light-active: var(--focus-ring);
+  --semi-color-primary-light-default: var(--native-row-active, var(--accent-soft));
+  --semi-color-primary-light-hover: color-mix(in srgb, var(--accent) 18%, transparent);
+  --semi-color-secondary: var(--text-main);
+  --semi-color-secondary-hover: var(--text-main);
+  --semi-color-secondary-active: var(--text-main);
+  --semi-color-secondary-disabled: color-mix(in srgb, var(--text-main) 38%, transparent);
+  --semi-color-tertiary: var(--text-muted);
+  --semi-color-tertiary-hover: var(--text-main);
+  --semi-color-tertiary-active: var(--text-main);
+  --semi-color-tertiary-disabled: color-mix(in srgb, var(--text-muted) 38%, transparent);
+  --semi-color-danger: var(--danger);
+  --semi-color-danger-hover: color-mix(in srgb, var(--danger) 84%, #000000);
+  --semi-color-danger-active: color-mix(in srgb, var(--danger) 72%, #000000);
+  --semi-color-danger-disabled: color-mix(in srgb, var(--danger) 38%, transparent);
+  --semi-color-danger-light-default: var(--danger-soft);
+  --semi-color-danger-light-hover: color-mix(in srgb, var(--danger) 18%, transparent);
+  --semi-color-danger-light-active: color-mix(in srgb, var(--danger) 28%, transparent);
+  --semi-color-warning: var(--warning);
+  --semi-color-warning-hover: color-mix(in srgb, var(--warning) 84%, #000000);
+  --semi-color-warning-active: color-mix(in srgb, var(--warning) 72%, #000000);
+  --semi-color-warning-disabled: color-mix(in srgb, var(--warning) 38%, transparent);
+  --semi-color-warning-light-default: var(--warning-soft);
+  --semi-color-warning-light-hover: color-mix(in srgb, var(--warning) 18%, transparent);
+  --semi-color-warning-light-active: color-mix(in srgb, var(--warning) 28%, transparent);
+  --semi-color-success: var(--success);
+  --semi-color-success-hover: color-mix(in srgb, var(--success) 84%, #000000);
+  --semi-color-success-active: color-mix(in srgb, var(--success) 72%, #000000);
+  --semi-color-success-disabled: color-mix(in srgb, var(--success) 34%, transparent);
+  --semi-color-success-light-default: var(--success-soft);
+  --semi-color-success-light-hover: color-mix(in srgb, var(--success) 18%, transparent);
+  --semi-color-success-light-active: color-mix(in srgb, var(--success) 28%, transparent);
+  --semi-color-border: var(--native-panel-border, var(--stroke-soft));
+  --semi-color-shadow: color-mix(in srgb, var(--text-main) 8%, transparent);
+  --semi-color-focus-border: var(--accent);
+  --semi-color-bg-0: var(--native-content-bg, var(--bg-main));
+  --semi-color-bg-1: var(--native-content-bg, var(--bg-main));
+  --semi-color-bg-2: var(--native-panel-bg, var(--bg-panel));
+  --semi-color-fill-0: var(--native-control-bg, var(--bg-input));
+  --semi-color-fill-1: var(--native-subpanel-bg, var(--bg-card));
+  --semi-color-fill-2: var(--native-row-hover, var(--divider-soft));
+  --semi-color-text-0: var(--text-main);
+  --semi-color-text-1: var(--text-muted);
+  --semi-color-text-2: var(--text-soft);
+  --semi-color-text-3: var(--text-soft);
+  --semi-color-disabled-bg: color-mix(in srgb, var(--native-control-bg, var(--bg-input)) 72%, transparent);
+  --semi-color-disabled-fill: color-mix(in srgb, var(--native-control-bg, var(--bg-input)) 72%, transparent);
+  --semi-color-disabled-text: color-mix(in srgb, var(--text-muted) 62%, transparent);
+  --semi-transform_scale-none: 1;
+  --semi-transition_delay-none: 0ms;
+  --semi-transition_duration-none: 160ms;
+  --semi-transition_function-easeIn: ease;
+}
+
+.liberty-ui-button.semi-button {
+  min-height: 34px;
+  height: auto;
+  border-radius: var(--native-radius-control, var(--radius-sm));
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.liberty-ui-button--primary.semi-button {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.liberty-ui-button--primary.semi-button:not(.semi-button-disabled):hover {
+  background: var(--accent-strong);
+}
+
+.liberty-ui-button--secondary.semi-button {
+  border-color: var(--native-panel-border, var(--stroke-soft));
+  background: var(--native-control-bg, var(--bg-input));
+  color: var(--text-main);
+}
+
+.liberty-ui-button--secondary.semi-button:not(.semi-button-disabled):hover,
+.liberty-ui-button--ghost.semi-button:not(.semi-button-disabled):hover,
+.liberty-ui-button--text.semi-button:not(.semi-button-disabled):hover {
+  background: var(--native-row-hover, var(--bg-card));
+  color: var(--text-main);
+}
+
+.liberty-ui-button--ghost.semi-button,
+.liberty-ui-button--text.semi-button {
+  background: transparent;
+  color: var(--text-main);
+}
+
+.liberty-ui-button--danger.semi-button {
+  background: transparent;
+  color: var(--danger);
+}
+
+.liberty-ui-button--danger.semi-button:not(.semi-button-disabled):hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.liberty-ui-button.semi-button:focus-visible,
+.liberty-ui-input.semi-input-wrapper:focus-within,
+.liberty-ui-switch.semi-switch-focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.liberty-ui-input.semi-input-wrapper {
+  min-height: 34px;
+  border: 1px solid var(--native-panel-border, var(--stroke-soft));
+  border-radius: var(--native-radius-control, var(--radius-sm));
+  background: var(--native-control-bg, var(--bg-input));
+  color: var(--text-main);
+  font: inherit;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    outline-color 160ms ease;
+}
+
+.liberty-ui-input.semi-input-wrapper:hover {
+  border-color: color-mix(in srgb, var(--native-panel-border, var(--stroke-soft)) 62%, var(--text-muted));
+  background: var(--native-control-bg, var(--bg-input));
+}
+
+.liberty-ui-input.semi-input-wrapper-focus,
+.liberty-ui-input.semi-input-wrapper-focus:hover {
+  border-color: var(--accent);
+  background: var(--native-control-bg, var(--bg-input));
+}
+
+.field .liberty-ui-input .semi-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-main);
+  font: inherit;
+}
+
+.field .liberty-ui-input .semi-input::placeholder {
+  color: var(--text-soft);
+}
+
+.liberty-ui-switch-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  color: var(--text-main);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.liberty-ui-switch.semi-switch {
+  flex: 0 0 auto;
+  border-color: var(--native-panel-border, var(--stroke-soft));
+  background: var(--native-row-hover, var(--bg-card));
+}
+
+.liberty-ui-switch.semi-switch-checked,
+.liberty-ui-switch.semi-switch-checked:hover {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+.liberty-ui-switch.semi-switch-disabled + span,
+.liberty-ui-switch-field--disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.liberty-ui-tabs .semi-tabs-bar {
+  border-bottom-color: var(--native-separator, var(--divider-soft));
+}
+
+.liberty-ui-tabs .semi-tabs-tab {
+  padding: 10px 2px 9px;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+}
+
+.liberty-ui-tabs .semi-tabs-bar-line .semi-tabs-tab + .semi-tabs-tab {
+  margin-left: 24px;
+}
+
+.liberty-ui-tabs .semi-tabs-tab-active,
+.liberty-ui-tabs .semi-tabs-tab-active:hover {
+  color: var(--text-main);
+  font-weight: 650;
+}
+
+.liberty-ui-tabs .semi-tabs-tab:focus-visible {
+  border-radius: var(--native-radius-control, var(--radius-sm));
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liberty-ui-button.semi-button,
+  .liberty-ui-input.semi-input-wrapper,
+  .liberty-ui-switch.semi-switch,
+  .liberty-ui-switch .semi-switch-knob,
+  .liberty-ui-tabs .semi-tabs-tab {
+    transition: none;
+  }
+}

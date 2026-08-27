@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import type { MeetingJob, MeetingJobRef, ProcessingMode } from "@/shared/types/meeting";
 
 export type JobRouteIdentity = Pick<MeetingJobRef, "jobId" | "source">;
-export type JobRouteRef = JobRouteIdentity;
+export type JobRouteRef = MeetingJobRef;
 
-function parseSource(value: string | null, fallback: ProcessingMode): ProcessingMode | null {
+function parseSource(value: string | null, fallback?: ProcessingMode): ProcessingMode | null {
   if (value === null) {
-    return fallback;
+    return fallback ?? null;
   }
   return value === "local" || value === "remote" ? value : null;
 }
@@ -28,26 +28,6 @@ export function jobDetailRoute(reference: JobRouteIdentity) {
 
 export const jobDetailPath = jobDetailRoute;
 
-export function jobWorkbenchRoute(reference: JobRouteIdentity) {
-  const query = new URLSearchParams({ source: reference.source });
-  return `/jobs/${encodeURIComponent(reference.jobId)}/workbench?${query.toString()}`;
-}
-
-export const jobWorkbenchPath = jobWorkbenchRoute;
-
-export function resultsCenterRoute(reference?: JobRouteIdentity) {
-  if (!reference) {
-    return "/results";
-  }
-  const query = new URLSearchParams({
-    job: reference.jobId,
-    source: reference.source,
-  });
-  return `/results?${query.toString()}`;
-}
-
-export const resultsPath = resultsCenterRoute;
-
 export function parseJobPathReference(
   decodedJobId: string | undefined,
   search: string,
@@ -67,29 +47,6 @@ export function parseJobPathReference(
   };
 }
 
-export function parseResultsReference(
-  search: string,
-  fallbackSource: ProcessingMode,
-): JobRouteIdentity | null {
-  const params = new URLSearchParams(search);
-  const jobId = params.get("job");
-  if (!jobId) {
-    return null;
-  }
-  const source = parseSource(params.get("source"), fallbackSource);
-  if (!source) {
-    return null;
-  }
-  return {
-    jobId,
-    source,
-  };
-}
-
-export function readResultsJobRef(fallbackSource: ProcessingMode) {
-  return parseResultsReference(window.location.search, fallbackSource);
-}
-
 export function useBoundJobRouteRef(
   decodedJobId: string,
   settingsLoaded: boolean,
@@ -98,10 +55,11 @@ export function useBoundJobRouteRef(
   const [reference, setReference] = useState<JobRouteRef | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const source = params.get("source");
+    const windowScopeToken = params.get("scopeToken")?.trim() || undefined;
     if (!decodedJobId || (source !== "local" && source !== "remote")) {
       return null;
     }
-    return { jobId: decodedJobId, source };
+    return { jobId: decodedJobId, source, windowScopeToken };
   });
 
   useEffect(() => {
@@ -111,8 +69,9 @@ export function useBoundJobRouteRef(
     }
     const params = new URLSearchParams(window.location.search);
     const source = params.get("source");
+    const windowScopeToken = params.get("scopeToken")?.trim() || undefined;
     if (source === "local" || source === "remote") {
-      setReference({ jobId: decodedJobId, source });
+      setReference({ jobId: decodedJobId, source, windowScopeToken });
       return;
     }
     if (source !== null) {

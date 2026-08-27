@@ -37,25 +37,6 @@
   }
 }
 
-@media (max-width: 900px) {
-  .jobs-table {
-    min-width: 0;
-  }
-
-  .jobs-table-head {
-    display: none;
-  }
-
-  .jobs-row {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .jobs-actions {
-    justify-content: flex-start;
-  }
-}
-
 @media (max-width: 760px) {
   .window-titlebar {
     padding-left: 72px;

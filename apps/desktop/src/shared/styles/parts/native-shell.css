@@ -9,6 +9,8 @@
   --native-panel-border: rgba(60, 60, 67, 0.16);
   --native-row-hover: rgba(60, 60, 67, 0.06);
   --native-row-active: color-mix(in srgb, var(--accent) 14%, transparent);
+  --native-nav-hover-bg: color-mix(in srgb, var(--accent) 9%, transparent);
+  --native-nav-accent: color-mix(in srgb, var(--accent) 78%, #081225);
   --native-separator: rgba(60, 60, 67, 0.14);
   --native-inspector-bg: rgba(246, 246, 248, 0.82);
   --native-radius-panel: 10px;
@@ -27,6 +29,8 @@
   --native-panel-border: rgba(255, 255, 255, 0.1);
   --native-row-hover: rgba(255, 255, 255, 0.06);
   --native-row-active: color-mix(in srgb, var(--accent) 22%, transparent);
+  --native-nav-hover-bg: color-mix(in srgb, var(--accent) 16%, transparent);
+  --native-nav-accent: color-mix(in srgb, var(--accent) 74%, #ffffff);
   --native-separator: rgba(255, 255, 255, 0.1);
   --native-inspector-bg: rgba(37, 37, 40, 0.86);
   --native-shadow-panel: none;
@@ -125,7 +129,7 @@ body,
   margin: 0;
   padding: 6px 8px 3px;
   color: var(--text-soft);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -143,15 +147,15 @@ body,
   font-weight: 400;
 }
 
-.nav-link:hover {
+.nav-link:not(.active):hover {
   border-color: transparent;
-  background: transparent;
-  color: var(--accent-strong);
+  background: var(--native-nav-hover-bg);
+  color: var(--native-nav-accent);
 }
 
 .nav-link.active {
-  background: transparent;
-  color: var(--accent-strong);
+  background: var(--native-row-active);
+  color: var(--native-nav-accent);
 }
 
 .nav-link-icon {
@@ -164,8 +168,9 @@ body,
   color: var(--text-muted);
 }
 
+.nav-link:hover .nav-link-icon,
 .nav-link.active .nav-link-icon {
-  color: var(--accent-strong);
+  color: currentColor;
 }
 
 .nav-link-icon > span {
@@ -207,9 +212,12 @@ body,
 }
 
 .nav-footer-item:hover,
-.nav-footer-link:hover {
-  background: transparent;
-  color: var(--accent-strong);
+.nav-footer-link:not(.active):hover {
+  color: var(--native-nav-accent);
+}
+
+.nav-footer-link:not(.active):hover {
+  background: var(--native-nav-hover-bg);
 }
 
 .nav-footer-label {
@@ -227,7 +235,7 @@ body,
 }
 
 .nav-footer-item:hover .nav-link-icon {
-  color: var(--accent-strong);
+  color: currentColor;
 }
 
 .nav-footer-item strong {
@@ -244,6 +252,129 @@ body,
 .nav-footer-link {
   width: 100%;
   margin-bottom: 4px;
+}
+
+.settings-sidebar {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settings-sidebar-header {
+  display: grid;
+  gap: 14px;
+  padding: 12px 8px 6px;
+}
+
+.settings-sidebar-back {
+  display: inline-flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border-radius: var(--native-radius-control);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.settings-sidebar-back:hover {
+  background: var(--native-nav-hover-bg);
+  color: var(--native-nav-accent);
+}
+
+.settings-sidebar-back:hover .nav-link-icon {
+  color: currentColor;
+}
+
+.settings-sidebar-back:focus-visible,
+.settings-sidebar-item:focus-visible,
+.settings-sidebar-search input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: 2px;
+}
+
+.settings-sidebar-search {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.settings-sidebar-search-icon {
+  position: absolute;
+  left: 11px;
+  z-index: 1;
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.settings-sidebar-search-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.settings-sidebar-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 10px 6px 34px;
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-pill);
+  background: var(--native-control-bg, var(--bg-input));
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+}
+
+.settings-sidebar-search input::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-sidebar-groups {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  padding: 8px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.settings-sidebar-groups::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-sidebar-group {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-sidebar-item {
+  min-height: 34px;
+  text-align: left;
+}
+
+.settings-sidebar-item:not(.active):hover {
+  background: var(--native-nav-hover-bg);
+  color: var(--native-nav-accent);
+}
+
+.settings-sidebar-item.active {
+  background: var(--native-row-active);
+  color: var(--native-nav-accent);
+}
+
+.settings-sidebar-empty {
+  margin: 0;
+  padding: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .content {
@@ -481,39 +612,9 @@ body,
   grid-template-columns: 300px minmax(0, 1fr);
 }
 
-.jobs-table {
-  border-radius: var(--native-radius-panel);
-}
-
-.jobs-table-scroll {
-  border: 1px solid var(--native-panel-border);
-  border-radius: var(--native-radius-panel);
-  background: var(--native-panel-bg);
-}
-
-.jobs-table-scroll .jobs-table {
-  min-width: 980px;
-  border: 0;
-  border-radius: 0;
-}
-
-.jobs-table-head,
-.jobs-row {
-  padding: 9px 12px;
-}
-
-.jobs-table-head {
-  background: var(--native-subpanel-bg);
-}
-
-.jobs-row:hover,
 .model-list-row:hover,
 .record-item:hover {
   background: var(--native-row-hover);
-}
-
-.jobs-row {
-  background: transparent;
 }
 
 .status-badge {

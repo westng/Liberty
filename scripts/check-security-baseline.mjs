@@ -120,6 +120,7 @@ const expectedPermissionsByWindow = {
       "start_work_game_task",
       "create_job",
       "delete_job",
+      "get_dashboard_overview",
       "get_job",
       "get_job_result",
       "list_jobs",
@@ -201,6 +202,26 @@ const expectedPermissionsByWindow = {
       "set_current_window_theme",
       "get_ui_preferences",
       "get_job_result",
+    ].map(permissionForCommand),
+  ],
+  "job-workbench": [
+    "core:event:allow-emit",
+    "core:event:allow-emit-to",
+    "dialog:allow-confirm",
+    "dialog:allow-save",
+    ...[
+      "close_current_window",
+      "set_current_window_theme",
+      "get_ui_preferences",
+      "get_job_result",
+      "rename_job_speaker",
+      "get_remote_capabilities",
+      "remote_get_job_result",
+      "remote_rename_job_speaker",
+      "export_job_text",
+      "export_job_summary_docx",
+      "list_ai_templates",
+      "issue_job_window_scope",
     ].map(permissionForCommand),
   ],
   "model-editor": [
@@ -463,11 +484,11 @@ if (!localExportOutputSource.includes("webview.fs_scope().is_allowed(&output_pat
   errors.push("The shared Rust export output boundary must enforce the dialog-granted FS scope.");
 }
 
-if (!localExportSource.includes("authorized_output_path(&webview, &file_path)")) {
+if (!localExportSource.includes("authorized_output_path(window.as_ref(), &file_path)")) {
   errors.push("DOCX export must use the shared authorized output path boundary.");
 }
 
-if (!localExportTextSource.includes("authorized_output_path(&webview, &input.file_path)")) {
+if (!localExportTextSource.includes("authorized_output_path(window.as_ref(), &input.file_path)")) {
   errors.push("Text export must use the shared authorized output path boundary.");
 }
 

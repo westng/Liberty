@@ -12,13 +12,13 @@ use sysinfo::{Pid, ProcessRefreshKind, System};
 use tauri::AppHandle;
 
 use crate::{
+    domain::asr_resources::{resolve_asr_resource_budget, AsrResourceBudget},
     infrastructure::{process_logs, runner_protocol},
     local_db::{AppSettings, LocalResult, MeetingJob},
     local_runtime::ResolvedPythonRuntime,
     process_utils::configure_background_process,
 };
 
-const MAX_LOCAL_ASR_THREADS: u32 = 32;
 const PROCESS_IDENTITY_VERSION: u8 = 1;
 const MAX_RUNNER_STDOUT_LINE_BYTES: usize = 16 * 1024;
 const MAX_RUNNER_STDERR_LINE_CHARS: usize = 4096;
@@ -324,16 +324,18 @@ pub fn normalize_local_asr_device(settings: &AppSettings) -> String {
     }
 }
 
-pub fn resolve_local_asr_threads(settings: &AppSettings) -> u32 {
-    if settings.local_asr_threads > 0 {
-        return settings.local_asr_threads.clamp(1, MAX_LOCAL_ASR_THREADS);
-    }
-
-    let available = std::thread::available_parallelism()
-        .map(|value| value.get() as u32)
+pub fn resolve_local_asr_resource_budget(settings: &AppSettings) -> AsrResourceBudget {
+    let logical_cpus = std::thread::available_parallelism()
+        .map(|value| value.get())
         .unwrap_or(4);
-
-    available.clamp(1, MAX_LOCAL_ASR_THREADS)
+    let mut system = System::new();
+    system.refresh_memory();
+    resolve_asr_resource_budget(
+        settings.concurrency as usize,
+        settings.local_asr_threads,
+        logical_cpus,
+        system.total_memory(),
+    )
 }
 
 pub fn build_runner_command(input: RunnerCommandInput<'_>) -> Command {

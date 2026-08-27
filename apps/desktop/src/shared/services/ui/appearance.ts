@@ -53,6 +53,7 @@ export function applyAppearance(settings: SettingsState): void {
   const root = document.documentElement;
   const theme = resolveTheme(settings.themeMode);
   root.dataset.theme = theme;
+  document.body.setAttribute("theme-mode", theme);
   root.dataset.glassStyle = settings.liquidGlassStyle;
   root.style.setProperty("--accent", settings.accentColor);
   root.style.setProperty("--accent-contrast", resolveAccentContrast(settings.accentColor));

@@ -90,9 +90,13 @@ export function createMeetingApi() {
       requireOperation(capabilities, "jobs.read");
       return invokeRemote<MeetingJob>("remote_get_job", { id });
     },
-    getResult: async (capabilities: RemoteMeetingCapabilities, id: string) => {
+    getResult: async (
+      capabilities: RemoteMeetingCapabilities,
+      id: string,
+      windowScopeToken?: string,
+    ) => {
       requireOperation(capabilities, "jobs.result.read");
-      return invokeRemote<MeetingJob>("remote_get_job_result", { id });
+      return invokeRemote<MeetingJob>("remote_get_job_result", { id, windowScopeToken });
     },
     retryJob: async (capabilities: RemoteMeetingCapabilities, id: string) => {
       requireOperation(capabilities, "jobs.retry");
@@ -107,12 +111,14 @@ export function createMeetingApi() {
       id: string,
       fromSpeaker: string,
       toSpeaker: string,
+      windowScopeToken?: string,
     ) => {
       requireOperation(capabilities, "transcript.speakers.rename");
       return invokeRemote<MeetingJob>("remote_rename_job_speaker", {
         id,
         fromSpeaker,
         toSpeaker,
+        windowScopeToken,
       });
     },
   };
