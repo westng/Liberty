@@ -25,21 +25,21 @@
 
 Liberty is a local-first desktop application for meeting media processing. The current frontend uses React, the desktop shell uses Tauri 2, native services are implemented in Rust, and local transcription runs through a managed Python 3.10.17 runtime with a FunASR runner. It can process meetings fully through local SQLite and the managed runtime, while still keeping an optional remote backend mode.
 
-![Liberty Create Job](docs/images/ScreenShot_2026-05-21_192125_725.png)
-
-![Liberty Desktop Companion](docs/images/ScreenShot_2026-05-21_192138_208.png)
-
-![Liberty Pet Store](docs/images/ScreenShot_2026-05-21_192159_758.png)
+The current workflow starts on the dashboard, continues through job creation or the job queue, and opens completed work in a dedicated result workbench for review, cleanup, and export.
 
 ## Current Capabilities
 
+- Review job metrics, processing trends, result completeness, recent jobs, resources, and companion state on the dashboard.
 - Create meeting jobs through the desktop file picker with local audio and video files.
 - In local mode, process one local file with the managed Python 3.10.17 runtime, FunASR runner, and ffmpeg.
-- Track transcription, speaker diarization, task logs, processing duration, failure reasons, and retries.
-- Manage OpenAI-compatible models, summary templates, AI summary windows, repeated summary runs, and the active summary result.
+- Filter and search the job queue, then open details or a dedicated result workbench, retry jobs, and delete jobs according to their state.
+- Track ASR and diarization separately. Only verified results enter the speaker projection; unavailable or failed diarization preserves the transcript without inventing speaker labels.
+- Manage OpenAI-compatible models, summary templates, and meeting members as cards with dedicated editor windows.
+- Use AI summary windows, repeated summary runs, and active summary selection.
 - Review transcripts, filter by speaker, rename speakers, open meeting notes, and work from a dedicated result workspace.
 - Export transcript TXT, notes Markdown, bundled Markdown, and formal DOCX meeting minutes.
 - Manage meeting members with Excel import/export, department, sort order, and recorder metadata.
+- Navigate Settings by appearance, theme, runtime, processing defaults, remote compatibility, and diagnostics, with separate controls for Python, ffmpeg, and model resources.
 - Switch Chinese/English UI, automatic/light/dark theme, transparent/tinted glass style, and accent color.
 - View diagnostics for platform matrix, database schema version, runtime status, security baseline, and exported desktop-pet diagnostic logs.
 - Use the desktop companion, 255-level growth, LP wallet, Pet Store, inventory, daily free blind box, daily check-in, make-up check-in, gift boxes, redeem center, item detail window, and native desktop pet rendering.
@@ -59,6 +59,8 @@ Local mode includes:
 - SQLite storage for jobs, transcripts, AI summaries, members, settings, and pet data.
 
 Current local job execution processes one file with a local path. In local mode, selecting multiple files keeps the last selected file.
+
+The local concurrency setting is an upper bound, not a fixed worker count. The scheduler reserves 2 GiB for the operating system and desktop app, budgets 4 GiB per ASR runner, and divides logical CPU threads across the effective concurrency; an 8 GiB device runs one local job by default.
 
 ### Remote Mode
 
@@ -120,14 +122,13 @@ See [docs/pet-system.md](./docs/pet-system.md) for the current implementation no
 
 ## Main Screens
 
+- `Dashboard`: review job metrics, processing trends, result completeness, recent jobs, resources, and companion state.
 - `New Job`: choose local media, title, language, speaker diarization, and hotwords.
-- `Jobs`: review job status, processing time, file metadata, detail, retry, and delete actions.
-- `Job Detail`: inspect input, status, progress, logs, failure reason, and workbench entry.
-- `Workbench`: review transcripts, filter by speaker, rename speakers, open AI summary and notes windows, export results.
-- `Models` / `Model Editor`: maintain OpenAI-compatible model configuration.
-- `Templates` / `Template Editor`: maintain AI summary templates.
-- `Members` / `Member Editor`: maintain members, departments, sort order, and recorder metadata with Excel import/export.
-- `Settings`: appearance, locale, managed runtime, manual Python, ASR parameters, remote backend, diagnostics.
+- `Job Queue`: filter and search jobs; completed jobs open the result workbench directly, while active or failed jobs open details; retry and delete actions remain available by state.
+- `Job Detail`: inspect input, status, progress, logs, and failure reason, then open the result workbench for a completed job.
+- `Result Workbench`: use a dedicated window scoped to one job to review transcripts, filter or rename speakers, open AI summary and notes windows, and export results. The legacy `/results` route redirects to the completed-job queue.
+- `Models` / `Templates` / `Members`: manage resources as cards and edit them in dedicated windows; member management includes Excel import/export.
+- `Settings`: navigate categorized appearance, locale, runtime-component, ASR, remote-backend, and diagnostics controls.
 - `Pet Center`: view pet level, cumulative growth, stage, events, desktop behavior, and interactions.
 - `Pet Store`: view LP, catalog, inventory, equipment, food/tool usage, and item details.
 - `Daily Blind Box`: open up to 10 free local boxes per day; rewards come from the Pet Store, excluding pets.
@@ -152,7 +153,7 @@ The schema is created in `apps/desktop/src-tauri/src/local_db/schema.rs`; migrat
 Install dependencies:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 Start the frontend:
@@ -185,7 +186,7 @@ Run the full check:
 pnpm check
 ```
 
-`pnpm check` runs frontend typecheck/build, version/platform/security checks, Rust fmt/test/clippy.
+`pnpm check` runs contract-drift checks, frontend type checking and unit tests, Python Ruff/pytest, Rust fmt/tests, the frontend production build, Clippy, and version, platform, security-baseline, runtime-lock, dependency-governance, and ASR blocking-fixture checks.
 
 ## Supported Platforms
 

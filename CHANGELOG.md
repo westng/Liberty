@@ -1,5 +1,49 @@
 # 更新日志 / Changelog
 
+## Unreleased
+
+### 中文
+
+#### 新增
+
+- 新增聚合工作台，集中展示任务指标、处理趋势、结果完整度、最近任务、资源配置和桌宠状态。
+- 新增按任务来源、任务 ID 与临时作用域令牌授权的独立结果工作台，可重命名已验证说话人、导出结果，并安全请求 AI 总结与会议纪要窗口。
+- 新增跨 Rust、TypeScript 与 Python 的版本化 Runner/IPC 契约，以及前端、Python、依赖治理和 ASR 证据阻断测试。
+
+#### 调整
+
+- 独立结果中心并入任务队列；已完成任务直接打开结果工作台，旧结果入口兼容跳转到已完成任务筛选。
+- 重做任务创建、任务队列、系统设置、模型、模板和人员管理界面，统一卡片、表单和独立编辑窗口交互。
+- 系统设置按分类导航，并可分别查看、选择来源、安装、修复或校验 Python、ffmpeg 与模型资源。
+- 本地 ASR 并发改为内存和 CPU 感知的资源上限，8 GiB 设备默认单任务运行，工具栏指标覆盖 Liberty 进程树。
+
+#### 修复
+
+- 修复缺少真实说话人结果时伪造默认标签的问题；说话人能力不可用或失败时保留逐字稿、警告和真实状态。
+- 强化 AI/远端网络目标、系统凭据补偿、原子导出、结构化脱敏日志、WebView 策略和按窗口最小权限。
+- 修复依赖安全策略与 CI 质量门禁校验，使缺少扫描器、ASR 证据或必要检查时明确阻断而不是跳过。
+
+### English
+
+#### Added
+
+- Added an aggregate dashboard for job metrics, processing trends, result completeness, recent jobs, resources, and desktop-companion state.
+- Added a dedicated result workbench authorized by job source, job ID, and an ephemeral scope token, with verified-speaker renaming, exports, and scoped AI-summary or meeting-notes requests.
+- Added versioned Runner/IPC contracts across Rust, TypeScript, and Python, plus frontend, Python, dependency-governance, and ASR evidence blocking tests.
+
+#### Changed
+
+- Folded the standalone Results Center into the job queue; completed jobs now open the result workbench directly, and legacy result routes redirect to the completed-job filter.
+- Redesigned job creation, the job queue, Settings, and model, template, and member management around consistent cards, forms, and dedicated editor windows.
+- Categorized Settings and exposed independent source selection, installation, repair, and validation for Python, ffmpeg, and model resources.
+- Made local ASR concurrency memory- and CPU-aware, defaulting 8 GiB devices to one job and aggregating toolbar metrics across the Liberty process tree.
+
+#### Fixed
+
+- Stopped synthesizing default labels when no real diarization result exists; unavailable or failed diarization now preserves the transcript, warnings, and truthful capability state.
+- Hardened AI and remote network targets, credential compensation, atomic exports, structured redacted logs, WebView policy, and least-privilege window capabilities.
+- Fixed dependency-security policy and CI quality-gate validation so missing scanners, ASR evidence, or required checks block explicitly instead of being skipped.
+
 ## 1.1.24 - 2026-07-30
 
 ### 中文

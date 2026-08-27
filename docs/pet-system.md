@@ -361,7 +361,7 @@ apps/desktop/src/assets/images/shop/
 宠物系统变更至少跑：
 
 ```bash
-/Users/west/Library/pnpm/pnpm check
+pnpm check
 ```
 
 重点覆盖：

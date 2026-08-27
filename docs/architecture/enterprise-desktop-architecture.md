@@ -1,6 +1,6 @@
 # Liberty Enterprise Desktop Architecture
 
-Status: implemented architecture baseline; last verified 2026-08-13. Platform performance evidence remains governed separately and is not implied by this document.
+Status: implemented architecture baseline; last verified 2026-08-27 against commit `1563af7a`. Platform performance evidence remains governed separately and is not implied by this document.
 
 ## Scope
 
@@ -37,6 +37,39 @@ Command modules must not directly own SQL, child-process orchestration, or file-
 - `webview_policy.rs` applies the no-browser-refresh and no-default-context-menu policy to every WebView, including windows created at runtime.
 - macOS and Linux use document-start event interception. Windows additionally disables WebView2 default context menus and browser accelerator keys through its native settings API.
 - Liberty has no browser reload entry point. A future user-visible recovery action must call a narrowly authorized Rust command and must not re-enable browser-owned refresh shortcuts.
+
+### Desktop Workflow And Window Topology
+
+- `main` owns the dashboard, job creation, job queue, job details, Settings,
+  resource management, dialogs, orchestration, and actual runtime WebView
+  creation.
+- Completed jobs open the single `job-workbench` window. Its route binds the
+  processing source, job ID, and an ephemeral scope token; opening a different
+  job replaces the previous workbench instance. Invalid, stale, or mismatched
+  scopes are rejected.
+- `job-workbench` may read only its bound result, rename speakers, export text
+  or DOCX, list summary templates, and request a child scope for the same job.
+  It cannot list jobs, mutate unrelated jobs, read full settings, or access
+  credentials.
+- `job-workbench` requests `ai-summary` or `meeting-notes` through a scoped event
+  to `main`. The main window validates the request and remains the only WebView
+  that creates the auxiliary window.
+- `ai-summary` can start or resume a scoped summary run, change the active run,
+  and delete a run. `meeting-notes` is a read-only result projection. Model,
+  template, and member editors retain separate least-privilege capabilities.
+- Legacy `/results` and `/jobs/:id/workbench` routes do not render a second
+  results surface; they redirect to `/jobs?status=completed`.
+
+```mermaid
+flowchart LR
+  MAIN["main window"] -->|"issue scope and create"| WORKBENCH["job-workbench"]
+  WORKBENCH -->|"same-job child scope request"| MAIN
+  MAIN --> SUMMARY["ai-summary"]
+  MAIN --> NOTES["meeting-notes"]
+  WORKBENCH -->|"scoped read, rename, export"| JOB["one job result"]
+  SUMMARY -->|"scoped summary-run mutations"| JOB
+  NOTES -->|"read-only projection"| JOB
+```
 
 ### File Export Boundary
 
@@ -172,17 +205,20 @@ source of truth for:
 - ffmpeg bundle URLs and executable candidates
 - selectable download sources, pip indexes, and model endpoints
 
-Settings exposes the Environment & Models flow. Users may choose a configured
-download source or manually specify a Python path. Placeholder or missing asset
-URLs must fail visibly during runtime installation instead of pretending a
-source is usable.
+Settings separates runtime overview, processing defaults, and local runtime
+management. Python, ffmpeg, and model resources expose their own state, source
+selection where supported, progress, and install, repair, or validation action.
+Users may also manually specify a Python path. Placeholder or missing asset URLs
+must fail visibly instead of pretending a source is usable.
 
 ## Security Baseline
 
 - Tauri CSP is enabled for production builds.
 - Capabilities are split by window role:
   - `main`: orchestration, dialogs, exports, and child-window creation
-  - `ai-summary` / `meeting-notes`: read-only result windows
+  - `job-workbench`: one scoped job result, speaker rename, export, and same-job child-scope requests
+  - `ai-summary`: scoped summary-run creation, selection, and deletion
+  - `meeting-notes`: read-only result projection
   - `model-editor` / `template-editor` / `member-editor`: edit windows
 - File-system permissions use explicit scopes.
 - API keys and remote tokens live in the system credential store:
@@ -191,9 +227,12 @@ source is usable.
 - Logs and diagnostics redact tokens, API keys, and unnecessary local path details.
 
 The implementation enables CSP, explicit file-system scopes, and per-window
-capability files. File-system writes and child-window creation stay limited to
-the main window; result and editor windows only receive the native window
-permissions they actually use.
+capability files. Raw WebView creation remains limited to `main`;
+`job-workbench` can issue only a same-job child scope and asks `main` to create
+the auxiliary window. Result exports use narrowly authorized Rust commands and
+dialog-selected paths rather than broad WebView file-system access. Every result
+and editor window receives only the native and application permissions required
+for its role.
 
 AI model records now store an `api_key_ref` and keep API keys in the system
 credential store. Model listing hydrates secrets through the credential store,
